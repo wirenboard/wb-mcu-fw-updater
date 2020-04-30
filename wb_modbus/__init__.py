@@ -1,0 +1,9 @@
+from collections import OrderedDict
+
+
+#TODO: fill from config
+ALLOWED_UNSUCCESSFUL_TRIES = 2
+CLOSE_PORT_AFTER_EACH_CALL = True
+ALLOWED_BAUDRATES = [9600, 1200, 2400, 4800, 19200, 38400, 57600, 115200]
+ALLOWED_STOPBITS = [2, 1]
+ALLOWED_PARITIES = OrderedDict([('N', 0), ('O', 1), ('E', 2)])
