@@ -1,6 +1,9 @@
 import sys
 
 
+SLAVEID_PLACEHOLDER = 245
+
+
 def die(err_message, exitcode=1):
     """
     Exits gracefully, writing <err_message> to stderr
