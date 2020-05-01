@@ -1,18 +1,58 @@
-import requests
 import logging
 import os
 from posixpath import join as urljoin
 from . import die
+
+import sys
+if sys.version_info[0] < 3:
+    import urllib2 as url_handler
+    HTTPError = url_handler.HTTPError
+    URLError = url_handler.URLError
+    python2 = True
+else:
+    import urllib.request as url_handler
+    import urllib.error
+    HTTPError = urllib.error.HTTPError
+    URLError = urllib.error.URLError
+    python2 = False
 
 
 ROOT_URL = 'http://fw-releases.wirenboard.com/' #TODO: fill from config/env vars
 FW_SAVING_DIR = os.path.join(os.path.dirname(__file__), 'firmwares')
 
 
+def perform_head_request(url_path):
+    """
+    Performing a HEAD http request to defined url.
+
+    :param url_path: full url, request will be sent to
+    :type url_path: str
+    :return: a responce object
+    :rtype: responce obj from urllib (or urllib2 in python2)
+    """
+    if python2:
+        request = url_handler.Request(url_path)
+        request.get_method = lambda : 'HEAD'
+    else:
+        request = url_handler.Request(url_path, method='HEAD')
+    return url_handler.urlopen(request)
+
+
+def perform_get_request(url_path):
+    """
+    Performing a GET http request to defined url.
+
+    :param url_path: full url, request will be sent to
+    :type url_path: str
+    :return: a responce object
+    :rtype: responce obj from urllib (or urllib2 in python2)
+    """
+    return url_handler.urlopen(url_path)
+
+
 class RemoteFileWatcher(object):
     """
-    A class, downloading Firmware from remote server.
-
+    A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
     """
     _EXTENSION = '.wbfw'
     _LATEST_FW_VERSION_FILE = 'latest.txt'
@@ -31,29 +71,25 @@ class RemoteFileWatcher(object):
         :param branch_name: looking for fw/bootloader from specified branch (instead of stable), defaults to None
         :type branch_name: str, optional
         """
-        if self._check_url_is_available(ROOT_URL):
-            self.parrent_url_path = urljoin(ROOT_URL, mode, sort_by) 
-        else:
-            die('FW download server is unavailable. Check your Internet connection!')
+        self._check_url_is_available(ROOT_URL)
+        self.parrent_url_path = urljoin(ROOT_URL, mode, sort_by) 
         if branch_name:
             self._BRANCH = branch_name
             logging.debug('Looking to unstable branch: %s' % branch_name)
             self._SOURCE = urljoin('unstable', branch_name)
 
-    def _check_url_is_available(self, url_path, max_allowed_retcode=400):
+    def _check_url_is_available(self, url_path):
         """
-        Checking url accessibility by sending HEAD request to it and anallyzing http return code.
+        Checking url accessibility by sending HEAD request to it and catching urllib's errors.
 
         :param url_path: url, need to be checked
         :type url_path: str
-        :param max_allowed_retcode: http request code should be less, than. Defaults to 400
-        :type max_allowed_retcode: int, optional
-        :return: has url accessible or not
-        :rtype: bool
         """
         logging.debug('Checking url: %s' % url_path)
-        ret = requests.head(url_path)
-        return True if ret.status_code < max_allowed_retcode else False
+        try:
+            responce = perform_head_request(url_path)
+        except (HTTPError, URLError) as e:
+            die('Error, while opening %s (%s)' % (url_path, str(e)))
 
     def _get_request_content(self, url_path):
         """
@@ -64,11 +100,10 @@ class RemoteFileWatcher(object):
         :return: responce's content
         :rtype: bytestring
         """
-        if self._check_url_is_available(url_path):
-            ret = requests.get(url_path)
-            return ret.content.strip()
-        else:
-            die('Wrong url: %s' % url_path)
+        self._check_url_is_available(url_path)
+        responce = perform_get_request(url_path)
+        ret = responce.read()
+        return ret.strip()
 
     def _construct_urlpath(self, name):
         """
@@ -88,10 +123,10 @@ class RemoteFileWatcher(object):
         :param name: could be a device_signature or project_name
         :type name: str
         :return: content of text file, where latest fw version number is stored
-        :rtype: bytestring
+        :rtype: str
         """
         url_path = urljoin(self._construct_urlpath(name), self._LATEST_FW_VERSION_FILE)
-        return self._get_request_content(url_path)
+        return self._get_request_content(url_path).decode('utf-8')
 
     def download(self, name, version='latest', fname=None):
         """
