@@ -213,6 +213,28 @@ class MinimalModbusAPIWrapper(object):
         return str(ret).replace('\x00', '')
 
 
+def find_uart_settings(method_to_decorate):
+    """
+    WirenBoard devices support a determinate set of UART params. So, trying to perform a method, iterating over all allowed UART settings.
+    If succeed, successful uart settings remain on current instrument.
+
+    :param method_to_decorate: a method, containing any operation with minimalmodbus's instrument
+    :type method_to_decorate: func
+    """
+    @wraps(method_to_decorate)
+    def wrapper(self, *args, **kwargs):
+        allowed_parities = ALLOWED_PARITIES.keys()
+        for settings in product(ALLOWED_BAUDRATES, allowed_parities, ALLOWED_STOPBITS):
+            try:
+                return method_to_decorate(self, *args, **kwargs)
+            except IOError:
+                self.set_port_settings(*settings)
+                logging.debug('Trying UART settings: %s' % str(settings))
+        else:
+            raise RuntimeError('All UART settings were not successful! Check device slaveid/power!')
+    return wrapper
+
+
 class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     """
     Common modbus-bindings for WirenBoard devices.
@@ -245,26 +267,6 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.slaveid = addr
         self.port = port
 
-    def find_uart_settings(method_to_decorate):
-        """
-        WirenBoard devices support a determinate set of UART params. So, trying to perform a method, iterating over all allowed UART settings.
-        If succeed, successful uart settings remain on current instrument.
-
-        :param method_to_decorate: a method, containing any operation with minimalmodbus's instrument
-        :type method_to_decorate: func
-        """
-        @wraps(method_to_decorate)
-        def wrapper(self, *args, **kwargs):
-            allowed_parities = ALLOWED_PARITIES.keys()
-            for settings in product(ALLOWED_BAUDRATES, allowed_parities, ALLOWED_STOPBITS):
-                try:
-                    return method_to_decorate(self, *args, **kwargs)
-                except IOError:
-                    self.set_port_settings(*settings)
-                    logging.debug('Trying UART settings: %s' % str(settings))
-            else:
-                raise RuntimeError('All UART settings were not successful! Check device slaveid/power!')
-        return wrapper
 
     def _validate_param(self, param, sequence):
         if param not in sequence:
