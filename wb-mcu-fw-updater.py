@@ -1,5 +1,6 @@
 from wb_mcu_fw_updater.fw_downloader import RemoteFileWatcher
 from wb_mcu_fw_updater.device_info import SerialDeviceHandler, parse_fw_version
+from wb_mcu_fw_updater.fw_flasher import WBFWFlasher
 import logging
 from sys import argv
 
@@ -24,7 +25,10 @@ if __name__ == "__main__":
 
     if parse_fw_version(latest_remote_fw) > parse_fw_version(fw_version):
         logging.info('FW on device should be updated! (local: %s; remote: %s)' % (fw_version, latest_remote_fw))
+        saved_file = stable_fw_watcher.download(fw_signature)
+        device.reboot_to_bootloader()
+        flasher = WBFWFlasher(slaveid, port)
+        flasher.flash(saved_file)
     else:
         logging.info('FW version on device is latest!')
 
-    device.reboot_to_bootloader()
