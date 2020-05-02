@@ -1,20 +1,17 @@
 import logging
 import os
 from posixpath import join as urljoin
-from . import die
+from . import die, PYTHON2
 
-import sys
-if sys.version_info[0] < 3:
+if PYTHON2:
     import urllib2 as url_handler
     HTTPError = url_handler.HTTPError
     URLError = url_handler.URLError
-    python2 = True
 else:
     import urllib.request as url_handler
     import urllib.error
     HTTPError = urllib.error.HTTPError
     URLError = urllib.error.URLError
-    python2 = False
 
 
 ROOT_URL = 'http://fw-releases.wirenboard.com/' #TODO: fill from config/env vars
@@ -30,7 +27,7 @@ def perform_head_request(url_path):
     :return: a responce object
     :rtype: responce obj from urllib (or urllib2 in python2)
     """
-    if python2:
+    if PYTHON2:
         request = url_handler.Request(url_path)
         request.get_method = lambda : 'HEAD'
     else:
@@ -87,7 +84,7 @@ class RemoteFileWatcher(object):
         """
         logging.debug('Checking url: %s' % url_path)
         try:
-            responce = perform_head_request(url_path)
+            perform_head_request(url_path)
         except (HTTPError, URLError) as e:
             die('Error, while opening %s (%s)' % (url_path, str(e)))
 

@@ -66,6 +66,7 @@ class SerialDeviceHandler(object):
             logging.info('Using broadcast connection (slaveid 0)! Will set addr to %d' % SLAVEID_PLACEHOLDER)
             slaveid = SLAVEID_PLACEHOLDER
             self.device.set_slave_addr(slaveid)
+        self.slaveid = slaveid
 
     def get_fw_signature(self):
         """

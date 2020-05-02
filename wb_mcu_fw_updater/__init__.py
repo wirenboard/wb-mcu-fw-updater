@@ -1,5 +1,10 @@
 import sys
 
+if sys.version_info[0] < 3:
+    PYTHON2 = True
+else:
+    PYTHON2 = False
+
 
 SLAVEID_PLACEHOLDER = 245
 

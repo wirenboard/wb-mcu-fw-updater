@@ -49,8 +49,8 @@ class WBFWFlasher(object):
         if not os.path.exists(fpath):
             die('%s not found!')
         self.cmd_args.extend([self._LAUNCHKEYS['fw_file'], fpath])
-        logging.debug('Will run %s' % ' '.join(self.cmd_args))
+        logging.debug('Will run:\n%s' % ' '.join(self.cmd_args))
         try:
             subprocess.check_call(self.cmd_args, shell=False)
         except subprocess.CalledProcessError as e:
-            die('FAIL: %s' % str(e))
+            die('FAILED!')
