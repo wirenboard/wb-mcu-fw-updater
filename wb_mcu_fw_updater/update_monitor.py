@@ -15,22 +15,36 @@ class UpdateHandler(object):
 
     _ALLOWED_TASKS = ('fw', 'bootloader')
 
-    def __init__(self, port, slaveid=0, mode='fw', branch_name=None):
-        if slaveid == 0:
-            if self._ensure('No slaveid was passed. Will use broadcast command! Is device alone on the bus?'):
-                pass
-            else:
-                die('Disconnect another devices or specify slaveid!')
-        self.device = device_info.SerialDeviceHandler(port, slaveid)
-        if mode == 'fw':
-            self.current_version = self.device.get_fw_version
-        elif mode == 'bootloader':
-            self.current_version = self.device.get_bootloader_version
+    FW_SIGNATURES_PER_MODELS = {  # TODO: fill for all models from external config
+        'WB-MR6C' : 'mr6c',
+        'WB-MR6HV/I' : 'mr6',
+        'WB-MR6HV/S' : 'mr6',
+        'WB-MR6LV/I' : 'mr6',
+        'WB-MR6LV/S' : 'mr6'
+    }
+
+    def __init__(self, port, mode='fw', branch_name=None):
+        self.port = port
+        if mode in self._ALLOWED_TASKS:
+            self.mode = mode
         else:
-            die('Mode %s is unsupported!\nTry one of: %s' % ', '.join('fw', 'bootloader'))
-        self.remote_file_watcher = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
+            die('Mode <%s> is unsupported. Try one of: %s' % (mode, ', '.join(self._ALLOWED_TASKS)))
+        self.branch_name = branch_name
+        self.flasher = fw_flasher.WBFWFlasher(port)
+        self.remote_file_watcher = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
 
     def _ensure(self, message, positive='Y', negative='N'):
+        """Asking, is user sure or not.
+
+        :param message: message, will be printed to user
+        :type message: str
+        :param positive: beginning of positive user's answer, defaults to 'Y'
+        :type positive: str, optional
+        :param negative: beginning of negative user's answer, defaults to 'N'
+        :type negative: str, optional
+        :return: was user sure or not
+        :rtype: bool
+        """
         message_str = '%s [%s/%s] ' % (message, positive, negative)
         ret = input_func(message_str)
         if ret.upper().startswith(positive):
@@ -38,26 +52,89 @@ class UpdateHandler(object):
         else:
             return False
 
-    def flash(self, slaveid, port, fname, erase_settings=False):
-        flasher = fw_flasher.WBFWFlasher(slaveid, port, erase_settings)
-        flasher.flash(fname)
+    def get_modbus_device_connection(self, slaveid):
+        """Connection to device with possibly known slaveid and unknown UART settings.
 
-    def download(self, name, version, fname=None):
+        :param slaveid: slave address of device
+        :type slaveid: int
+        :return: a connection instance
+        :rtype: device_info.SerialDeviceHandler object
+        """
+        if slaveid == 0:
+            if self._ensure('No slaveid has passed. Will use broadcast command! Is device alone on the bus?'):
+                pass
+            else:
+                die('Disconnect ALL other devices from the bus!')
+        device = device_info.SerialDeviceHandler(self.port, slaveid)
+        return device
+
+    def flash(self, slaveid, fname, erase_settings=False):
+        """Flashing .wbfw file over already known port.
+
+        :param slaveid: slave addr of device
+        :type slaveid: int
+        :param fname: a .wbfw file to flash
+        :type fname: str
+        :param erase_settings: will all settings be erased after flashing or not, defaults to False
+        :type erase_settings: bool, optional
+        """
+        self.flasher.flash(slaveid, fname, erase_settings)
+
+    def download(self, name, version='latest', fname=None):
+        """Downloading .wbfw file from remote server.
+
+        :param name: a wb-device's fw signature
+        :type name: str
+        :param version: a specific version of fw, defaults to 'latest'
+        :type version: str, optional
+        :param fname: a specific filepath, download will be performed to, defaults to None
+        :type fname: str, optional
+        :return: filepath, download has performed to
+        :rtype: str
+        """
         return self.remote_file_watcher.download(name, version, fname)
 
-    def update_is_needed(self):
+    def update_is_needed(self, instrument):
         """
         Checking, whether update is needed or not by comparing version, stored in the device with remote.
 
-        :return: is device's version latest or not
-        :rtype: bool
+        :param instrument: a modbus connection to device
+        :type instrument: a device_info.SerialDeviceHandler' instance
         """
-        self.meaningful_str = self.device.get_fw_signature()
-        self.latest_remote_version = self.remote_file_watcher.get_latest_version_number(self.meaningful_str)
-        current_version = self.current_version()
-        if device_info.parse_fw_version(current_version) < device_info.parse_fw_version(self.latest_remote_version):
-            logging.debug('Update is needed! (local version: %s; remote version: %s)' % (current_version, self.latest_remote_version))
+        meaningful_str = instrument.get_fw_signature()
+        latest_remote_version = self.remote_file_watcher.get_latest_version_number(meaningful_str)
+        current_version = instrument.get_bootloader_version() if self.mode == 'bootloader' else instrument.get_fw_version()
+        if device_info.parse_fw_version(current_version) < device_info.parse_fw_version(latest_remote_version):
+            logging.debug('Update is needed! (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))
             return True
         else:
-            logging.debug('Device has latest version (%s)!' % current_version)
+            logging.debug('Device has latest %s version (%s)!' % (self.mode, current_version))
             return False
+
+    def find_slaveid_in_bootloader(self):
+        """Iterating over all possible slaveaddrs and probing connection on it.
+
+        :return: found slaveid
+        :rtype: int
+        """
+        if self._ensure("Is device in bootloader now? All device's settings will be restored to defaults!"):
+            pass
+        else:
+            die('Refused erasing settings')
+        for slaveid in range(0, 248):
+            if self.flasher.probe_connection(slaveid):
+                return slaveid
+        else:
+            die('No valid slaveid was found. Check physical connection to device!')
+
+    def get_fw_signature_by_model(self, modelname):
+        """If there is no connection with device, fw_signature could be get via internal model_name <=> fw_csignature conformity.
+
+        :param modelname: a full device's model name (ex: WB-MR6HV/I)
+        :type modelname: str
+        :return: fw_signature of device
+        :rtype: str
+        """
+        if modelname not in self.FW_SIGNATURES_PER_MODELS:
+            die('Model %s is unknown! Choose one from: ' % (modelname, ', '.join(self.FW_SIGNATURES_PER_MODELS.keys())))
+        return self.FW_SIGNATURES_PER_MODELS[modelname]
