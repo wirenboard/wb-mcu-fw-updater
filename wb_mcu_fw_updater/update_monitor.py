@@ -1,4 +1,5 @@
 import logging
+import json
 from . import fw_flasher, device_info, fw_downloader, die, SLAVEID_PLACEHOLDER, PYTHON2
 
 
@@ -15,6 +16,13 @@ class UpdateHandler(object):
 
     _ALLOWED_TASKS = ('fw', 'bootloader')
 
+    _DRIVER_CONFIG_MAP = {
+        'ports_list' : 'ports',
+        'port_fname' : 'path',
+        'devices_list' : 'devices',
+        'slaveid' : 'slave_id'
+    }
+
     FW_SIGNATURES_PER_MODELS = {  # TODO: fill for all models from external config
         'WB-MR6C' : 'mr6c',
         'WB-MR6HV/I' : 'mr6',
@@ -23,7 +31,7 @@ class UpdateHandler(object):
         'WB-MR6LV/S' : 'mr6'
     }
 
-    def __init__(self, port, mode='fw', branch_name=None):
+    def __init__(self, port, mode, branch_name):
         self.port = port
         if mode in self._ALLOWED_TASKS:
             self.mode = mode
@@ -51,6 +59,14 @@ class UpdateHandler(object):
             return True
         else:
             return False
+
+    def _parse_driver_config(self, driver_config_fname):
+        try:
+            config_file = open(driver_config_fname, 'r')
+        except IOError as e:
+            die(str(e))
+        config_dict = json.load(config_file)
+        return config_dict
 
     def get_modbus_device_connection(self, slaveid):
         """Connection to device with possibly known slaveid and unknown UART settings.
@@ -128,7 +144,7 @@ class UpdateHandler(object):
             die('No valid slaveid was found. Check physical connection to device!')
 
     def get_fw_signature_by_model(self, modelname):
-        """If there is no connection with device, fw_signature could be get via internal model_name <=> fw_csignature conformity.
+        """If there is no connection with device, fw_signature could be get via internal model_name <=> fw_signature conformity.
 
         :param modelname: a full device's model name (ex: WB-MR6HV/I)
         :type modelname: str
@@ -138,3 +154,22 @@ class UpdateHandler(object):
         if modelname not in self.FW_SIGNATURES_PER_MODELS:
             die('Model %s is unknown! Choose one from: ' % (modelname, ', '.join(self.FW_SIGNATURES_PER_MODELS.keys())))
         return self.FW_SIGNATURES_PER_MODELS[modelname]
+
+    def get_devices_on_port(self, driver_config_fname):
+        """Parsing <driver_config_fname> for a list of device slaveids.
+
+        :param driver_config_fname: wb-mqtt-serial's config file
+        :type driver_config_fname: str
+        :return: a list of slaveids from driver
+        :rtype: list
+        """
+        found_slaveids = []
+        config_dict = self._parse_driver_config(driver_config_fname)
+        for port in config_dict[self._DRIVER_CONFIG_MAP['ports_list']]:
+            if port[self._DRIVER_CONFIG_MAP['port_fname']] == self.port:
+                for serial_device in port[self._DRIVER_CONFIG_MAP['devices_list']]:
+                    found_slaveids.append(int(serial_device[self._DRIVER_CONFIG_MAP['slaveid']]))
+        if found_slaveids:
+            return found_slaveids
+        else:
+            die('Looks, like there is no devices on port %s. Aborted.' % self.port)

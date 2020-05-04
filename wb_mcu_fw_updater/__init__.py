@@ -9,6 +9,9 @@ else:
 SLAVEID_PLACEHOLDER = 245
 
 
+DRIVER_EXEC_NAME = 'wb-mqtt-serial'
+
+
 def die(err_message, exitcode=1):
     """
     Exits gracefully, writing <err_message> to stderr
