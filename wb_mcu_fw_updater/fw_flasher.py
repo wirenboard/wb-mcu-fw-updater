@@ -3,7 +3,7 @@ import os
 import logging
 from copy import copy
 from distutils.spawn import find_executable
-from . import die
+from . import die, CONFIG
 
 
 class WBFWFlasher(object):
@@ -11,7 +11,6 @@ class WBFWFlasher(object):
     A python-wrapper around wb-mcu-fw-flasher binary (writes *.wbfw files over serial port).
     Device is assumed to be in bootloader mode already!
     """
-    _EXEC_FNAME = 'wb-mcu-fw-flasher'
 
     _LAUNCHKEYS = {
         'port' : '-d',
@@ -22,12 +21,12 @@ class WBFWFlasher(object):
     }
 
     def __init__(self, port):
-        exec_path = find_executable(self._EXEC_FNAME)
+        exec_path = find_executable(CONFIG['FLASHER_FNAME'])
         if exec_path:
             self.executable = exec_path
             self.compulsory_cmd_args = [exec_path, self._LAUNCHKEYS['port'], port]
         else:
-            die('Executable path for %s not found!' % self._EXEC_FNAME)
+            die('Executable path for %s not found!' % CONFIG['FLASHER_FNAME'])
 
     def _run_cmd(self, args_list):
         logging.debug('Will run:\n%s' % ' '.join(args_list))

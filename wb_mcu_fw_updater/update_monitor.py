@@ -1,6 +1,6 @@
 import logging
 import json
-from . import fw_flasher, device_info, fw_downloader, die, SLAVEID_PLACEHOLDER, PYTHON2
+from . import fw_flasher, device_info, fw_downloader, die, PYTHON2, CONFIG
 
 
 if PYTHON2:
@@ -21,14 +21,6 @@ class UpdateHandler(object):
         'port_fname' : 'path',
         'devices_list' : 'devices',
         'slaveid' : 'slave_id'
-    }
-
-    FW_SIGNATURES_PER_MODELS = {  # TODO: fill for all models from external config
-        'WB-MR6C' : 'mr6c',
-        'WB-MR6HV/I' : 'mr6',
-        'WB-MR6HV/S' : 'mr6',
-        'WB-MR6LV/I' : 'mr6',
-        'WB-MR6LV/S' : 'mr6'
     }
 
     def __init__(self, port, mode, branch_name):
@@ -151,9 +143,9 @@ class UpdateHandler(object):
         :return: fw_signature of device
         :rtype: str
         """
-        if modelname not in self.FW_SIGNATURES_PER_MODELS:
-            die('Model %s is unknown! Choose one from: ' % (modelname, ', '.join(self.FW_SIGNATURES_PER_MODELS.keys())))
-        return self.FW_SIGNATURES_PER_MODELS[modelname]
+        if modelname not in CONFIG['FW_SIGNATURES_PER_MODEL']:
+            die('Model %s is unknown! Choose one from:\n%s' % (modelname, ', '.join(CONFIG['FW_SIGNATURES_PER_MODEL'].keys())))
+        return CONFIG['FW_SIGNATURES_PER_MODEL'][modelname]
 
     def get_devices_on_port(self, driver_config_fname):
         """Parsing <driver_config_fname> for a list of device slaveids.

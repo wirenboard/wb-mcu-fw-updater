@@ -1,7 +1,7 @@
 import logging
 from distutils.version import LooseVersion
 from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
-from . import SLAVEID_PLACEHOLDER
+from . import CONFIG
 
 
 def parse_fw_version(fw_ver):
@@ -63,8 +63,8 @@ class SerialDeviceHandler(object):
     def __init__(self, port, slaveid=0):
         self.device = UnknownUARTSettingsDevice(slaveid, port)
         if slaveid == 0:
-            logging.info('Using broadcast connection (slaveid 0)! Will set addr to %d' % SLAVEID_PLACEHOLDER)
-            slaveid = SLAVEID_PLACEHOLDER
+            logging.info('Using broadcast connection (slaveid 0)! Will set addr to %d' % CONFIG['SLAVEID_PLACEHOLDER'])
+            slaveid = CONFIG['SLAVEID_PLACEHOLDER']
             self.device.set_slave_addr(slaveid)
         self.slaveid = slaveid
 
@@ -85,7 +85,7 @@ class SerialDeviceHandler(object):
         :rtype: str
         """
         return self.device.get_device_signature()
-    
+
     def get_fw_version(self):
         """
         Firmware version is a dot-terminated number.

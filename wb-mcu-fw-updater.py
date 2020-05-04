@@ -1,7 +1,7 @@
 import argparse
 import logging
 import subprocess
-from wb_mcu_fw_updater import update_monitor, DRIVER_EXEC_NAME
+from wb_mcu_fw_updater import update_monitor, CONFIG
 
 
 def update_alive_device(updater, args):
@@ -40,12 +40,12 @@ def update_all(updater, args): # TODO: not fail after first unconnected device; 
     """Parsing driver_config for a list of slaveids. Trying to update each device.
     """
     args.erase_settings = False
-    subprocess.call('service %s stop' % DRIVER_EXEC_NAME, shell=True)
+    subprocess.call('service %s stop' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
     for device_slaveid in updater.get_devices_on_port(args.driver_config):
         args.slaveid = device_slaveid
         logging.info('Trying to update device with slaveid %d:' % args.slaveid)
         update_alive_device(updater, args)
-    subprocess.call('service %s restart' % DRIVER_EXEC_NAME, shell=True)
+    subprocess.call('service %s restart' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
 
 
 def parse_args():
