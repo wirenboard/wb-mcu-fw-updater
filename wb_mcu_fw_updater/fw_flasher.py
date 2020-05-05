@@ -29,7 +29,7 @@ class WBFWFlasher(object):
             die('Executable path for %s not found!' % CONFIG['FLASHER_FNAME'])
 
     def _run_cmd(self, args_list):
-        logging.debug('Will run:\n%s' % ' '.join(args_list))
+        logging.debug('Will run cmd (%s)' % ' '.join(args_list))
         subprocess.check_call(args_list, shell=False)
 
     def _make_args_list(self, slaveid, additional_args_list):

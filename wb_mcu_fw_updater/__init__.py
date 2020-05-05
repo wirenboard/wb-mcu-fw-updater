@@ -1,5 +1,6 @@
 import sys
 import logging
+import logging.handlers
 from ast import literal_eval
 
 if sys.version_info[0] < 3:
@@ -18,6 +19,11 @@ CONFIG = {
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',
     'DEFAULT_SOURCE' : 'stable',
+    'USERLOG_MESSAGE_FMT' : '%(asctime)s %(message)s',
+    'SYSLOG_MESSAGE_FMT' : 'wb-mcu-fw-updater:%(module)s.%(funcName)s[%(process)s]: %(message)s',
+    'LOG_DATETIME_FMT' : '%Y-%m-%d|%H:%M:%S',
+    'SYSLOG_LOGLEVEL' : 10,
+    'USER_LOGLEVEL' : 30,
     'FW_SIGNATURES_PER_MODEL': {
 
     }
@@ -47,3 +53,10 @@ def update_config(config_fname):
 
 
 update_config(CONFIG['EXTERNAL_CONFIG_FNAME'])
+
+
+logging.getLogger().setLevel(logging.NOTSET)
+syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
+syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
+syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
+logging.getLogger().addHandler(syslog_handler)

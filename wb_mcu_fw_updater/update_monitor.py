@@ -113,10 +113,10 @@ class UpdateHandler(object):
         latest_remote_version = self.remote_file_watcher.get_latest_version_number(meaningful_str)
         current_version = instrument.get_bootloader_version() if self.mode == 'bootloader' else instrument.get_fw_version()
         if device_info.parse_fw_version(current_version) < device_info.parse_fw_version(latest_remote_version):
-            logging.debug('Update is needed! (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))
+            logging.info('Update is needed! (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))
             return True
         else:
-            logging.debug('Device has latest %s version (%s)!' % (self.mode, current_version))
+            logging.info('Device has latest %s version (%s)!' % (self.mode, current_version))
             return False
 
     def find_slaveid_in_bootloader(self):

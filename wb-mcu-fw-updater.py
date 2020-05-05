@@ -1,7 +1,8 @@
 import argparse
 import logging
 import subprocess
-from wb_mcu_fw_updater import update_monitor, CONFIG
+import sys
+from wb_mcu_fw_updater import update_monitor, user_log, CONFIG
 
 
 def update_alive_device(updater, args):
@@ -53,6 +54,7 @@ def parse_args():
     main_parser.add_argument('-p', '--port', type=str, dest='port', required=True, help='Serial port, device connected to')
     main_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, choices=range(0, 248), help='Slaveid of device') #TODO: remove choices
     main_parser.add_argument('--save-to', type=str, dest='fname', default=None, help='Fpath, where download firmware')
+    main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const', const=10, help='Set log priority to lowest')
     main_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='A current version could be specified')
     main_parser.add_argument('--erase-settings', action='store_true', dest='erase_settings', default=False, help='Erase all device settings at flash')
     main_parser.add_argument('--branch', type=str, dest='branch_name', default=None, help='Install FW from specified branch')
@@ -77,7 +79,9 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    logging.getLogger().setLevel(logging.NOTSET)
     args = parse_args()
+
+    user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
+
     updater = update_monitor.UpdateHandler(args.port, args.mode, args.branch_name)
     args.func(updater, args)

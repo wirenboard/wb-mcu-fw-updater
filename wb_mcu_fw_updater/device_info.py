@@ -63,7 +63,7 @@ class SerialDeviceHandler(object):
     def __init__(self, port, slaveid=0):
         self.device = UnknownUARTSettingsDevice(slaveid, port)
         if slaveid == 0:
-            logging.info('Using broadcast connection (slaveid 0)! Will set addr to %d' % CONFIG['SLAVEID_PLACEHOLDER'])
+            logging.warn('Using broadcast connection (slaveid 0)! Will set addr to %d' % CONFIG['SLAVEID_PLACEHOLDER'])
             slaveid = CONFIG['SLAVEID_PLACEHOLDER']
             self.device.set_slave_addr(slaveid)
         self.slaveid = slaveid

@@ -65,7 +65,7 @@ class RemoteFileWatcher(object):
         self.parrent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
         if branch_name:
             self._BRANCH = branch_name
-            logging.debug('Looking to unstable branch: %s' % branch_name)
+            logging.warn('Looking to unstable branch: %s' % branch_name)
             self._SOURCE = urljoin('unstable', branch_name)
 
     def _check_url_is_available(self, url_path):
@@ -142,7 +142,7 @@ class RemoteFileWatcher(object):
             fpath = os.path.join(file_saving_dir, fname)
         else:
             fpath = fname
-        logging.debug('Downloading to: %s' % fpath)
+        logging.info('Downloading to: %s' % fpath)
         with open(fpath, 'wb+') as fh:
             fh.write(content)
         return fpath
