@@ -20,6 +20,7 @@ class UpdateHandler(object):
         'ports_list' : 'ports',
         'port_fname' : 'path',
         'devices_list' : 'devices',
+        'model' : 'device_type',
         'slaveid' : 'slave_id'
     }
 
@@ -65,11 +66,15 @@ class UpdateHandler(object):
         :return: a connection instance
         :rtype: device_info.SerialDeviceHandler object
         """
-        if slaveid == 0:
+        if 0 < slaveid <= 247:
+            pass
+        elif slaveid == 0:
             if self._ensure('No slaveid has passed. Will use broadcast command! Is device alone on the bus?'):
                 pass
             else:
                 die('Disconnect ALL other devices from the bus!')
+        else:
+            die('Slaveid %d is not allowed!' % slaveid)
         device = device_info.SerialDeviceHandler(self.port, slaveid)
         return device
 
@@ -145,20 +150,22 @@ class UpdateHandler(object):
         return CONFIG['FW_SIGNATURES_PER_MODEL'][modelname]
 
     def get_devices_on_port(self, driver_config_fname):
-        """Parsing <driver_config_fname> for a list of device slaveids.
+        """Parsing <driver_config_fname> for a list of pairs device_model & slaveid.
 
         :param driver_config_fname: wb-mqtt-serial's config file
         :type driver_config_fname: str
-        :return: a list of slaveids from driver
+        :return: a list of device models and their slaveids
         :rtype: list
         """
-        found_slaveids = []
+        found_devices = []
         config_dict = self._parse_driver_config(driver_config_fname)
         for port in config_dict[self._DRIVER_CONFIG_MAP['ports_list']]:
             if port[self._DRIVER_CONFIG_MAP['port_fname']] == self.port:
                 for serial_device in port[self._DRIVER_CONFIG_MAP['devices_list']]:
-                    found_slaveids.append(int(serial_device[self._DRIVER_CONFIG_MAP['slaveid']]))
-        if found_slaveids:
-            return found_slaveids
+                    device_name = serial_device[self._DRIVER_CONFIG_MAP['model']]
+                    slaveid = serial_device[self._DRIVER_CONFIG_MAP['slaveid']]
+                    found_devices.append([device_name, int(slaveid)])
+        if found_devices:
+            return found_devices
         else:
             die('Looks, like there is no devices on port %s. Aborted.' % self.port)

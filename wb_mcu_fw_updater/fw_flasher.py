@@ -48,6 +48,10 @@ class WBFWFlasher(object):
         :param restore_defaults: will all settings be erased during flashing or not, defaults to False
         :type restore_defaults: bool, optional
         """
+        if 0 <= slaveid <= 247:
+            pass
+        else:
+            die('Slaveid %d is not allowed!')
         if not os.path.exists(fpath):
             die('%s not found!')
         args_list = self._make_args_list(slaveid, [self._LAUNCHKEYS['fw_file'], fpath])

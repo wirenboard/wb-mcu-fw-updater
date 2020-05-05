@@ -1,8 +1,11 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import argparse
 import logging
 import subprocess
 import sys
-from wb_mcu_fw_updater import update_monitor, user_log, CONFIG
+from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
 
 
 def update_alive_device(updater, args):
@@ -33,26 +36,33 @@ def reflash_in_bootloader(updater, args):
     if args.slaveid != 0:
         slaveid = args.slaveid
     else:
-        slaveid = updater.find_slaveid_in_bootloader()
+        slaveid = updater.find_slaveid_in_bootloader()  # Erasing all settings!
     updater.flash(slaveid, download_fpath, args.erase_settings)
 
 
-def update_all(updater, args): # TODO: not fail after first unconnected device; collect statistics
+def update_all(updater, args):
     """Parsing driver_config for a list of slaveids. Trying to update each device.
     """
-    args.erase_settings = False
+    args.erase_settings = False  # Restoring settings to default is not allowed!
+    failed_devices = []
     subprocess.call('service %s stop' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
-    for device_slaveid in updater.get_devices_on_port(args.driver_config):
+    for device_name, device_slaveid in updater.get_devices_on_port(args.driver_config):
         args.slaveid = device_slaveid
-        logging.info('Trying to update device with slaveid %d:' % args.slaveid)
-        update_alive_device(updater, args)
+        logging.info('Trying to update %s with slaveid %d:' % (device_name, args.slaveid))
+        try:
+            update_alive_device(updater, args)
+        except Exception as e:
+            logging.error('Update for %s : %d failed!' % (device_name, args.slaveid), exc_info=True)
+            failed_devices.append([device_name, args.slaveid])
+    if failed_devices:
+        die('Update has failed for:\n%s\nCheck syslog for more info' % (str(failed_devices)))
     subprocess.call('service %s restart' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
 
 
 def parse_args():
-    main_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description='WirenBoard modbus devices firmware update tool')
-    main_parser.add_argument('-p', '--port', type=str, dest='port', required=True, help='Serial port, device connected to')
-    main_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, choices=range(0, 248), help='Slaveid of device') #TODO: remove choices
+    main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter, description='WirenBoard modbus devices firmware update tool')
+    main_parser.add_argument("port", type=str, help='Serial port, device connected to')
+    main_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slaveid of device') #TODO: remove choices
     main_parser.add_argument('--save-to', type=str, dest='fname', default=None, help='Fpath, where download firmware')
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const', const=10, help='Set log priority to lowest')
     main_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='A current version could be specified')

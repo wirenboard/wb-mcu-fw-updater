@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import logging
 from distutils.version import LooseVersion
 from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings

@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import logging
 import os
 from posixpath import join as urljoin
@@ -7,7 +10,6 @@ if PYTHON2:
     import urllib2 as url_handler
 else:
     import urllib.request as url_handler
-    import urllib.error
 
 
 def perform_head_request(url_path):
