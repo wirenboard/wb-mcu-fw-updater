@@ -53,10 +53,7 @@ class WBFWFlasher(object):
         args_list = self._make_args_list(slaveid, [self._LAUNCHKEYS['fw_file'], fpath])
         if restore_defaults:
             args_list.append(self._LAUNCHKEYS['erase_settings'])
-        try:
-            self._run_cmd(args_list)
-        except subprocess.CalledProcessError as e:
-            die('FAILED!')
+        self._run_cmd(args_list)
 
     def probe_connection(self, slaveid, desired_response_timeout=0.2):
         """Assumed, device in bootloader and slaveid is unknown. Launching <erase_eeprom> cmd with short response timeout.

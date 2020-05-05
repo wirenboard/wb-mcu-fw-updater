@@ -1,17 +1,13 @@
 import logging
 import os
 from posixpath import join as urljoin
-from . import die, PYTHON2, CONFIG
+from . import PYTHON2, CONFIG
 
 if PYTHON2:
     import urllib2 as url_handler
-    HTTPError = url_handler.HTTPError
-    URLError = url_handler.URLError
 else:
     import urllib.request as url_handler
     import urllib.error
-    HTTPError = urllib.error.HTTPError
-    URLError = urllib.error.URLError
 
 
 def perform_head_request(url_path):
@@ -76,10 +72,7 @@ class RemoteFileWatcher(object):
         :type url_path: str
         """
         logging.debug('Checking url: %s' % url_path)
-        try:
-            perform_head_request(url_path)
-        except (HTTPError, URLError) as e:
-            die('Error, while opening %s (%s)' % (url_path, str(e)))
+        perform_head_request(url_path)
 
     def _get_request_content(self, url_path):
         """

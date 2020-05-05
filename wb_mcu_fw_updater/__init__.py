@@ -30,13 +30,20 @@ CONFIG = {
 }
 
 
-def die(err_message, exitcode=1):
+def die(err_message=None, exitcode=1):
     """
-    Exits gracefully, writing <err_message> to stderr
+    Exits gracefully, writing <err_message> to stderr via logging.
+    Call explicitly only if python's exceptions are not informative!
     """
-    sys.stderr.write('%s\n' % err_message)
-    sys.stderr.flush()
+    if err_message:
+        logging.error(err_message)
+        sys.stderr.flush()
     sys.exit(exitcode)
+
+
+def tb_to_syslog_exc_hook(exc_type, value, traceback):
+    logging.error('Error occured: %s' % str(value), exc_info=(exc_type, value, traceback))
+    die()
 
 
 def update_config(config_fname):
@@ -60,3 +67,5 @@ syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
 syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
 syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
 logging.getLogger().addHandler(syslog_handler)
+
+sys.excepthook = tb_to_syslog_exc_hook  # Exception's traceback is written only to syslog

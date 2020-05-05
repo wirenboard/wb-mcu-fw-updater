@@ -53,10 +53,7 @@ class UpdateHandler(object):
             return False
 
     def _parse_driver_config(self, driver_config_fname):
-        try:
-            config_file = open(driver_config_fname, 'r')
-        except IOError as e:
-            die(str(e))
+        config_file = open(driver_config_fname, 'r')
         config_dict = json.load(config_file)
         return config_dict
 
