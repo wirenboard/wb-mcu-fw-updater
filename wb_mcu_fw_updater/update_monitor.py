@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import logging
 import json
 from . import fw_flasher, device_info, fw_downloader, die, PYTHON2, CONFIG

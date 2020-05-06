@@ -11,6 +11,10 @@ if sys.version_info[0] < 3:
 else:
     PYTHON2 = False
 
+_DEFAULT_SYSLOG_SOCKET = '/dev/log'  # For all Linuxes
+if 'darwin' in sys.platform:
+    _DEFAULT_SYSLOG_SOCKET = '/var/run/syslog' # For OSX
+
 
 CONFIG = {
     'EXTERNAL_CONFIG_FNAME' : '/etc/wb-mcu-fw-updater.conf',
@@ -66,7 +70,7 @@ update_config(CONFIG['EXTERNAL_CONFIG_FNAME'])
 
 
 logging.getLogger().setLevel(logging.NOTSET)
-syslog_handler = logging.handlers.SysLogHandler(address='/dev/log')
+syslog_handler = logging.handlers.SysLogHandler(address=_DEFAULT_SYSLOG_SOCKET, facility='user')
 syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
 syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
 logging.getLogger().addHandler(syslog_handler)
