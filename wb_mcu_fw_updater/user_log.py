@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os
 import logging
 from . import CONFIG
 
@@ -56,3 +57,16 @@ def setup_user_logger(least_visible_level):
     stderr_handler.setFormatter(user_formatter)
     stderr_handler.addFilter(StderrFilter())
     logging.getLogger().addHandler(stderr_handler)
+
+
+def setup_syslog_logger():
+    """
+    Writing logging messages to syslog socket.
+    Default syslog socket is platform-dependent and could be absent in some development environments.
+    """
+    _default_syslog_sock = '/var/run/syslog' if 'darwin' in sys.platform else '/dev/log'  # For all linux systems
+    if os.path.exists(_default_syslog_sock):
+        syslog_handler = logging.handlers.SysLogHandler(address=_default_syslog_sock, facility='user')
+        syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
+        syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
+        logging.getLogger().handlers.insert(0, syslog_handler)  # Each message should be formatted by syslog's handler at first

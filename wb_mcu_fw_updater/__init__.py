@@ -6,14 +6,14 @@ import logging
 import logging.handlers
 from ast import literal_eval
 
+
 if sys.version_info[0] < 3:
     PYTHON2 = True
 else:
     PYTHON2 = False
 
-_DEFAULT_SYSLOG_SOCKET = '/dev/log'  # For all Linuxes
-if 'darwin' in sys.platform:
-    _DEFAULT_SYSLOG_SOCKET = '/var/run/syslog' # For OSX
+
+logging.getLogger().setLevel(logging.NOTSET)
 
 
 CONFIG = {
@@ -50,14 +50,24 @@ def die(err_message=None, exitcode=1):
 
 
 def tb_to_syslog_exc_hook(exc_type, value, traceback):
+    """
+    Excepthook, redirecting an uncatched error's traceback to syslog.
+    """
     logging.error('Error occured: %s' % str(value), exc_info=(exc_type, value, traceback))
     die()
 
 
 def update_config(config_fname):
+    """
+    Only fields, existing in CONFIG will be updated.
+
+    :param config_fname: a full path to user config file
+    :type config_fname: str
+    """
     try:
         conffile = open(config_fname)
     except IOError:
+        logging.warning('No user config file has found! Will use built-in default')
         return
     try:
         config_dict = literal_eval(conffile.read())
@@ -68,11 +78,5 @@ def update_config(config_fname):
 
 update_config(CONFIG['EXTERNAL_CONFIG_FNAME'])
 
-
-logging.getLogger().setLevel(logging.NOTSET)
-syslog_handler = logging.handlers.SysLogHandler(address=_DEFAULT_SYSLOG_SOCKET, facility='user')
-syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
-syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
-logging.getLogger().addHandler(syslog_handler)
 
 sys.excepthook = tb_to_syslog_exc_hook  # Exception's traceback is written only to syslog

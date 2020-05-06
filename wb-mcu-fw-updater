@@ -50,9 +50,9 @@ def update_all(updater, args):
         except Exception as e:
             logging.error('Update for %s : %d failed!' % (device_name, args.slaveid), exc_info=True)
             failed_devices.append([device_name, args.slaveid])
+    subprocess.call('service %s restart' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
     if failed_devices:
         die('Update has failed for:\n%s\nCheck syslog for more info' % (str(failed_devices)))
-    subprocess.call('service %s restart' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
 
 
 def parse_args():
@@ -87,6 +87,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
+    user_log.setup_syslog_logger()
     user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
 
     updater = update_monitor.UpdateHandler(args.port, args.mode, args.branch_name)
