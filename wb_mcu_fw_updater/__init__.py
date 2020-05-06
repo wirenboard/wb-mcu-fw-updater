@@ -54,7 +54,6 @@ def update_config(config_fname):
     try:
         conffile = open(config_fname)
     except IOError:
-        logging.warn('No config (%s) found! Using default built-in instead' % config_fname)
         return
     try:
         config_dict = literal_eval(conffile.read())
