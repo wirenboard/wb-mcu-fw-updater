@@ -113,38 +113,116 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def write_bits(self, addr, values_list):
+        """
+        Writing multiple consecutive coils (each one stores 1 bit) per one modbus message.
+
+        :param addr: address of first register of a row
+        :type addr: int
+        :param values_list: a list of registers values to write
+        :type values_list: list
+        """
         self.device.write_bits(addr, values_list)
 
     @force()
     def read_u16(self, addr):
+        """
+        Reading single holding register (stores unsigned int16).
+
+        :param addr: address of register
+        :type addr: int
+        :return: value, stored in register (only positive)
+        :rtype: int
+        """
         return self.device.read_register(addr, 0, 3, signed=False)
 
     @force()
     def read_s16(self, addr):
+        """
+        Reading single holding register (stores signed int16).
+
+        :param addr: address of register
+        :type addr: int
+        :return: value, stored in register (could be negative)
+        :rtype: int
+        """
         return self.device.read_register(addr, 0, 3, signed=True)
 
     @force()
     def write_u16(self, addr, value):
+        """
+        Writing single holding register (stores unsigned int16).
+
+        :param addr: address of register
+        :type addr: int
+        :param value: value, to write into register (only positive)
+        :type value: int
+        """
         self.device.write_register(addr, value, 0, 6, signed=False)
 
     @force()
     def write_u16_regs(self, beginning, values):
+        """
+        Writing multiple consecutive holding registers (each one stores unsigned int16) per one modbus message.
+
+        :param beginning: address of first register
+        :type beginning: int
+        :param values: a list of values to write to device
+        :type values: list
+        """
         self.device.write_registers(beginning, values)
 
     @force()
     def read_u16_holdings(self, beginning, number_of_regs):
+        """
+        Reading multiple consecutive holding registers (each one stores unsigned int16) per one modbus message.
+
+        :param beginning: address of first register
+        :type beginning: int
+        :param number_of_regs: numbers of registers to read
+        :type number_of_regs: int
+        :return: a list of registers values
+        :rtype: list
+        """
         return self.device.read_registers(beginning, number_of_regs, 3)
 
     @force()
     def read_u16_inputs(self, beginning, number_of_regs):
+        """
+        Reading multiple consecutive input registers (each one stores unsigned int16) per one modbus message.
+
+        :param beginning: address of first register
+        :type beginning: int
+        :param number_of_regs: numbers of registers to read
+        :type number_of_regs: int
+        :return: a list of registers values
+        :rtype: list
+        """
         return self.device.read_registers(beginning, number_of_regs, 4)
 
     @force()
     def write_s16(self, addr, value):
+        """
+        Writing single holding register (stores signed int16).
+
+        :param addr: address of register
+        :type addr: int
+        :param value: value, to write into register (only positive)
+        :type value: int
+        """
         self.device.write_register(addr, value, 0, 6, signed=True)
 
     @force()
     def read_u32_big_endian(self, addr, byteswap=False):
+        """
+        Reading two consecutive 16 bit registers and interpreting value as one unsigned 32 bit integer with Big-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param byteswap: are bytes swapped or not, defaults to False
+        :type byteswap: bool, optional
+        :return: unsigned 32 bit integer
+        :rtype: int
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_BIG_SWAP
         else:
@@ -153,6 +231,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def read_u32_little_endian(self, addr, byteswap=False):
+        """
+        Reading two consecutive 16 bit registers and interpreting value as one unsigned 32 bit integer with Little-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param byteswap: are bytes swapped or not, defaults to False
+        :type byteswap: bool, optional
+        :return: unsigned 32 bit integer
+        :rtype: int
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_LITTLE_SWAP
         else:
@@ -161,6 +249,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def read_s32_big_endian(self, addr, byteswap=False):
+        """
+        Reading two consecutive 16 bit registers and interpreting value as one signed 32 bit integer with Big-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param byteswap: are bytes swapped or not, defaults to False
+        :type byteswap: bool, optional
+        :return: signed 32 bit integer
+        :rtype: int
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_BIG_SWAP
         else:
@@ -169,6 +267,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def read_s32_little_endian(self, addr, byteswap=False):
+        """
+        Reading two consecutive 16 bit registers and interpreting value as one signed 32 bit integer with Little-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param byteswap: are bytes swapped or not, defaults to False
+        :type byteswap: bool, optional
+        :return: signed 32 bit integer
+        :rtype: int
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_LITTLE_SWAP
         else:
@@ -177,6 +285,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def write_u32_big_endian(self, addr, value, byteswap=False):
+        """
+        Writing an unsigned 32 bit integer to two consecutive 16 bit holding registers with Big-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param value: value, will be written to regs
+        :type value: int
+        :param byteswap: will bytes be swapped or not, defaults to False
+        :type byteswap: bool, optional
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_BIG_SWAP
         else:
@@ -185,6 +303,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def write_u32_little_endian(self, addr, value, byteswap=False):
+        """
+        Writing an unsigned 32 bit integer to two consecutive 16 bit holding registers with Little-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param value: value, will be written to regs
+        :type value: int
+        :param byteswap: will bytes be swapped or not, defaults to False
+        :type byteswap: bool, optional
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_LITTLE_SWAP
         else:
@@ -193,6 +321,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def write_s32_big_endian(self, addr, value, byteswap=False):
+        """
+        Writing a signed 32 bit integer to two consecutive 16 bit holding registers with Big-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param value: value, will be written to regs
+        :type value: int
+        :param byteswap: will bytes be swapped or not, defaults to False
+        :type byteswap: bool, optional
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_BIG_SWAP
         else:
@@ -201,6 +339,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def write_s32_little_endian(self, addr, value, byteswap=False):
+        """
+        Writing a signed 32 bit integer to two consecutive 16 bit holding registers with Little-Endian byteorder.
+
+        :param addr: address of first register
+        :type addr: int
+        :param value: value, will be written to regs
+        :type value: int
+        :param byteswap: will bytes be swapped or not, defaults to False
+        :type byteswap: bool, optional
+        """
         if byteswap:
             order = minimalmodbus.BYTEORDER_LITTLE_SWAP
         else:
@@ -209,6 +357,16 @@ class MinimalModbusAPIWrapper(object):
 
     @force()
     def read_string(self, addr, regs_lenght):
+        """
+        Reading a row of consecutive uint16 holding registers and interpreting row as a string.
+
+        :param addr: address of first register
+        :type addr: int
+        :param regs_lenght: number of registers, will be red
+        :type regs_lenght: int
+        :return: a string with cut trailing null-bytes
+        :rtype: str
+        """
         ret = self.device.read_string(addr, regs_lenght, 3)
         return str(ret).replace('\x00', '')
 
@@ -237,7 +395,7 @@ def find_uart_settings(method_to_decorate):
 
 class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     """
-    Common modbus-bindings for WirenBoard devices.
+    Common modbus bindings for all WirenBoard devices.
     """
     COMMON_REGS_MAP = {
         'uptime' : 104,
@@ -255,6 +413,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         'bootloader_version' : 330
     }
 
+    SLAVEID_BOUNDS = (0, 247)
+    FIRMWARE_VERSION_LENGTH = 8
+    DEVICE_SIGNATURE_LENGTH = 6
+    FIRMWARE_SIGNATURE_LENGTH = 11
+    BOOTLOADER_VERSION_LENGTH = 7
+
     def __init__(self, addr, port, settings={
         'baudrate' : 9600,
         'parity' : 'N',
@@ -267,14 +431,13 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.slaveid = addr
         self.port = port
 
-
     def _validate_param(self, param, sequence):
         if param not in sequence:
             raise RuntimeError('Unsupported param %s! Try one of: %s' % (str(param), ', '.join(map(str, sequence))))
 
     def get_serial_number(self):
         """
-        WirenBoard device's serial number is unique and stored in uint32 modbus reg.
+        WirenBoard device's serial number is unique and stored in uint32 modbus reg with Big-Endian byteorder.
 
         :return: serial number of device
         :rtype: int
@@ -282,17 +445,31 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
 
     def get_serial_number_map(self):
+        """
+        WB-MAP* devices family store serial number differently from other devices.
+
+        :return: serial number of WB-MAP* device
+        :rtype: int
+        """
         int_values = self.read_u16_inputs(self.COMMON_REGS_MAP['serial_number'], 2)
         return ((int_values[0] % 256) * 65536) + int_values[1]
 
-    def write_serial_number(self, sn):
-        self.write_u32_big_endian(self.COMMON_REGS_MAP['serial_number'], int(sn))
+    def get_fw_version(self):
+        """
+        Firmware version is a string of fixed length (FIRMWARE_VERSION_LENGTH), containing numbers and dots.
 
-    def get_rom_version(self):
-        fw_version_regs_length = 8
-        return self.read_string(self.COMMON_REGS_MAP['fw_version'], fw_version_regs_length).strip()
+        :return: firmware version string
+        :rtype: str
+        """
+        return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH).strip()
 
     def get_slave_addr(self):
+        """
+        Slave address is an id of device on the bus.
+
+        :return: slave address of device
+        :rtype: int
+        """
         return self.read_u16(self.COMMON_REGS_MAP['slaveid'])
 
     @find_uart_settings
@@ -300,13 +477,18 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         Trying to write modbus slaveid to device's reg. Checking success via initializing a new instrument with uart settings of a previous one and the new slaveid. Updating current instrument instance with set slaveid, if succeed.
 
+        Typical usage:
+        instrument = WBModbusDeviceBase(0, <port>)
+        instrument.set_slave_addr(<desired_slaveid>)
+
         :param addr: desired slaveid
         :type addr: int
         """
         to_write = int(addr)
+        if (to_write < min(self.SLAVEID_BOUNDS)) or (to_write > max(self.SLAVEID_BOUNDS)):
+            raise RuntimeError('Slaveid %d is not allowed!' % to_write)
         reg = self.COMMON_REGS_MAP['slaveid']
         try:
-            # self.device.write_register(reg, to_write, 0, 6, False)
             self.write_u16(reg, to_write)
         except IOError:
             pass
@@ -315,6 +497,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.device = checking_device.device #Updating current instrument
 
     def set_baudrate(self, bd):
+        """
+        Writing baudrate to device and updating UART settings of current instrument to written baudrate.
+
+        :param bd: serial port's speed
+        :type bd: int
+        """
         self._validate_param(bd, ALLOWED_BAUDRATES)
         to_write = int(bd / 100)
         self.write_u16(self.COMMON_REGS_MAP['baudrate'], to_write)
@@ -324,6 +512,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.set_port_settings_raw(serial_settings)
 
     def set_parity(self, parity):
+        """
+        Writing parity to device and updating current instrument to written parity.
+
+        :param parity: parity of serial port
+        :type parity: str
+        """
         self._validate_param(parity, ALLOWED_PARITIES)
         to_write = ALLOWED_PARITIES[parity]
         self.write_u16(self.COMMON_REGS_MAP['parity'], to_write)
@@ -333,6 +527,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.set_port_settings_raw(serial_settings)
 
     def set_stopbits(self, stopbits):
+        """
+        Writing stopbits to device and updating current instrument to written stopbits.
+
+        :param stopbits: stopbits of serial port
+        :type stopbits: int
+        """
         self._validate_param(stopbits, ALLOWED_STOPBITS)
         self.write_u16(self.COMMON_REGS_MAP['stopbits'], stopbits)
         serial_settings = {
@@ -341,31 +541,65 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.set_port_settings_raw(serial_settings)
 
     def get_device_signature(self):
+        """
+        Device signature is a part of model name, stored in modbus regs.
+
+        :return: device signature string
+        :rtype: str
+        """
         coding = 'utf-8'
-        signature_regs_length = 6
-        ret = self.read_string(self.COMMON_REGS_MAP['device_signature'], signature_regs_length)
+        ret = self.read_string(self.COMMON_REGS_MAP['device_signature'], self.DEVICE_SIGNATURE_LENGTH)
         return ret.encode().decode(coding).strip() #Python 2/3 compatibility
 
     def get_fw_signature(self):
+        """
+        Firmware signature is a string, defining, which firmwares are compatible with device's bootloader.
+
+        :return: firmware signature string
+        :rtype: str
+        """
         coding = 'utf-8'
-        signature_regs_length = 11
-        ret = self.read_string(self.COMMON_REGS_MAP['fw_signature'], signature_regs_length)
+        ret = self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
         return ret.encode().decode(coding).strip() #Python 2/3 compatibility
 
     def get_bootloader_version(self):
-        bootloader_version_regs_length = 7
-        return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], bootloader_version_regs_length).strip()
+        """
+        Bootloader version is a string, containing numbers and dots.
+
+        :return: bootloader version
+        :rtype: str
+        """
+        return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH).strip()
 
     def get_uptime(self):
+        """
+        Uptime is a number of seconds, gone from previous reboot of device's MCU.
+
+        :return: uptime seconds
+        :rtype: int
+        """
         reg = self.COMMON_REGS_MAP['uptime']
         return self.read_u32_big_endian(reg)
 
     def get_v_in(self):
+        """
+        Each Wiren Board device measures power supply voltage via MCU.
+
+        :return: voltage (V)
+        :rtype: float
+        """
         multiplier = 1E-3 #value is stored in mV
         ret = self.read_u16(self.COMMON_REGS_MAP['v_in'])
         return ret * multiplier
 
     def soft_reboot(self, bootloader_timeout=3):
+        """
+        Rebooting a device's MCU without toggling power.
+
+        :param bootloader_timeout: time, device is in bootloader after reboot, defaults to 3
+        :type bootloader_timeout: int, optional
+        :raises RuntimeError: device's uptime after reboot is not less than before
+        """
         to_write = 1
         uptime_before = self.get_uptime()
         try:
@@ -378,6 +612,11 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             raise RuntimeError('Device has not rebooted!')
 
     def reboot_to_bootloader(self):
+        """
+        Rebooting device into bootloader via modbus reg. After writing the reg, device stucks in bootloader for 2 minutes.
+
+        :raises RuntimeError: device has not stuck in bootloader
+        """
         to_write = 1
         self.get_slave_addr() #To ensure, device has connection
         try:
@@ -393,7 +632,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             pass #Device is in bootloader mode and doesn't responce
 
     @find_uart_settings
-    def write_port_settings(self, baudrate, parity, stopbits):
+    def _write_port_settings(self, baudrate, parity, stopbits):
         """
         bd, parity and stopbits regs are mapped consistently (110, 111, 112)
         Writing all settings per one message
@@ -401,3 +640,23 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         message = map(int, [(baudrate / 100), parity, stopbits])
         self.device.write_registers(self.COMMON_REGS_MAP['baudrate'], message)
 
+    def write_uart_settings(self, baudrate, parity, stopbits):
+        """
+        Writing UART params to serial device and updating current instrument instance to new UART settings.
+
+        :param baudrate: serial port speed
+        :type baudrate: int
+        :param parity: serial port parity
+        :type parity: str
+        :param stopbits: serial port stopbits
+        :type stopbits: int
+        """
+        for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
+            self._validate_param(param, allowed_row)
+        self._write_port_settings(baudrate, ALLOWED_PARITIES[parity], stopbits)
+        new_port_settings = {
+            'baudrate' : baudrate,
+            'parity' : parity,
+            'stopbits' : stopbits
+        }
+        self.set_port_settings_raw(new_port_settings)
