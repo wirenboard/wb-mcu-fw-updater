@@ -15,6 +15,7 @@ else:
 CONFIG = {
     'EXTERNAL_CONFIG_FNAME' : '/etc/wb-mcu-fw-updater.conf',
     'SLAVEID_PLACEHOLDER' : 245,
+    'ALLOWED_UNSUCCESSFUL_MODBUS_TRIES' : 2,
     'DRIVER_EXEC_NAME' : 'wb-mqtt-serial',
     'FLASHER_FNAME' : 'wb-mcu-fw-flasher',
     'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
@@ -28,7 +29,7 @@ CONFIG = {
     'SYSLOG_LOGLEVEL' : 10,
     'USER_LOGLEVEL' : 30,
     'FW_SIGNATURES_PER_MODEL': {
-
+        # Filling from config file
     }
 }
 

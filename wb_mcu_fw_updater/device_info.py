@@ -3,8 +3,12 @@
 
 import logging
 from distutils.version import LooseVersion
-from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
+import wb_modbus
 from . import CONFIG
+
+wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
+
+from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
 
 
 def parse_fw_version(fw_ver):
@@ -32,8 +36,8 @@ class UnknownUARTSettingsDevice(WBModbusDeviceBase):
         return super(UnknownUARTSettingsDevice, self).get_fw_signature()
 
     @find_uart_settings
-    def get_rom_version(self):
-        return super(UnknownUARTSettingsDevice, self).get_rom_version()
+    def get_fw_version(self):
+        return super(UnknownUARTSettingsDevice, self).get_fw_version()
 
     @find_uart_settings
     def get_bootloader_version(self):
@@ -96,7 +100,7 @@ class SerialDeviceHandler(object):
         :return: firmware version
         :rtype: str
         """
-        return self.device.get_rom_version()
+        return self.device.get_fw_version()
 
     def get_bootloader_version(self):
         """
