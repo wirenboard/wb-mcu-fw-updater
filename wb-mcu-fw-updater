@@ -12,12 +12,15 @@ def update_alive_device(updater, args):
     """
     Updating device, working in normal mode. Port name is compulsory.
     """
+    erase_all_settings = False
+    if 'erase_settings' in vars(args):
+        erase_all_settings = args.erase_settings
     modbus_connection = updater.get_modbus_device_connection(args.slaveid)
     if updater.update_is_needed(modbus_connection) or args.force:
         fw_signature = modbus_connection.get_fw_signature()
         download_fpath = updater.download(fw_signature, args.specified_version, args.fname)
         modbus_connection.reboot_to_bootloader()
-        updater.flash(modbus_connection.slaveid, download_fpath, args.erase_settings)  # Slaveid is internal modbus_connection's one!
+        updater.flash(modbus_connection.slaveid, download_fpath, erase_all_settings)  # Slaveid is internal modbus_connection's one!
 
 
 def reflash_in_bootloader(updater, args):
@@ -33,13 +36,13 @@ def reflash_in_bootloader(updater, args):
         slaveid = args.slaveid
     else:
         slaveid = updater.find_slaveid_in_bootloader()  # Erasing all settings!
-    updater.flash(slaveid, download_fpath, args.erase_settings)
+    updater.flash(slaveid, download_fpath)
 
 
 def update_all(updater, args):
-    """Parsing driver_config for a list of slaveids. Trying to update each device.
     """
-    args.erase_settings = False  # Restoring settings to default is not allowed!
+    Parsing driver_config for a list of slaveids. Trying to update each device.
+    """
     failed_devices = []
     subprocess.call('service %s stop' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
     for device_name, device_slaveid in updater.get_devices_on_port(args.driver_config):
@@ -62,12 +65,12 @@ def parse_args():
     main_parser.add_argument('--save-to', type=str, dest='fname', default=None, help='Filepath, where to download the firmware.')
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const', const=10, help='Displaying all log records.')
     main_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='Download a specified firmware version.')
-    main_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
     main_parser.add_argument('--branch', type=str, dest='branch_name', default=None, help='Install firmware from specified branch.')
     main_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
     subparsers = main_parser.add_subparsers()
 
     update_parser = subparsers.add_parser('update', help='Update firmware on single working device.')
+    update_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
     update_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device reflash, even if firmware is latest.')
     update_parser.set_defaults(func=update_alive_device)
 
