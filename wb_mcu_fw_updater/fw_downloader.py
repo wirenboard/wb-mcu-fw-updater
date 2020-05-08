@@ -12,42 +12,11 @@ else:
     import urllib.request as url_handler
 
 
-def perform_head_request(url_path):
-    """
-    Performing a HEAD http request to defined url.
-
-    :param url_path: full url, request will be sent to
-    :type url_path: str
-    :return: a responce object
-    :rtype: responce obj from urllib (or urllib2 in python2)
-    """
-    if PYTHON2:
-        request = url_handler.Request(url_path)
-        request.get_method = lambda : 'HEAD'
-    else:
-        request = url_handler.Request(url_path, method='HEAD')
-    return url_handler.urlopen(request)
-
-
-def perform_get_request(url_path):
-    """
-    Performing a GET http request to defined url.
-
-    :param url_path: full url, request will be sent to
-    :type url_path: str
-    :return: a responce object
-    :rtype: responce obj from urllib (or urllib2 in python2)
-    """
-    return url_handler.urlopen(url_path)
-
-
 class RemoteFileWatcher(object):
     """
     A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
     """
-    _BRANCH = ''
-
-    def __init__(self, mode='fw', sort_by='by-signature', branch_name=None):
+    def __init__(self, mode='fw', sort_by='by-signature', branch_name=''):
         """
         Could download firmware or bootloder files from stable or specified branch.
 
@@ -59,34 +28,25 @@ class RemoteFileWatcher(object):
         :type branch_name: str, optional
         """
         self.mode = mode
-        self._check_url_is_available(CONFIG['ROOT_URL'])
-        self.parrent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
+        url_handler.urlopen(CONFIG['ROOT_URL']) # Checking, user has internet connection
+        self.parent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
+        self.fw_source = CONFIG['DEFAULT_SOURCE']
+        self.branch_name = branch_name
         if branch_name:
-            self._BRANCH = branch_name
             logging.warn('Looking to unstable branch: %s' % branch_name)
-            self._SOURCE = urljoin('unstable', branch_name)
-
-    def _check_url_is_available(self, url_path):
-        """
-        Checking url accessibility by sending HEAD request to it and catching urllib's errors.
-
-        :param url_path: url, need to be checked
-        :type url_path: str
-        """
-        logging.debug('Checking url: %s' % url_path)
-        perform_head_request(url_path)
+            self.fw_source = urljoin('unstable', branch_name)
 
     def _get_request_content(self, url_path):
         """
-        Checking, is url_path available; sending GET request to it; returning responce's content.
+        Sending GET request to url; returning responce's content.
 
         :param url_path: url, request will be sent to
         :type url_path: str
         :return: responce's content
         :rtype: bytestring
         """
-        self._check_url_is_available(url_path)
-        responce = perform_get_request(url_path)
+        logging.debug('Looking to: %s' % url_path)
+        responce = url_handler.urlopen(url_path)
         ret = responce.read()
         return ret.strip()
 
@@ -99,7 +59,7 @@ class RemoteFileWatcher(object):
         :return: constructed url without filename
         :rtype: str
         """
-        return urljoin(self.parrent_url_path, name, CONFIG['DEFAULT_SOURCE'])
+        return urljoin(self.parent_url_path, name, self.fw_source)
 
     def get_latest_version_number(self, name):
         """
@@ -133,7 +93,7 @@ class RemoteFileWatcher(object):
         if not fname:
             if not os.path.isdir(file_saving_dir):
                 os.mkdir(file_saving_dir)
-            fname = '%s_%s_%s' % (name, self._BRANCH, fw_ver)
+            fname = '%s_%s_%s' % (name, self.branch_name, fw_ver)
             fpath = os.path.join(file_saving_dir, fname)
         else:
             fpath = fname

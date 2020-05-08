@@ -27,7 +27,7 @@ class UpdateHandler(object):
         'slaveid' : 'slave_id'
     }
 
-    def __init__(self, port, mode, branch_name):
+    def __init__(self, port, mode, branch_name=''):
         self.port = port
         if mode in self._ALLOWED_TASKS:
             self.mode = mode
@@ -35,7 +35,7 @@ class UpdateHandler(object):
             die('Mode <%s> is unsupported. Try one of: %s' % (mode, ', '.join(self._ALLOWED_TASKS)))
         self.branch_name = branch_name
         self.flasher = fw_flasher.WBFWFlasher(port)
-        self.remote_file_watcher = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
+        self.downloader = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
 
     def _ensure(self, message, positive='Y', negative='N'):
         """Asking, is user sure or not.
@@ -105,7 +105,7 @@ class UpdateHandler(object):
         :return: filepath, download has performed to
         :rtype: str
         """
-        return self.remote_file_watcher.download(name, version, fname)
+        return self.downloader.download(name, version, fname)
 
     def update_is_needed(self, instrument):
         """
@@ -115,7 +115,7 @@ class UpdateHandler(object):
         :type instrument: a device_info.SerialDeviceHandler' instance
         """
         meaningful_str = instrument.get_fw_signature()
-        latest_remote_version = self.remote_file_watcher.get_latest_version_number(meaningful_str)
+        latest_remote_version = self.downloader.get_latest_version_number(meaningful_str)
         current_version = instrument.get_bootloader_version() if self.mode == 'bootloader' else instrument.get_fw_version()
         if device_info.parse_fw_version(current_version) < device_info.parse_fw_version(latest_remote_version):
             logging.info('Update is needed! (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))

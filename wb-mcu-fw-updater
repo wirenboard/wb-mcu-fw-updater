@@ -65,7 +65,7 @@ def parse_args():
     main_parser.add_argument('--save-to', type=str, dest='fname', default=None, help='Filepath, where to download the firmware.')
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const', const=10, help='Displaying all log records.')
     main_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='Download a specified firmware version.')
-    main_parser.add_argument('--branch', type=str, dest='branch_name', default=None, help='Install firmware from specified branch.')
+    main_parser.add_argument('--branch', type=str, dest='branch_name', default='', help='Install firmware from specified branch.')
     main_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
     subparsers = main_parser.add_subparsers()
 
