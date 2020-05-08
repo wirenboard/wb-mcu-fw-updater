@@ -124,22 +124,6 @@ class UpdateHandler(object):
             logging.info('Device has latest %s version (%s)!' % (self.mode, current_version))
             return False
 
-    def find_slaveid_in_bootloader(self):
-        """Iterating over all possible slaveaddrs and probing connection on it.
-
-        :return: found slaveid
-        :rtype: int
-        """
-        if self._ensure("Is device in bootloader now? All device's settings will be restored to defaults!"):
-            pass
-        else:
-            die('Refused erasing settings')
-        for slaveid in range(0, 248):
-            if self.flasher.probe_connection(slaveid):
-                return slaveid
-        else:
-            die('No valid slaveid was found. Check physical connection to device!')
-
     def get_fw_signature_by_model(self, modelname):
         """If there is no connection with device, fw_signature could be get via internal model_name <=> fw_signature conformity.
 

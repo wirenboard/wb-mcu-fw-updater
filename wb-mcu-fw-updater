@@ -32,11 +32,7 @@ def reflash_in_bootloader(updater, args):
     else:
         fw_signature = args.known_signature
     download_fpath = updater.download(fw_signature, args.specified_version, args.fname)
-    if args.slaveid != 0:
-        slaveid = args.slaveid
-    else:
-        slaveid = updater.find_slaveid_in_bootloader()  # Erasing all settings!
-    updater.flash(slaveid, download_fpath)
+    updater.flash(args.slaveid, download_fpath)
 
 
 def update_all(updater, args):
