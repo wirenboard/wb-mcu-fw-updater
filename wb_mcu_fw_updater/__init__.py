@@ -23,7 +23,7 @@ CONFIG = {
     'DRIVER_EXEC_NAME' : 'wb-mqtt-serial',
     'FLASHER_FNAME' : 'wb-mcu-fw-flasher',
     'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
-    'FW_SAVING_DIR' : '/usr/share/wb_mcu_fw_updater/',
+    'FW_SAVING_DIR' : '/var/lib/wb-mcu-fw-updater/',
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',
     'DEFAULT_SOURCE' : 'stable',
