@@ -5,7 +5,7 @@ import argparse
 import logging
 import subprocess
 import sys
-from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
+from wb_mcu_fw_updater import update_monitor, fw_flasher, user_log, die, CONFIG
 
 
 def update_alive_device(updater, args):
@@ -15,12 +15,13 @@ def update_alive_device(updater, args):
     erase_all_settings = False
     if 'erase_settings' in vars(args):
         erase_all_settings = args.erase_settings
-    modbus_connection = updater.get_modbus_device_connection(args.slaveid)
-    if updater.update_is_needed(modbus_connection) or args.force:
+    modbus_connection = updater.get_modbus_device_connection(args.port, args.slaveid)
+    if updater.is_update_needed(modbus_connection) or args.force:
+        flasher = fw_flasher.WBFWFlasher(args.port)
         fw_signature = modbus_connection.get_fw_signature()
-        download_fpath = updater.download(fw_signature, args.specified_version, args.fname)
+        download_fpath = updater.downloader.download(fw_signature, args.specified_version, args.fname)
         modbus_connection.reboot_to_bootloader()
-        updater.flash(modbus_connection.slaveid, download_fpath, erase_all_settings)  # Slaveid is internal modbus_connection's one!
+        flasher.flash(modbus_connection.slaveid, download_fpath, erase_all_settings)  # Slaveid is internal modbus_connection's one!
 
 
 def reflash_in_bootloader(updater, args):
@@ -31,7 +32,7 @@ def reflash_in_bootloader(updater, args):
         fw_signature = updater.get_fw_signature_by_model(args.device_model)
     else:
         fw_signature = args.known_signature
-    download_fpath = updater.download(fw_signature, args.specified_version, args.fname)
+    download_fpath = updater.downloader.download(fw_signature, args.specified_version, args.fname)
     updater.flash(args.slaveid, download_fpath)
 
 
@@ -41,14 +42,16 @@ def update_all(updater, args):
     """
     failed_devices = []
     subprocess.call('service %s stop' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
-    for device_name, device_slaveid in updater.get_devices_on_port(args.driver_config):
-        args.slaveid = device_slaveid
-        logging.info('Trying to update %s with slaveid %d:' % (device_name, args.slaveid))
-        try:
-            update_alive_device(updater, args)
-        except Exception as e:
-            logging.error('Update for %s : %d failed!' % (device_name, args.slaveid), exc_info=True)
-            failed_devices.append([device_name, args.slaveid])
+    for port, devices_on_port in updater.get_devices_on_driver().items():
+        for device_name, device_slaveid in devices_on_port:
+            args.slaveid = device_slaveid
+            args.port = port
+            logging.info('Trying to update %s with slaveid %d:' % (device_name, args.slaveid))
+            try:
+                update_alive_device(updater, args)
+            except Exception as e:
+                logging.error('Update for %s : %d failed!' % (device_name, args.slaveid), exc_info=True)
+                failed_devices.append([device_name, args.slaveid])
     subprocess.call('service %s restart' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
     if failed_devices:
         die('Update has failed for:\n%s\nCheck syslog for more info' % (str(failed_devices)))
@@ -76,7 +79,6 @@ def parse_args():
     recover_parser.set_defaults(func=reflash_in_bootloader)
 
     update_all_parser = subparsers.add_parser('update-all', help="Trying to update all devices, added to wb-mqtt-serial's config.")
-    update_all_parser.add_argument('--config', type=str, dest='driver_config', default='/etc/wb-mqtt-serial.conf', help="Specify driver's config filepath.")
     update_all_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device update, even if firmware is latest.')
     update_all_parser.set_defaults(func=update_all)
 
@@ -89,5 +91,5 @@ if __name__ == "__main__":
     user_log.setup_syslog_logger()
     user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
 
-    updater = update_monitor.UpdateHandler(args.port, args.mode, args.branch_name)
+    updater = update_monitor.UpdateHandler(args.mode, args.branch_name)
     args.func(updater, args)

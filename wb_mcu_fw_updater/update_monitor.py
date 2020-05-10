@@ -3,7 +3,13 @@
 
 import logging
 import json
-from . import fw_flasher, device_info, fw_downloader, die, PYTHON2, CONFIG
+from distutils.version import LooseVersion
+import wb_modbus
+from . import fw_flasher, fw_downloader, die, PYTHON2, CONFIG
+
+wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
+
+from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
 
 
 if PYTHON2:
@@ -12,113 +18,67 @@ else:
     input_func = input
 
 
+def ask_user(message):
+    """
+    Asking user before potentionally dangerous action.
+
+    :param message: will be printed to user
+    :type message: str
+    :return: is user sure or not
+    :rtype: bool
+    """
+    message_str = '*** %s [Y/N] *** ' % (message)
+    ret = input_func(message_str)
+    return ret.upper().startswith('Y')
+
+
+def compare_semver(first, second):
+    """
+    Comparing versions strings in semver.
+    Second is converted implicitly via LooseVersion.
+
+    :return: is first semver > second
+    :rtype: bool
+    """
+    return LooseVersion(first) > second
+
+
 class UpdateHandler(object):
     """
     A 'launcher' class, handling all update logic.
     """
-
-    _ALLOWED_TASKS = ('fw', 'bootloader')
-
-    _DRIVER_CONFIG_MAP = {
-        'ports_list' : 'ports',
-        'port_fname' : 'path',
-        'devices_list' : 'devices',
-        'model' : 'device_type',
-        'slaveid' : 'slave_id'
-    }
-
-    def __init__(self, port, mode, branch_name=''):
-        self.port = port
-        if mode in self._ALLOWED_TASKS:
-            self.mode = mode
-        else:
-            die('Mode <%s> is unsupported. Try one of: %s' % (mode, ', '.join(self._ALLOWED_TASKS)))
-        self.branch_name = branch_name
-        self.flasher = fw_flasher.WBFWFlasher(port)
+    def __init__(self, mode, branch_name=''):
         self.downloader = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
+        self.mode = mode
 
-    def _ensure(self, message, positive='Y', negative='N'):
-        """Asking, is user sure or not.
-
-        :param message: message, will be printed to user
-        :type message: str
-        :param positive: beginning of positive user's answer, defaults to 'Y'
-        :type positive: str, optional
-        :param negative: beginning of negative user's answer, defaults to 'N'
-        :type negative: str, optional
-        :return: was user sure or not
-        :rtype: bool
+    def get_modbus_device_connection(self, port, slaveid=0):
         """
-        message_str = '%s [%s/%s] ' % (message, positive, negative)
-        ret = input_func(message_str)
-        if ret.upper().startswith(positive):
-            return True
-        else:
-            return False
+        Asking user before setting slaveid via broadcast connection.
 
-    def _parse_driver_config(self, driver_config_fname):
-        config_file = open(driver_config_fname, 'r')
-        config_dict = json.load(config_file)
-        return config_dict
-
-    def get_modbus_device_connection(self, slaveid):
-        """Connection to device with possibly known slaveid and unknown UART settings.
-
-        :param slaveid: slave address of device
-        :type slaveid: int
-        :return: a connection instance
-        :rtype: device_info.SerialDeviceHandler object
+        :param port: port, device connected to
+        :type port: str
+        :param slaveid: modbus address of device, defaults to 0
+        :type slaveid: int, optional
+        :return: minimalmodbus.Instrument instance
         """
-        if 0 < slaveid <= 247:
-            pass
-        elif slaveid == 0:
-            if self._ensure('No slaveid has passed. Will use broadcast command! Is device alone on the bus?'):
-                pass
+        device = WBModbusDeviceBase(slaveid, port)
+        if slaveid == 0:
+            if ask_user('Will use broadcast id (0). Are ALL other devices disconnected from %s port?' % port):
+                logging.warning('Trying to set slaveid %d' % CONFIG['SLAVEID_PLACEHOLDER'])
+                device.set_slave_addr(CONFIG['SLAVEID_PLACEHOLDER']) # Finding uart settings here
             else:
-                die('Disconnect ALL other devices from the bus!')
-        else:
-            die('Slaveid %d is not allowed!' % slaveid)
-        device = device_info.SerialDeviceHandler(self.port, slaveid)
+                die('ALL other devices should be disconnected before!')
         return device
 
-    def flash(self, slaveid, fname, erase_settings=False):
-        """Flashing .wbfw file over already known port.
-
-        :param slaveid: slave addr of device
-        :type slaveid: int
-        :param fname: a .wbfw file to flash
-        :type fname: str
-        :param erase_settings: will all settings be erased after flashing or not, defaults to False
-        :type erase_settings: bool, optional
-        """
-        self.flasher.flash(slaveid, fname, erase_settings)
-
-    def download(self, name, version='latest', fname=None):
-        """Downloading .wbfw file from remote server.
-
-        :param name: a wb-device's fw signature
-        :type name: str
-        :param version: a specific version of fw, defaults to 'latest'
-        :type version: str, optional
-        :param fname: a specific filepath, download will be performed to, defaults to None
-        :type fname: str, optional
-        :return: filepath, download has performed to
-        :rtype: str
-        """
-        return self.downloader.download(name, version, fname)
-
-    def update_is_needed(self, instrument):
+    def is_update_needed(self, modbus_connection):
         """
         Checking, whether update is needed or not by comparing version, stored in the device with remote.
-
-        :param instrument: a modbus connection to device
-        :type instrument: a device_info.SerialDeviceHandler' instance
         """
-        meaningful_str = instrument.get_fw_signature()
+        meaningful_str = modbus_connection.get_fw_signature()
         latest_remote_version = self.downloader.get_latest_version_number(meaningful_str)
-        current_version = instrument.get_bootloader_version() if self.mode == 'bootloader' else instrument.get_fw_version()
-        if device_info.parse_fw_version(current_version) < device_info.parse_fw_version(latest_remote_version):
-            logging.info('Update is needed! (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))
+        current_version = modbus_connection.get_bootloader_version() if self.mode == 'bootloader' else modbus_connection.get_fw_version()
+        if compare_semver(latest_remote_version, current_version):
+            logging.info('Update is needed (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))
             return True
         else:
             logging.info('Device has latest %s version (%s)!' % (self.mode, current_version))
@@ -136,23 +96,25 @@ class UpdateHandler(object):
             die('Model %s is unknown! Choose one from:\n%s' % (modelname, ', '.join(CONFIG['FW_SIGNATURES_PER_MODEL'].keys())))
         return CONFIG['FW_SIGNATURES_PER_MODEL'][modelname]
 
-    def get_devices_on_port(self, driver_config_fname):
-        """Parsing <driver_config_fname> for a list of pairs device_model & slaveid.
-
-        :param driver_config_fname: wb-mqtt-serial's config file
-        :type driver_config_fname: str
-        :return: a list of device models and their slaveids
-        :rtype: list
+    def get_devices_on_driver(self):
         """
-        found_devices = []
-        config_dict = self._parse_driver_config(driver_config_fname)
-        for port in config_dict[self._DRIVER_CONFIG_MAP['ports_list']]:
-            if port[self._DRIVER_CONFIG_MAP['port_fname']] == self.port:
-                for serial_device in port[self._DRIVER_CONFIG_MAP['devices_list']]:
-                    device_name = serial_device[self._DRIVER_CONFIG_MAP['model']]
-                    slaveid = serial_device[self._DRIVER_CONFIG_MAP['slaveid']]
-                    found_devices.append([device_name, int(slaveid)])
+        Parsing a driver's config file to get ports and devices, connected to.
+
+        :return: {<port_name> : [devices on this port]}
+        :rtype: dict
+        """
+        found_devices = {}
+        config_dict = json.load(open(CONFIG['DRIVER_CONFIG_FNAME'], 'r'))
+        for port in config_dict['ports']:
+            port_name = port['path']
+            devices_on_port = []
+            for serial_device in port['devices']:
+                device_name = serial_device['device_type']
+                slaveid = serial_device['slave_id']
+                devices_on_port.append([device_name, int(slaveid)])
+            if devices_on_port:
+                found_devices.update({port_name : devices_on_port})
         if found_devices:
             return found_devices
         else:
-            die('Looks, like there is no devices on port %s. Aborted.' % self.port)
+            die('No devices has found in %s' % CONFIG['DRIVER_CONFIG_FNAME'])
