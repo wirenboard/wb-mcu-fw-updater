@@ -3,6 +3,7 @@
 
 import logging
 import json
+import subprocess
 from distutils.version import LooseVersion
 import wb_modbus
 from . import fw_flasher, fw_downloader, die, PYTHON2, CONFIG
@@ -104,7 +105,7 @@ class UpdateHandler(object):
         :rtype: dict
         """
         found_devices = {}
-        config_dict = json.load(open(CONFIG['DRIVER_CONFIG_FNAME'], 'r'))
+        config_dict = json.load(open(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], 'r'))
         for port in config_dict['ports']:
             port_name = port['path']
             devices_on_port = []
@@ -117,7 +118,7 @@ class UpdateHandler(object):
         if found_devices:
             return found_devices
         else:
-            die('No devices has found in %s' % CONFIG['DRIVER_CONFIG_FNAME'])
+            die('No devices has found in %s' % CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
 
 
 def flash_in_bootloader(updater, port, slaveid, fw_signature, specified_fw_version, erase_settings):
@@ -137,3 +138,24 @@ def flash_alive_device(updater, port, slaveid, specified_fw_version, force, eras
         fw_signature = modbus_connection.get_fw_signature()
         modbus_connection.reboot_to_bootloader()
         flash_in_bootloader(updater, port, modbus_connection.slaveid, fw_signature, specified_fw_version, erase_settings)
+
+
+def _send_signal_to_driver(signal):
+    """
+    Use pausing/resuming of process, found by name (instead of killing/starting)
+    to handle cases, like <wb-mqtt-serial -c config.conf>
+
+    :type signal: str
+    """
+    if CONFIG['SERIAL_DRIVER_PROCESS_NAME']:
+        cmd_str = 'killall %s %s' % (signal, CONFIG['SERIAL_DRIVER_PROCESS_NAME'])
+        logging.debug('Will run: %s' % cmd_str)
+        subprocess.call(cmd_str, shell=True)
+
+
+def pause_driver():
+    _send_signal_to_driver('-STOP')
+
+
+def resume_driver():
+    _send_signal_to_driver('-CONT')

@@ -3,8 +3,7 @@
 
 import argparse
 import logging
-import subprocess
-import sys
+import atexit
 from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
 
 
@@ -85,5 +84,8 @@ if __name__ == "__main__":
 
     user_log.setup_syslog_logger()
     user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
+
+    update_monitor.pause_driver()
+    atexit.register(update_monitor.resume_driver)
 
     args.func(args)
