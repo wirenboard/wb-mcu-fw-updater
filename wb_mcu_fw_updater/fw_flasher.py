@@ -15,11 +15,11 @@ class WBFWFlasher(object):
     """
 
     def __init__(self, port):
-        exec_path = find_executable(CONFIG['FLASHER_FNAME'])
+        exec_path = find_executable(CONFIG['FLASHER_EXEC_NAME'])
         if exec_path:
             self.known_cmd_part = '%s -d %s' % (exec_path, port)
         else:
-            die('Executable %s not found!' % CONFIG['FLASHER_FNAME'])
+            die('Executable %s not found!' % CONFIG['FLASHER_EXEC_NAME'])
 
     def flash(self, slaveid, fpath, restore_defaults=False):
         """Flashing .wbfw file via constructing and calling wb-mcu-fw-flasher command.

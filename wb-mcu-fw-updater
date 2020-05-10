@@ -5,78 +5,73 @@ import argparse
 import logging
 import subprocess
 import sys
-from wb_mcu_fw_updater import update_monitor, fw_flasher, user_log, die, CONFIG
+from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
 
 
-def update_alive_device(updater, args):
+def update_alive_device(args):
     """
     Updating device, working in normal mode. Port name is compulsory.
     """
-    erase_all_settings = False
-    if 'erase_settings' in vars(args):
-        erase_all_settings = args.erase_settings
-    modbus_connection = updater.get_modbus_device_connection(args.port, args.slaveid)
-    if updater.is_update_needed(modbus_connection) or args.force:
-        flasher = fw_flasher.WBFWFlasher(args.port)
-        fw_signature = modbus_connection.get_fw_signature()
-        download_fpath = updater.downloader.download(fw_signature, args.specified_version, args.fname)
-        modbus_connection.reboot_to_bootloader()
-        flasher.flash(modbus_connection.slaveid, download_fpath, erase_all_settings)  # Slaveid is internal modbus_connection's one!
+    updater = update_monitor.UpdateHandler(args.mode, args.branch_name)
+    update_monitor.flash_alive_device(updater, args.port, args.slaveid, args.specified_version, args.force, args.erase_settings)
 
 
-def reflash_in_bootloader(updater, args):
+def recover(args):
     """
-    Flashing device, stuck in bootloader. Actual slaveid and fw signature are required.
+    Flashing device, stuck in the bootloader. Unstable FW branches are not allowed.
     """
+    updater = update_monitor.UpdateHandler(args.mode)
     if not args.known_signature:
         fw_signature = updater.get_fw_signature_by_model(args.device_model)
     else:
         fw_signature = args.known_signature
-    download_fpath = updater.downloader.download(fw_signature, args.specified_version, args.fname)
-    updater.flash(args.slaveid, download_fpath)
+    update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, args.specified_version, args.erase_settings)
 
 
-def update_all(updater, args):
+def update_all(args):
     """
-    Parsing driver_config for a list of slaveids. Trying to update each device.
+    Parsing driver_config for a list of devices on all ports. Trying to update each device.
     """
-    failed_devices = []
-    subprocess.call('service %s stop' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
+    overall_fails = {}
+    updater = update_monitor.UpdateHandler(mode='fw')
     for port, devices_on_port in updater.get_devices_on_driver().items():
+        failed_devices = []
         for device_name, device_slaveid in devices_on_port:
-            args.slaveid = device_slaveid
-            args.port = port
-            logging.info('Trying to update %s with slaveid %d:' % (device_name, args.slaveid))
+            logging.info('Trying to update %s with slaveid %d:' % (device_name, device_slaveid))
             try:
-                update_alive_device(updater, args)
+                update_monitor.flash_alive_device(updater, port, device_slaveid, 'latest', args.force, False)
             except Exception as e:
-                logging.error('Update for %s : %d failed!' % (device_name, args.slaveid), exc_info=True)
-                failed_devices.append([device_name, args.slaveid])
-    subprocess.call('service %s restart' % CONFIG['DRIVER_EXEC_NAME'], shell=True)
-    if failed_devices:
-        die('Update has failed for:\n%s\nCheck syslog for more info' % (str(failed_devices)))
+                logging.error('Update for %s : %d failed!' % (device_name, device_slaveid), exc_info=True)
+                failed_devices.append([device_name, device_slaveid])
+        if failed_devices:
+            overall_fails.update({port : failed_devices})
+    if overall_fails:
+        die('Update has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
 
 
 def parse_args():
     main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter, description='WirenBoard modbus devices firmware update tool')
-    main_parser.add_argument("port", type=str, help='Serial port, device connected to.')
-    main_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
-    main_parser.add_argument('--save-to', type=str, dest='fname', default=None, help='Filepath, where to download the firmware.')
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const', const=10, help='Displaying all log records.')
-    main_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='Download a specified firmware version.')
-    main_parser.add_argument('--branch', type=str, dest='branch_name', default='', help='Install firmware from specified branch.')
-    main_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
     subparsers = main_parser.add_subparsers()
 
     update_parser = subparsers.add_parser('update', help='Update firmware on single working device.')
+    update_parser.add_argument("port", type=str, help='Serial port, device connected to.')
+    update_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
+    update_parser.add_argument('--branch', type=str, dest='branch_name', default='', help='Install firmware from specified branch.')
+    update_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
     update_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
     update_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device reflash, even if firmware is latest.')
+    update_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='Download a specified firmware version.')
     update_parser.set_defaults(func=update_alive_device)
 
     recover_parser = subparsers.add_parser('recover', help="Flash single device, stuck in bootloader to it's latest firmware. Device model name (or known firmware signature) is required!")
-    recover_parser.add_argument('--model-name', type=str, dest='device_model', required=True, help='Getting firmware signature by model name.')
+    recover_parser.add_argument("port", type=str, help='Serial port, device connected to.')
+    recover_parser.add_argument("device_model", type=str, help="Getting appropriate firmware by device's model")
+    recover_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
     recover_parser.add_argument('--signature', type=str, dest='known_signature', default=None, help="Force specify device's firmware signature.")
-    recover_parser.set_defaults(func=reflash_in_bootloader)
+    recover_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
+    recover_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
+    recover_parser.set_defaults(func=recover)
 
     update_all_parser = subparsers.add_parser('update-all', help="Trying to update all devices, added to wb-mqtt-serial's config.")
     update_all_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device update, even if firmware is latest.')
@@ -91,5 +86,4 @@ if __name__ == "__main__":
     user_log.setup_syslog_logger()
     user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
 
-    updater = update_monitor.UpdateHandler(args.mode, args.branch_name)
-    args.func(updater, args)
+    args.func(args)
