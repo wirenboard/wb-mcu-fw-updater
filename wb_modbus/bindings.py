@@ -41,9 +41,9 @@ class MinimalModbusAPIWrapper(object):
     """
     A generic wrapper around minimalmodbus's api. Handles connection errors; Allows changing serial connection settings on-the-fly.
     """
-    def __init__(self, addr, port, settings):
+    def __init__(self, addr, port, baudrate, parity, stopbits):
         self.device = minimalmodbus.Instrument(port, addr)
-        self.set_port_settings_raw(settings)
+        self.set_port_settings(baudrate, parity, stopbits)
 
     def set_port_settings_raw(self, settings_dict):
         """
@@ -413,21 +413,15 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         'bootloader_version' : 330
     }
 
-    SLAVEID_BOUNDS = (0, 247)
     FIRMWARE_VERSION_LENGTH = 8
     DEVICE_SIGNATURE_LENGTH = 6
     FIRMWARE_SIGNATURE_LENGTH = 11
     BOOTLOADER_VERSION_LENGTH = 7
 
-    def __init__(self, addr, port, settings={
-        'baudrate' : 9600,
-        'parity' : 'N',
-        'stopbits' : 2,
-        'bytesize' : 8,
-        'timeout' : 0.1,
-        'write_timeout' : 2.0
-    }):
-        super(WBModbusDeviceBase, self).__init__(addr, port, settings)
+    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2):
+        for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
+            self._validate_param(param, allowed_row)
+        super(WBModbusDeviceBase, self).__init__(addr, port, baudrate, parity, stopbits)
         self.slaveid = addr
         self.port = port
 
@@ -437,20 +431,17 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     def get_serial_number(self):
         """
-        WirenBoard device's serial number is unique and stored in uint32 modbus reg with Big-Endian byteorder.
+        WB-MAP* devices family calculate serial number, stored in the same regs, differently from other devices.
 
         :return: serial number of device
         :rtype: int
         """
-        return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
+        if self.get_device_signature().startswith('WBMAP'):
+            return self._get_serial_number_map()
+        else:
+            return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
 
-    def get_serial_number_map(self):
-        """
-        WB-MAP* devices family store serial number differently from other devices.
-
-        :return: serial number of WB-MAP* device
-        :rtype: int
-        """
+    def _get_serial_number_map(self):
         int_values = self.read_u16_inputs(self.COMMON_REGS_MAP['serial_number'], 2)
         return ((int_values[0] % 256) * 65536) + int_values[1]
 
@@ -464,12 +455,6 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH).strip()
 
     def get_slave_addr(self):
-        """
-        Slave address is an id of device on the bus.
-
-        :return: slave address of device
-        :rtype: int
-        """
         return self.read_u16(self.COMMON_REGS_MAP['slaveid'])
 
     @find_uart_settings
@@ -485,8 +470,6 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :type addr: int
         """
         to_write = int(addr)
-        if (to_write < min(self.SLAVEID_BOUNDS)) or (to_write > max(self.SLAVEID_BOUNDS)):
-            raise RuntimeError('Slaveid %d is not allowed!' % to_write)
         reg = self.COMMON_REGS_MAP['slaveid']
         try:
             self.write_u16(reg, to_write)
@@ -617,14 +600,13 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
         :raises RuntimeError: device has not stuck in bootloader
         """
-        to_write = 1
         self.get_slave_addr() #To ensure, device has connection
         try:
-            self.device.write_register(self.COMMON_REGS_MAP['reboot_to_bootloader'], to_write, 0, 6, False)
+            self.device.write_register(self.COMMON_REGS_MAP['reboot_to_bootloader'], 1, 0, 6, False)
         except IOError:
             pass #Device has rebooted and doesn't send responce (Fixed in latest FWs)
         finally:
-            time.sleep(1) #Delay before going to bootloader
+            time.sleep(0.5) #Delay before going to bootloader
         try:
             self.device.read_register(self.COMMON_REGS_MAP['slaveid'], 0, 3, False)
             raise RuntimeError('Device has not rebooted to bootloader!')
@@ -637,8 +619,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         bd, parity and stopbits regs are mapped consistently (110, 111, 112)
         Writing all settings per one message
         """
-        message = map(int, [(baudrate / 100), parity, stopbits])
-        self.device.write_registers(self.COMMON_REGS_MAP['baudrate'], message)
+        self.device.write_registers(self.COMMON_REGS_MAP['baudrate'], int(baudrate / 100), parity, stopbits)
 
     def write_uart_settings(self, baudrate, parity, stopbits):
         """

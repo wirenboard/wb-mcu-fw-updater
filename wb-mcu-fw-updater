@@ -5,6 +5,7 @@ import argparse
 import logging
 import atexit
 from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
+from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
 
 
 def update_alive_device(args):
@@ -12,7 +13,14 @@ def update_alive_device(args):
     Updating device, working in normal mode. Port name is compulsory.
     """
     updater = update_monitor.UpdateHandler(args.mode, args.branch_name)
-    update_monitor.flash_alive_device(updater, args.port, args.slaveid, args.specified_version, args.force, args.erase_settings)
+    modbus_connection = updater.get_modbus_device_connection(args.port, args.slaveid, *update_monitor._parse_uart_params_str(args.uart_settings))
+    if args.unknown_uart_settings:
+        """
+        Applying found uart settings to modbus_connection instance.
+        """
+        probe_uart_settings = find_uart_settings(WBModbusDeviceBase.get_slave_addr)
+        probe_uart_settings(modbus_connection)
+    update_monitor.flash_alive_device(updater, modbus_connection, args.specified_version, args.force, args.erase_settings)
 
 
 def recover(args):
@@ -24,7 +32,7 @@ def recover(args):
         fw_signature = updater.get_fw_signature_by_model(args.device_model)
     else:
         fw_signature = args.known_signature
-    update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, args.specified_version, args.erase_settings)
+    update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings)
 
 
 def update_all(args):
@@ -33,12 +41,15 @@ def update_all(args):
     """
     overall_fails = {}
     updater = update_monitor.UpdateHandler(mode='fw')
-    for port, devices_on_port in updater.get_devices_on_driver().items():
+    for port, port_params in updater.get_devices_on_driver().items():
+        uart_params = port_params['uart_params']
+        devices_on_port = port_params['devices']
         failed_devices = []
         for device_name, device_slaveid in devices_on_port:
             logging.info('Trying to update %s with slaveid %d:' % (device_name, device_slaveid))
+            modbus_connection = updater.get_modbus_device_connection(port, device_slaveid, *uart_params)
             try:
-                update_monitor.flash_alive_device(updater, port, device_slaveid, 'latest', args.force, False)
+                update_monitor.flash_alive_device(updater, modbus_connection, 'latest', args.force, False)
             except Exception as e:
                 logging.error('Update for %s : %d failed!' % (device_name, device_slaveid), exc_info=True)
                 failed_devices.append([device_name, device_slaveid])
@@ -46,6 +57,30 @@ def update_all(args):
             overall_fails.update({port : failed_devices})
     if overall_fails:
         die('Update has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
+
+
+def show_typical_usage(progname):
+    update_alive_device_example = '%s update <port> -a <slaveid>' % progname
+    update_alive_device_custom_uart_example = '%s update <port> -a <slaveid> --uart-params 115200-N-2' % progname
+    update_alive_device_unknown_example = '%s update <port> --find-uart' % progname
+    recover_with_known_slaveid_example = '%s recover <port> -a <slaveid> <device_model>' % progname
+    recover_with_unknown_slaveid_example = '%s recover <port> <device_model>' % progname
+    update_all_example = '%s update-all' % progname
+    print("""
+          Some typical usage cases
+          Updating a device with known slaveid and default UART params (9600-N-2):
+          \t%s
+          Updating a device with known slaveid and custom UART params (115200-N-2, for example):
+          \t%s
+          Updating a device with unknown slaveid and unknown UART settings:
+          \t%s
+          Recovering a device with known slaveid, stuck in the bootloader:
+          \t%s
+          Recovering a device with unknown slaveid, stuck in the bootloader:
+          \t%s
+          Updating all devices, found in wb-mqtt-serial config:
+          \t%s
+          """ % (update_alive_device_example, update_alive_device_custom_uart_example, update_alive_device_unknown_example, recover_with_known_slaveid_example, recover_with_unknown_slaveid_example, update_all_example))
 
 
 def parse_args():
@@ -58,6 +93,8 @@ def parse_args():
     update_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
     update_parser.add_argument('--branch', type=str, dest='branch_name', default='', help='Install firmware from specified branch.')
     update_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
+    update_parser.add_argument('--uart-params', type=str, dest='uart_settings', default='9600-N-2', help='UART settings string (ex: 9600-N-2).')
+    update_parser.add_argument('--find-uart', action='store_true', dest='unknown_uart_settings', default=False, help='UART settings of device will be found via iterating over all allowed.')
     update_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
     update_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device reflash, even if firmware is latest.')
     update_parser.add_argument('--version', type=str, dest='specified_version', default='latest', help='Download a specified firmware version.')
@@ -76,7 +113,13 @@ def parse_args():
     update_all_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device update, even if firmware is latest.')
     update_all_parser.set_defaults(func=update_all)
 
-    return main_parser.parse_args()
+    args = main_parser.parse_args()
+    if 'func' in vars(args):
+        return args
+    else:
+        print(main_parser.format_usage())
+        show_typical_usage(main_parser.prog)
+        die('No action has chosen')
 
 
 if __name__ == "__main__":
@@ -88,4 +131,5 @@ if __name__ == "__main__":
     update_monitor.pause_driver()
     atexit.register(update_monitor.resume_driver)
 
+    args = parse_args()
     args.func(args)

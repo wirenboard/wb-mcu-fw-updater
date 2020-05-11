@@ -44,6 +44,11 @@ def compare_semver(first, second):
     return LooseVersion(first) > second
 
 
+def _parse_uart_params_str(uart_params_str, delimiter='-'):
+    baudrate, parity, stopbits = uart_params_str.strip().split(delimiter)
+    return [int(baudrate), parity, int(stopbits)]
+
+
 class UpdateHandler(object):
     """
     A 'launcher' class, handling all update logic.
@@ -52,7 +57,7 @@ class UpdateHandler(object):
         self.downloader = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
         self.mode = mode
 
-    def get_modbus_device_connection(self, port, slaveid=0):
+    def get_modbus_device_connection(self, port, slaveid=0, baudrate=9600, parity='N', stopbits=2):
         """
         Asking user before setting slaveid via broadcast connection.
 
@@ -62,7 +67,7 @@ class UpdateHandler(object):
         :type slaveid: int, optional
         :return: minimalmodbus.Instrument instance
         """
-        device = WBModbusDeviceBase(slaveid, port)
+        device = WBModbusDeviceBase(slaveid, port, baudrate, parity, stopbits)
         if slaveid == 0:
             if ask_user('Will use broadcast id (0). Are ALL other devices disconnected from %s port?' % port):
                 logging.warning('Trying to set slaveid %d' % CONFIG['SLAVEID_PLACEHOLDER'])
@@ -99,22 +104,23 @@ class UpdateHandler(object):
 
     def get_devices_on_driver(self):
         """
-        Parsing a driver's config file to get ports and devices, connected to.
+        Parsing a driver's config file to get ports, their uart params and devices, connected to.
 
-        :return: {<port_name> : [devices on this port]}
+        :return: {<port_name> : {'devices' : [devices_on_port], 'uart_params' : [uart_params_of_port]}}
         :rtype: dict
         """
         found_devices = {}
         config_dict = json.load(open(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], 'r'))
         for port in config_dict['ports']:
             port_name = port['path']
+            uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
             devices_on_port = []
             for serial_device in port['devices']:
                 device_name = serial_device['device_type']
                 slaveid = serial_device['slave_id']
                 devices_on_port.append([device_name, int(slaveid)])
             if devices_on_port:
-                found_devices.update({port_name : devices_on_port})
+                found_devices.update({port_name : {'devices' : devices_on_port, 'uart_params' : uart_params_of_port}})
         if found_devices:
             return found_devices
         else:
@@ -132,12 +138,11 @@ def flash_in_bootloader(updater, port, slaveid, fw_signature, specified_fw_versi
     flasher.flash(slaveid, download_fpath, erase_settings)
 
 
-def flash_alive_device(updater, port, slaveid, specified_fw_version, force, erase_settings):
-    modbus_connection = updater.get_modbus_device_connection(port, slaveid)
+def flash_alive_device(updater, modbus_connection, specified_fw_version, force, erase_settings):
     if updater.is_update_needed(modbus_connection) or force:
         fw_signature = modbus_connection.get_fw_signature()
         modbus_connection.reboot_to_bootloader()
-        flash_in_bootloader(updater, port, modbus_connection.slaveid, fw_signature, specified_fw_version, erase_settings)
+        flash_in_bootloader(updater, modbus_connection.port, modbus_connection.slaveid, fw_signature, specified_fw_version, erase_settings)
 
 
 def _send_signal_to_driver(signal):
