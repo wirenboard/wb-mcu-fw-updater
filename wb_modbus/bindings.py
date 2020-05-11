@@ -3,6 +3,7 @@
 #
 import logging
 import time
+from copy import deepcopy
 from itertools import product
 from functools import wraps
 from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS
@@ -371,7 +372,7 @@ class MinimalModbusAPIWrapper(object):
         return str(ret).replace('\x00', '')
 
 
-def find_uart_settings(method_to_decorate):
+def auto_find_uart_settings(method_to_decorate):
     """
     WirenBoard devices support a determinate set of UART params. So, trying to perform a method, iterating over all allowed UART settings.
     If succeed, successful uart settings remain on current instrument.
@@ -429,6 +430,32 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         if param not in sequence:
             raise RuntimeError('Unsupported param %s! Try one of: %s' % (str(param), ', '.join(map(str, sequence))))
 
+    def find_uart_settings(self, probe_method_callable, *args, **kwargs):
+        """
+        Iterating over all allowed UART settings to find valid ones via launching connection's method.
+
+        :param probe_method_callable: a minimalmodbus's Instrument instance
+        :type probe_method_callable: func
+        :raises RuntimeError: all allowed uart settings were not successful
+        :return: actual uart settings of connected device
+        :rtype: dict
+        """
+        initial_uart_settings = deepcopy(self.settings)
+        actual_uart_settings = []
+        allowed_parities = ALLOWED_PARITIES.keys()
+        for settings in product(ALLOWED_BAUDRATES, allowed_parities, ALLOWED_STOPBITS):
+            try:
+                probe_method_callable(*args, **kwargs)
+                actual_uart_settings = deepcopy(self.settings)
+                self.set_port_settings_raw(initial_uart_settings)
+                return actual_uart_settings
+            except IOError:
+                logging.debug('Trying UART settings: %s' % str(settings))
+                self.set_port_settings(*settings)
+                continue
+        else:
+            raise RuntimeError('All UART settings were not successful! Check device slaveid/power!')
+
     def get_serial_number(self):
         """
         WB-MAP* devices family calculate serial number, stored in the same regs, differently from other devices.
@@ -446,18 +473,11 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         return ((int_values[0] % 256) * 65536) + int_values[1]
 
     def get_fw_version(self):
-        """
-        Firmware version is a string of fixed length (FIRMWARE_VERSION_LENGTH), containing numbers and dots.
-
-        :return: firmware version string
-        :rtype: str
-        """
         return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH).strip()
 
     def get_slave_addr(self):
         return self.read_u16(self.COMMON_REGS_MAP['slaveid'])
 
-    @find_uart_settings
     def set_slave_addr(self, addr):
         """
         Trying to write modbus slaveid to device's reg. Checking success via initializing a new instrument with uart settings of a previous one and the new slaveid. Updating current instrument instance with set slaveid, if succeed.
@@ -546,12 +566,6 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         return ret.encode().decode(coding).strip() #Python 2/3 compatibility
 
     def get_bootloader_version(self):
-        """
-        Bootloader version is a string, containing numbers and dots.
-
-        :return: bootloader version
-        :rtype: str
-        """
         return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH).strip()
 
     def get_uptime(self):
@@ -613,7 +627,6 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except IOError:
             pass #Device is in bootloader mode and doesn't responce
 
-    @find_uart_settings
     def _write_port_settings(self, baudrate, parity, stopbits):
         """
         bd, parity and stopbits regs are mapped consistently (110, 111, 112)

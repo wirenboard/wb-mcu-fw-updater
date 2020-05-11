@@ -5,7 +5,6 @@ import argparse
 import logging
 import atexit
 from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
-from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
 
 
 def update_alive_device(args):
@@ -18,8 +17,9 @@ def update_alive_device(args):
         """
         Applying found uart settings to modbus_connection instance.
         """
-        probe_uart_settings = find_uart_settings(WBModbusDeviceBase.get_slave_addr)
-        probe_uart_settings(modbus_connection)
+        uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        logging.warning('Has found UART settings: %s' % str(uart_settings))
+        modbus_connection.set_port_settings_raw(uart_settings)
     update_monitor.flash_alive_device(updater, modbus_connection, args.specified_version, args.force, args.erase_settings)
 
 
@@ -66,21 +66,23 @@ def show_typical_usage(progname):
     recover_with_known_slaveid_example = '%s recover <port> -a <slaveid> <device_model>' % progname
     recover_with_unknown_slaveid_example = '%s recover <port> <device_model>' % progname
     update_all_example = '%s update-all' % progname
-    print("""
-          Some typical usage cases
-          Updating a device with known slaveid and default UART params (9600-N-2):
-          \t%s
-          Updating a device with known slaveid and custom UART params (115200-N-2, for example):
-          \t%s
-          Updating a device with unknown slaveid and unknown UART settings:
-          \t%s
-          Recovering a device with known slaveid, stuck in the bootloader:
-          \t%s
-          Recovering a device with unknown slaveid, stuck in the bootloader:
-          \t%s
-          Updating all devices, found in wb-mqtt-serial config:
-          \t%s
-          """ % (update_alive_device_example, update_alive_device_custom_uart_example, update_alive_device_unknown_example, recover_with_known_slaveid_example, recover_with_unknown_slaveid_example, update_all_example))
+    typical_usage_str = """\
+    Some typical usage cases
+
+    Updating a device with known slaveid and default UART params (9600-N-2):
+    \t%s
+    Updating a device with known slaveid and custom UART params (115200-N-2, for example):
+    \t%s
+    Updating a device with unknown slaveid and unknown UART settings:
+    \t%s
+    Recovering a device with known slaveid, stuck in the bootloader:
+    \t%s
+    Recovering a device with unknown slaveid, stuck in the bootloader:
+    \t%s
+    Updating all devices, found in wb-mqtt-serial config:
+    \t%s
+    """ % (update_alive_device_example, update_alive_device_custom_uart_example, update_alive_device_unknown_example, recover_with_known_slaveid_example, recover_with_unknown_slaveid_example, update_all_example)
+    print(typical_usage_str)
 
 
 def parse_args():

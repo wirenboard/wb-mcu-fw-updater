@@ -10,7 +10,7 @@ from . import fw_flasher, fw_downloader, die, PYTHON2, CONFIG
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 
-from wb_modbus.bindings import WBModbusDeviceBase, find_uart_settings
+from wb_modbus.bindings import WBModbusDeviceBase
 
 
 if PYTHON2:
@@ -71,7 +71,8 @@ class UpdateHandler(object):
         if slaveid == 0:
             if ask_user('Will use broadcast id (0). Are ALL other devices disconnected from %s port?' % port):
                 logging.warning('Trying to set slaveid %d' % CONFIG['SLAVEID_PLACEHOLDER'])
-                device.set_slave_addr(CONFIG['SLAVEID_PLACEHOLDER']) # Finding uart settings here
+                uart_settings = device.find_uart_settings(device.set_slave_addr, CONFIG['SLAVEID_PLACEHOLDER'])
+                device.set_port_settings_raw(uart_settings)
             else:
                 die('ALL other devices should be disconnected before!')
         return device
