@@ -128,7 +128,7 @@ class UpdateHandler(object):
             die('No devices has found in %s' % CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
 
 
-def flash_in_bootloader(updater, port, slaveid, fw_signature, specified_fw_version, erase_settings):
+def flash_in_bootloader(updater, port, slaveid, fw_signature, specified_fw_version, erase_settings, response_timeout=2.0):
     if erase_settings:
         if ask_user('All settings will be reset to defaults (1, 9600-8-N-2). Are you sure?'):
             pass
@@ -136,7 +136,7 @@ def flash_in_bootloader(updater, port, slaveid, fw_signature, specified_fw_versi
             die('Reset of settings was rejected')
     download_fpath = updater.downloader.download(fw_signature, specified_fw_version)
     flasher = fw_flasher.WBFWFlasher(port)
-    flasher.flash(slaveid, download_fpath, erase_settings)
+    flasher.flash(slaveid, download_fpath, erase_settings, response_timeout)
 
 
 def flash_alive_device(updater, modbus_connection, specified_fw_version, force, erase_settings):

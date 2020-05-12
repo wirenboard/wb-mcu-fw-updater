@@ -21,7 +21,7 @@ class WBFWFlasher(object):
         else:
             die('Executable %s not found!' % CONFIG['FLASHER_EXEC_NAME'])
 
-    def flash(self, slaveid, fpath, restore_defaults=False):
+    def flash(self, slaveid, fpath, restore_defaults=False, response_timeout=2.0):
         """Flashing .wbfw file via constructing and calling wb-mcu-fw-flasher command.
 
         :param slaveid: slave addr of device
@@ -37,7 +37,7 @@ class WBFWFlasher(object):
             die('Slaveid %d is not allowed!' % slaveid)
         if not os.path.exists(fpath):
             die('%s not found!' % fpath)
-        cmd_str = '%s -a %d -f %s' % (self.known_cmd_part, slaveid, fpath)
+        cmd_str = '%s -a %d -f %s -t %.2f' % (self.known_cmd_part, slaveid, fpath, response_timeout)
         if restore_defaults:
             cmd_str += ' -e'
         logging.debug('Will run: %s' % cmd_str)

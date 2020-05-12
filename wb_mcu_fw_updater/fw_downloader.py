@@ -12,6 +12,26 @@ else:
     import urllib.request as url_handler
 
 
+def get_request_content(url_path):
+    """
+    Sending GET request to url; returning responce's content.
+
+    :param url_path: url, request will be sent to
+    :type url_path: str
+    :return: responce's content
+    :rtype: bytestring
+    """
+    logging.debug('Looking to: %s' % url_path)
+    responce = url_handler.urlopen(url_path)
+    ret = responce.read()
+    return ret.strip()
+
+
+def get_fw_signatures_list():
+    contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
+    return str(contents).split('\n')
+
+
 class RemoteFileWatcher(object):
     """
     A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
@@ -36,20 +56,6 @@ class RemoteFileWatcher(object):
             logging.warn('Looking to unstable branch: %s' % branch_name)
             self.fw_source = urljoin('unstable', branch_name)
 
-    def _get_request_content(self, url_path):
-        """
-        Sending GET request to url; returning responce's content.
-
-        :param url_path: url, request will be sent to
-        :type url_path: str
-        :return: responce's content
-        :rtype: bytestring
-        """
-        logging.debug('Looking to: %s' % url_path)
-        responce = url_handler.urlopen(url_path)
-        ret = responce.read()
-        return ret.strip()
-
     def _construct_urlpath(self, name):
         """
         Appending url from parts (parent url, significant part, stable or feature branch), excepting filename.
@@ -71,7 +77,7 @@ class RemoteFileWatcher(object):
         :rtype: str
         """
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
-        return self._get_request_content(url_path).decode('utf-8')
+        return get_request_content(url_path).decode('utf-8')
 
     def download(self, name, version='latest', fname=None):
         """
@@ -88,7 +94,7 @@ class RemoteFileWatcher(object):
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
-        content = self._get_request_content(url_path)
+        content = get_request_content(url_path)
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
         if not fname:
             if not os.path.isdir(file_saving_dir):

@@ -4,7 +4,9 @@
 import argparse
 import logging
 import atexit
+from subprocess import CalledProcessError
 from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
+from wb_mcu_fw_updater.fw_downloader import get_fw_signatures_list
 
 
 def update_alive_device(args):
@@ -18,7 +20,7 @@ def update_alive_device(args):
         Applying found uart settings to modbus_connection instance.
         """
         uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-        logging.warning('Has found UART settings: %s' % str(uart_settings))
+        logging.info('Has found UART settings: %s' % str(uart_settings))
         modbus_connection.set_port_settings_raw(uart_settings)
     update_monitor.flash_alive_device(updater, modbus_connection, args.specified_version, args.force, args.erase_settings)
 
@@ -28,11 +30,28 @@ def recover(args):
     Flashing device, stuck in the bootloader. Unstable FW branches are not allowed.
     """
     updater = update_monitor.UpdateHandler(args.mode)
-    if not args.known_signature:
-        fw_signature = updater.get_fw_signature_by_model(args.device_model)
+    fw_signatures_list = get_fw_signatures_list()
+    if args.known_signature is None:
+        logging.info('Will try to recover fw signature from file:')
+        fw_signature = 'mr6c' #TODO: Get from file
+        try:
+            update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings, response_timeout=0.5)
+        except CalledProcessError:
+            logging.info('Will try all possigle fw signatures:')
+            for fw_signature in fw_signatures_list:
+                logging.info('Trying %s:' % fw_signature)
+                try:
+                    update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings, response_timeout=0.5)
+                    logging.info('Successfully recovered device with fw_signature: %s' % fw_signature)
+                    return
+                except CalledProcessError:
+                    logging.error('Failed')
+            else:
+                die('Valid fw_signature was not found!')
+    elif args.known_signature in fw_signatures_list:
+        update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, args.known_signature, 'latest', args.erase_settings)
     else:
-        fw_signature = args.known_signature
-    update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings)
+        die('Choose a fw_signature from : %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
 
 
 def update_all(args):
@@ -104,7 +123,6 @@ def parse_args():
 
     recover_parser = subparsers.add_parser('recover', help="Flash single device, stuck in bootloader to it's latest firmware. Device model name (or known firmware signature) is required!")
     recover_parser.add_argument("port", type=str, help='Serial port, device connected to.')
-    recover_parser.add_argument("device_model", type=str, help="Getting appropriate firmware by device's model")
     recover_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
     recover_parser.add_argument('--signature', type=str, dest='known_signature', default=None, help="Force specify device's firmware signature.")
     recover_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")

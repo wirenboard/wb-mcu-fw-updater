@@ -24,6 +24,7 @@ CONFIG = {
     'SERIAL_DRIVER_CONFIG_FNAME' : '/etc/wb-mqtt-serial.conf',
     'FLASHER_EXEC_NAME' : 'wb-mcu-fw-flasher',
     'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
+    'FW_SIGNATURES_FILE_URL' : 'http://fw-releases.wirenboard.com/fw/by-signature/fw_signatures.txt',
     'FW_SAVING_DIR' : '/var/lib/wb-mcu-fw-updater/',
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',
@@ -32,10 +33,7 @@ CONFIG = {
     'SYSLOG_MESSAGE_FMT' : 'wb-mcu-fw-updater:%(module)s.%(funcName)s[%(process)s]: %(message)s',
     'LOG_DATETIME_FMT' : '%Y-%m-%d|%H:%M:%S',
     'SYSLOG_LOGLEVEL' : 10,
-    'USER_LOGLEVEL' : 30,
-    'FW_SIGNATURES_PER_MODEL': {
-        # Filling from config file
-    }
+    'USER_LOGLEVEL' : 30
 }
 
 
