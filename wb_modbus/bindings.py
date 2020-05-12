@@ -416,7 +416,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     FIRMWARE_VERSION_LENGTH = 8
     DEVICE_SIGNATURE_LENGTH = 6
-    FIRMWARE_SIGNATURE_LENGTH = 11
+    FIRMWARE_SIGNATURE_LENGTH = 12
     BOOTLOADER_VERSION_LENGTH = 7
 
     def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2):

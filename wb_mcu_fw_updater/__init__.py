@@ -49,14 +49,6 @@ def die(err_message=None, exitcode=1):
     sys.exit(exitcode)
 
 
-def tb_to_syslog_exc_hook(exc_type, value, traceback):
-    """
-    Excepthook, redirecting an uncatched error's traceback to syslog.
-    """
-    logging.error('Error occured: %s' % str(value), exc_info=(exc_type, value, traceback))
-    die()
-
-
 def update_config(config_fname):
     """
     Only fields, existing in CONFIG will be updated.
@@ -77,6 +69,3 @@ def update_config(config_fname):
 
 
 update_config(CONFIG['EXTERNAL_CONFIG_FNAME'])
-
-
-sys.excepthook = tb_to_syslog_exc_hook  # Exception's traceback is written only to syslog
