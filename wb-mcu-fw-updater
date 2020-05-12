@@ -29,15 +29,16 @@ def recover(args):
     """
     Flashing device, stuck in the bootloader. Unstable FW branches are not allowed.
     """
-    updater = update_monitor.UpdateHandler(args.mode)
+    updater = update_monitor.UpdateHandler('fw')
     fw_signatures_list = get_fw_signatures_list()
     if args.known_signature is None:
-        logging.info('Will try to recover fw signature from file:')
-        fw_signature = 'mr6c' #TODO: Get from file
+        fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
+        logging.info('Will try to recover fw signature from: %s' % fpath)
         try:
+            fw_signature = open(fpath).read().strip()
             update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings, response_timeout=0.5)
-        except CalledProcessError:
-            logging.info('Will try all possigle fw signatures:')
+        except (CalledProcessError, IOError) as e: # If file not found or fw_signature was wrong
+            logging.info('Failed. Will try all possigle fw signatures:')
             for fw_signature in fw_signatures_list:
                 logging.info('Trying %s:' % fw_signature)
                 try:
@@ -82,8 +83,8 @@ def show_typical_usage(progname):
     update_alive_device_example = '%s update <port> -a <slaveid>' % progname
     update_alive_device_custom_uart_example = '%s update <port> -a <slaveid> --uart-params 115200-N-2' % progname
     update_alive_device_unknown_example = '%s update <port> --find-uart' % progname
-    recover_with_known_slaveid_example = '%s recover <port> -a <slaveid> <device_model>' % progname
-    recover_with_unknown_slaveid_example = '%s recover <port> <device_model>' % progname
+    recover_auto_example = '%s recover <port>' % progname
+    recover_with_known_fw_signature_example = '%s recover <port> <firmware_signature>' % progname
     update_all_example = '%s update-all' % progname
     typical_usage_str = """\
     Some typical usage cases
@@ -94,13 +95,13 @@ def show_typical_usage(progname):
     \t%s
     Updating a device with unknown slaveid and unknown UART settings:
     \t%s
-    Recovering a device with known slaveid, stuck in the bootloader:
+    Recovering a device, stuck in the bootloader with known fw_signature:
     \t%s
-    Recovering a device with unknown slaveid, stuck in the bootloader:
+    Recovering a device, stuck in the bootloader (auto mode):
     \t%s
     Updating all devices, found in wb-mqtt-serial config:
     \t%s
-    """ % (update_alive_device_example, update_alive_device_custom_uart_example, update_alive_device_unknown_example, recover_with_known_slaveid_example, recover_with_unknown_slaveid_example, update_all_example)
+    """ % (update_alive_device_example, update_alive_device_custom_uart_example, update_alive_device_unknown_example, recover_with_known_fw_signature_example, recover_auto_example, update_all_example)
     print(typical_usage_str)
 
 
@@ -123,10 +124,9 @@ def parse_args():
 
     recover_parser = subparsers.add_parser('recover', help="Flash single device, stuck in bootloader to it's latest firmware. Device model name (or known firmware signature) is required!")
     recover_parser.add_argument("port", type=str, help='Serial port, device connected to.')
+    recover_parser.add_argument('--signature', dest='known_signature', type=str, default=None, help="Force specify device's firmware signature.")
     recover_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
-    recover_parser.add_argument('--signature', type=str, dest='known_signature', default=None, help="Force specify device's firmware signature.")
     recover_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
-    recover_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
     recover_parser.set_defaults(func=recover)
 
     update_all_parser = subparsers.add_parser('update-all', help="Trying to update all devices, added to wb-mqtt-serial's config.")
@@ -151,5 +151,4 @@ if __name__ == "__main__":
     update_monitor.pause_driver()
     atexit.register(update_monitor.resume_driver)
 
-    args = parse_args()
     args.func(args)

@@ -143,7 +143,14 @@ def flash_alive_device(updater, modbus_connection, specified_fw_version, force, 
     if updater.is_update_needed(modbus_connection) or force:
         fw_signature = modbus_connection.get_fw_signature()
         modbus_connection.reboot_to_bootloader()
-        flash_in_bootloader(updater, modbus_connection.port, modbus_connection.slaveid, fw_signature, specified_fw_version, erase_settings)
+        try:
+            flash_in_bootloader(updater, modbus_connection.port, modbus_connection.slaveid, fw_signature, specified_fw_version, erase_settings)
+        except subprocess.CalledProcessError as e:
+            fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
+            logging.debug('Saving %s to %s' % (fw_signature, fpath))
+            with open(fpath, 'w') as f:
+                f.write(fw_signature)
+            raise e
 
 
 def _send_signal_to_driver(signal):
