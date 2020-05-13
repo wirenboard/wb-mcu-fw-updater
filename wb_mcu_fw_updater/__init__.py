@@ -37,14 +37,17 @@ CONFIG = {
 }
 
 
-def die(err_message=None, exitcode=1):
+def die(err=None, exitcode=1):
     """
-    Exits gracefully, writing <err_message> to stderr via logging.
-    Call explicitly only if python's exceptions are not informative!
+    Exits gracefully, writing colored <err_message> to stderr via logging.
+
+    Use in except block of expected exceptions!
     """
-    if err_message:
-        logging.error(err_message)
-        sys.stderr.flush()
+    logger = logging.getLogger()
+    if isinstance(err, Exception):
+        logger.exception(err)
+    elif isinstance(err, str):
+        logger.error(err)
     sys.exit(exitcode)
 
 

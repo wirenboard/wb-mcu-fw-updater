@@ -75,7 +75,7 @@ def update_all(args):
             try:
                 update_monitor.flash_alive_device(modbus_connection, 'fw', '', fw_version, args.force, False)
             except Exception as e:
-                logging.error('Update for %s : %d failed!' % (device_name, device_slaveid), exc_info=True)
+                logging.warn('Update for %s : %d failed!' % (device_name, device_slaveid), exc_info=True)
                 failed_devices.append([device_name, device_slaveid])
         if failed_devices:
             overall_fails.update({port : failed_devices})
@@ -143,16 +143,21 @@ def parse_args():
     else:
         print(main_parser.format_usage())
         show_typical_usage(main_parser.prog)
-        die('No action has chosen')
+        die('No action has chosen!')
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    try:
+        args = parse_args()
 
-    user_log.setup_syslog_logger()
-    user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
+        user_log.setup_syslog_logger()
+        user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
+        user_log.show_tb_in_other_handlers()
 
-    update_monitor.pause_driver()
-    atexit.register(update_monitor.resume_driver)
+        update_monitor.pause_driver()
+        atexit.register(update_monitor.resume_driver)
 
-    args.func(args)
+        args.func(args)
+
+    except KeyboardInterrupt as e:
+        die(e)
