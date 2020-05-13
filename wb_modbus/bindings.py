@@ -12,7 +12,7 @@ from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_C
 minimalmodbus.CLOSE_PORT_AFTER_EACH_CALL = CLOSE_PORT_AFTER_EACH_CALL
 
 
-def force(errtypes=(IOError, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
+def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
     """
     A decorator, handling accidential connection errors on bus.
 
@@ -515,6 +515,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         checking_device = MinimalModbusAPIWrapper(to_write, self.port, baudrate, parity, stopbits, debug=self.debug)
         checking_device.read_u16(self.COMMON_REGS_MAP['slaveid']) #Raises IOError, if <to_write> was not written
         self.device = checking_device.device #Updating current instrument
+        self.slaveid = to_write
 
     def set_baudrate(self, bd):
         """
@@ -643,6 +644,42 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             raise RuntimeError('Device has not rebooted to bootloader!')
         except IOError:
             pass #Device is in bootloader mode and doesn't responce
+
+    def _has_bootloader_answered(self):
+        """
+        Sending a dummy-payload to bootloader and looking into minimalmodbus's errors.
+        Wiren Board modbus devices, while in bootloader, could answer to a dummy-payload via modbus error 04 (Slave Device Failure).
+
+        Devices, are not in bootloader, could raise error 04 too => combine with check, device is not answering to usual commands!
+
+        :return: has device raised modbus error 04 or not
+        :rtype: bool
+        """
+        bootloader_uart_params = [9600, 'N', 2]
+        bootloader_timeout = 0.5
+        bootloader_connection = MinimalModbusAPIWrapper(self.slaveid, self.port, *bootloader_uart_params, debug=self.debug)
+        bootloader_connection.device.serial.timeout = bootloader_timeout
+        try:
+            bootloader_connection.write_u16_regs(0x1000, [0] * 16)  # A dummy payload
+        except minimalmodbus.SlaveReportedException:  # Err 04
+            return True
+        except minimalmodbus.ModbusException:
+            return False
+
+    def is_in_bootloader(self):
+        """
+        If slaveid has got => device is in normal working mode.
+        If slaveid has not got and bootloader has answered (raised modbus error 04) => device is in bootloader.
+        If slaveid has not got and bootloader has not answered => device is disconnected.
+
+        :return: is device in bootloader or not
+        :rtype: bool
+        """
+        try:
+            self.get_slave_addr()
+            return False  # Device is powered on and sending correct reply
+        except minimalmodbus.ModbusException:
+            return self._has_bootloader_answered()  # Is device in bootloader or disconnected
 
     def _write_port_settings(self, baudrate, parity, stopbits):
         """
