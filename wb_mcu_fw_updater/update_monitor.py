@@ -67,7 +67,7 @@ class UpdateHandler(object):
         :type slaveid: int, optional
         :return: minimalmodbus.Instrument instance
         """
-        device = WBModbusDeviceBase(slaveid, port, baudrate, parity, stopbits)
+        device = WBModbusDeviceBase(slaveid, port, baudrate, parity, stopbits, debug=True)
         if slaveid == 0:
             if ask_user('Will use broadcast id (0). Are ALL other devices disconnected from %s port?' % port):
                 logging.warning('Trying to set slaveid %d' % CONFIG['SLAVEID_PLACEHOLDER'])
@@ -117,7 +117,7 @@ class UpdateHandler(object):
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
             devices_on_port = []
             for serial_device in port['devices']:
-                device_name = serial_device['device_type']
+                device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
                 devices_on_port.append([device_name, int(slaveid)])
             if devices_on_port:

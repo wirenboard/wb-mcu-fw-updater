@@ -38,12 +38,26 @@ def force(errtypes=(IOError, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
     return real_decorator
 
 
+def _debug_info(message):
+    """
+    Redirecting minimalmodbus's _print_out to logging debug
+
+    :param message: minimalmodbus's debug messages
+    :type message: str
+    """
+    minimalmodbus._check_string(message, description="string to print")
+    logging.debug(message)
+
+
 class MinimalModbusAPIWrapper(object):
     """
-    A generic wrapper around minimalmodbus's api. Handles connection errors; Allows changing serial connection settings on-the-fly.
+    A generic wrapper around minimalmodbus's api. Handles connection errors;
+    Allows changing serial connection settings on-the-fly;
+    Redirects minimalmodbus's debug messages to logging.
     """
-    def __init__(self, addr, port, baudrate, parity, stopbits):
-        self.device = minimalmodbus.Instrument(port, addr)
+    def __init__(self, addr, port, baudrate, parity, stopbits, debug=False):
+        minimalmodbus._print_out = _debug_info
+        self.device = minimalmodbus.Instrument(port, addr, debug=debug)
         self.set_port_settings(baudrate, parity, stopbits)
 
     def set_port_settings_raw(self, settings_dict):
@@ -419,12 +433,14 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     FIRMWARE_SIGNATURE_LENGTH = 12
     BOOTLOADER_VERSION_LENGTH = 7
 
-    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2):
+    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, debug=False):
         for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
             self._validate_param(param, allowed_row)
-        super(WBModbusDeviceBase, self).__init__(addr, port, baudrate, parity, stopbits)
+        super(WBModbusDeviceBase, self).__init__(addr, port, baudrate, parity, stopbits, debug)
+        self.device.serial.timeout = 0.1 # Workaround for WB-MSW devices
         self.slaveid = addr
         self.port = port
+        self.debug = debug
 
     def _validate_param(self, param, sequence):
         if param not in sequence:
@@ -495,7 +511,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             self.write_u16(reg, to_write)
         except IOError:
             pass
-        checking_device = MinimalModbusAPIWrapper(to_write, self.port, self.settings)
+        baudrate, parity, stopbits = self.settings['baudrate'], self.settings['parity'], self.settings['stopbits']
+        checking_device = MinimalModbusAPIWrapper(to_write, self.port, baudrate, parity, stopbits, debug=self.debug)
         checking_device.read_u16(self.COMMON_REGS_MAP['slaveid']) #Raises IOError, if <to_write> was not written
         self.device = checking_device.device #Updating current instrument
 
