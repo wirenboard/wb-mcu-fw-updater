@@ -5,16 +5,15 @@ import argparse
 import logging
 import atexit
 from subprocess import CalledProcessError
-from wb_mcu_fw_updater import update_monitor, user_log, die, CONFIG
-from wb_mcu_fw_updater.fw_downloader import get_fw_signatures_list
+from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
+from wb_modbus.bindings import WBModbusDeviceBase
 
 
 def update_alive_device(args):
     """
     Updating device, working in normal mode. Port name is compulsory.
     """
-    updater = update_monitor.UpdateHandler(args.mode, args.branch_name)
-    modbus_connection = updater.get_modbus_device_connection(args.port, args.slaveid, *update_monitor._parse_uart_params_str(args.uart_settings))
+    modbus_connection = WBModbusDeviceBase(args.slaveid, args.port, debug=True)
     if args.unknown_uart_settings:
         """
         Applying found uart settings to modbus_connection instance.
@@ -22,27 +21,30 @@ def update_alive_device(args):
         uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
         logging.info('Has found UART settings: %s' % str(uart_settings))
         modbus_connection.set_port_settings_raw(uart_settings)
-    update_monitor.flash_alive_device(updater, modbus_connection, args.specified_version, args.force, args.erase_settings)
+    update_monitor.flash_alive_device(modbus_connection, args.mode, args.branch_name, args.specified_version, args.force, args.erase_settings)
 
 
 def recover(args):
     """
     Flashing device, stuck in the bootloader. Unstable FW branches are not allowed.
     """
-    updater = update_monitor.UpdateHandler('fw')
-    fw_signatures_list = get_fw_signatures_list()
+    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
+    fw_version = 'latest'
+    fw_signatures_list = fw_downloader.get_fw_signatures_list()
     if args.known_signature is None:
         fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
         logging.info('Will try to recover fw signature from: %s' % fpath)
         try:
             fw_signature = open(fpath).read().strip()
-            update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings, response_timeout=0.5)
+            downloaded_fw = downloader.download(fw_signature, fw_version)
+            update_monitor.flash_in_bootloader(downloaded_fw, args.port, args.slaveid, args.erase_settings)
         except (CalledProcessError, IOError) as e: # If file not found or fw_signature was wrong
             logging.info('Failed. Will try all possigle fw signatures:')
             for fw_signature in fw_signatures_list:
                 logging.info('Trying %s:' % fw_signature)
+                downloaded_fw = downloader.download(fw_signature, fw_version)
                 try:
-                    update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, fw_signature, 'latest', args.erase_settings, response_timeout=0.5)
+                    update_monitor.flash_in_bootloader(downloaded_fw, args.port, args.slaveid, args.erase_settings, response_timeout=0.5)
                     logging.info('Successfully recovered device with fw_signature: %s' % fw_signature)
                     return
                 except CalledProcessError:
@@ -50,7 +52,8 @@ def recover(args):
             else:
                 die('Valid fw_signature was not found!')
     elif args.known_signature in fw_signatures_list:
-        update_monitor.flash_in_bootloader(updater, args.port, args.slaveid, args.known_signature, 'latest', args.erase_settings)
+        downloaded_fw = downloader.download(args.known_signature, fw_version)
+        update_monitor.flash_in_bootloader(downloaded_fw, args.port, args.slaveid, args.erase_settings)
     else:
         die('Choose a fw_signature from : %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
 
@@ -59,17 +62,18 @@ def update_all(args):
     """
     Parsing driver_config for a list of devices on all ports. Trying to update each device.
     """
+    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
+    fw_version = 'latest'
     overall_fails = {}
-    updater = update_monitor.UpdateHandler(mode='fw')
-    for port, port_params in updater.get_devices_on_driver().items():
+    for port, port_params in update_monitor.get_devices_on_driver(CONFIG['SERIAL_DRIVER_CONFIG_FNAME']).items():
         uart_params = port_params['uart_params']
         devices_on_port = port_params['devices']
         failed_devices = []
         for device_name, device_slaveid in devices_on_port:
             logging.info('Trying to update %s with slaveid %d:' % (device_name, device_slaveid))
-            modbus_connection = updater.get_modbus_device_connection(port, device_slaveid, *uart_params)
+            modbus_connection = WBModbusDeviceBase(device_slaveid, port, *uart_params, debug=True)
             try:
-                update_monitor.flash_alive_device(updater, modbus_connection, 'latest', args.force, False)
+                update_monitor.flash_alive_device(modbus_connection, 'fw', '', fw_version, args.force, False)
             except Exception as e:
                 logging.error('Update for %s : %d failed!' % (device_name, device_slaveid), exc_info=True)
                 failed_devices.append([device_name, device_slaveid])
@@ -112,7 +116,7 @@ def parse_args():
 
     update_parser = subparsers.add_parser('update', help='Update firmware on single working device.')
     update_parser.add_argument("port", type=str, help='Serial port, device connected to.')
-    update_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
+    update_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', required=True, help='Slave address of the device.')
     update_parser.add_argument('--branch', type=str, dest='branch_name', default='', help='Install firmware from specified branch.')
     update_parser.add_argument('--mode', type=str, dest='mode', default='fw', choices=('fw', 'bootloader'), help='Update firmware or bootloader.')
     update_parser.add_argument('--uart-params', type=str, dest='uart_settings', default='9600-N-2', help='UART settings string (ex: 9600-N-2).')
@@ -125,7 +129,7 @@ def parse_args():
     recover_parser = subparsers.add_parser('recover', help="Flash single device, stuck in bootloader to it's latest firmware. Device model name (or known firmware signature) is required!")
     recover_parser.add_argument("port", type=str, help='Serial port, device connected to.')
     recover_parser.add_argument('--signature', dest='known_signature', type=str, default=None, help="Force specify device's firmware signature.")
-    recover_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', default=0, help='Slave address of the device.')
+    recover_parser.add_argument('-a', '--slaveid', type=int, dest='slaveid', required=True, help='Slave address of the device.')
     recover_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings', default=False, help="Erase all device's settings during update.")
     recover_parser.set_defaults(func=recover)
 

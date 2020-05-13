@@ -18,7 +18,6 @@ logging.getLogger().setLevel(logging.NOTSET)
 
 CONFIG = {
     'EXTERNAL_CONFIG_FNAME' : '/etc/wb-mcu-fw-updater.conf',
-    'SLAVEID_PLACEHOLDER' : 245,
     'ALLOWED_UNSUCCESSFUL_MODBUS_TRIES' : 2,
     'SERIAL_DRIVER_PROCESS_NAME' : 'wb-mqtt-serial',
     'SERIAL_DRIVER_CONFIG_FNAME' : '/etc/wb-mqtt-serial.conf',

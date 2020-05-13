@@ -49,102 +49,72 @@ def _parse_uart_params_str(uart_params_str, delimiter='-'):
     return [int(baudrate), parity, int(stopbits)]
 
 
-class UpdateHandler(object):
+def is_update_needed(modbus_connection, mode, branch_name=''):
     """
-    A 'launcher' class, handling all update logic.
+    Checking, whether update is needed or not by comparing version, stored in the device with remote.
     """
-    def __init__(self, mode, branch_name=''):
-        self.downloader = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
-        self.mode = mode
-
-    def get_modbus_device_connection(self, port, slaveid=0, baudrate=9600, parity='N', stopbits=2):
-        """
-        Asking user before setting slaveid via broadcast connection.
-
-        :param port: port, device connected to
-        :type port: str
-        :param slaveid: modbus address of device, defaults to 0
-        :type slaveid: int, optional
-        :return: minimalmodbus.Instrument instance
-        """
-        device = WBModbusDeviceBase(slaveid, port, baudrate, parity, stopbits, debug=True)
-        if slaveid == 0:
-            if ask_user('Will use broadcast id (0). Are ALL other devices disconnected from %s port?' % port):
-                logging.warning('Trying to set slaveid %d' % CONFIG['SLAVEID_PLACEHOLDER'])
-                uart_settings = device.find_uart_settings(device.set_slave_addr, CONFIG['SLAVEID_PLACEHOLDER'])
-                device.set_port_settings_raw(uart_settings)
-            else:
-                die('ALL other devices should be disconnected before!')
-        return device
-
-    def is_update_needed(self, modbus_connection):
-        """
-        Checking, whether update is needed or not by comparing version, stored in the device with remote.
-        """
-        meaningful_str = modbus_connection.get_fw_signature()
-        latest_remote_version = self.downloader.get_latest_version_number(meaningful_str)
-        current_version = modbus_connection.get_bootloader_version() if self.mode == 'bootloader' else modbus_connection.get_fw_version()
-        if compare_semver(latest_remote_version, current_version):
-            logging.info('Update is needed (local %s version: %s; remote version: %s)' % (self.mode, current_version, latest_remote_version))
-            return True
-        else:
-            logging.info('Device has latest %s version (%s)!' % (self.mode, current_version))
-            return False
-
-    def get_fw_signature_by_model(self, modelname):
-        """If there is no connection with device, fw_signature could be get via internal model_name <=> fw_signature conformity.
-
-        :param modelname: a full device's model name (ex: WB-MR6HV/I)
-        :type modelname: str
-        :return: fw_signature of device
-        :rtype: str
-        """
-        if modelname not in CONFIG['FW_SIGNATURES_PER_MODEL']:
-            die('Model %s is unknown! Choose one from:\n%s' % (modelname, ', '.join(CONFIG['FW_SIGNATURES_PER_MODEL'].keys())))
-        return CONFIG['FW_SIGNATURES_PER_MODEL'][modelname]
-
-    def get_devices_on_driver(self):
-        """
-        Parsing a driver's config file to get ports, their uart params and devices, connected to.
-
-        :return: {<port_name> : {'devices' : [devices_on_port], 'uart_params' : [uart_params_of_port]}}
-        :rtype: dict
-        """
-        found_devices = {}
-        config_dict = json.load(open(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], 'r'))
-        for port in config_dict['ports']:
-            port_name = port['path']
-            uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
-            devices_on_port = []
-            for serial_device in port['devices']:
-                device_name = serial_device.get('device_type', 'Unknown')
-                slaveid = serial_device['slave_id']
-                devices_on_port.append([device_name, int(slaveid)])
-            if devices_on_port:
-                found_devices.update({port_name : {'devices' : devices_on_port, 'uart_params' : uart_params_of_port}})
-        if found_devices:
-            return found_devices
-        else:
-            die('No devices has found in %s' % CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    downloader = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
+    meaningful_str = modbus_connection.get_fw_signature()
+    latest_remote_version = downloader.get_latest_version_number(meaningful_str)
+    current_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
+    if compare_semver(latest_remote_version, current_version):
+        logging.info('Update is needed (local %s version: %s; remote version: %s)' % (mode, current_version, latest_remote_version))
+        return True
+    else:
+        logging.info('Device has latest %s version (%s)!' % (mode, current_version))
+        return False
 
 
-def flash_in_bootloader(updater, port, slaveid, fw_signature, specified_fw_version, erase_settings, response_timeout=2.0):
+def get_devices_on_driver(driver_config_fname):
+    """
+    Parsing a driver's config file to get ports, their uart params and devices, connected to.
+
+    :return: {<port_name> : {'devices' : [devices_on_port], 'uart_params' : [uart_params_of_port]}}
+    :rtype: dict
+    """
+    found_devices = {}
+    config_dict = json.load(open(driver_config_fname, 'r'))
+    for port in config_dict['ports']:
+        port_name = port['path']
+        uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
+        devices_on_port = []
+        for serial_device in port['devices']:
+            device_name = serial_device.get('device_type', 'Unknown')
+            slaveid = serial_device['slave_id']
+            devices_on_port.append([device_name, int(slaveid)])
+        if devices_on_port:
+            found_devices.update({port_name : {'devices' : devices_on_port, 'uart_params' : uart_params_of_port}})
+    if found_devices:
+        return found_devices
+    else:
+        die('No devices has found in %s' % driver_config_fname)
+
+
+def flash_in_bootloader(downloaded_fw_fpath, port, slaveid, erase_settings, response_timeout=2.0):
+    bootloader_connection = WBModbusDeviceBase(slaveid, port, debug=True)
+    if bootloader_connection.is_in_bootloader():
+        logging.debug('Device is in bootloader')
+        if bootloader_connection.device.serial.is_open:
+            logging.debug('Closing serial port before flashing')
+            bootloader_connection.device.serial.close()
+    else:
+        die("Seems, device is not in bootloader or disconnected.")
     if erase_settings:
         if ask_user('All settings will be reset to defaults (1, 9600-8-N-2). Are you sure?'):
             pass
         else:
             die('Reset of settings was rejected')
-    download_fpath = updater.downloader.download(fw_signature, specified_fw_version)
     flasher = fw_flasher.WBFWFlasher(port)
-    flasher.flash(slaveid, download_fpath, erase_settings, response_timeout)
+    flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout)
 
 
-def flash_alive_device(updater, modbus_connection, specified_fw_version, force, erase_settings):
-    if updater.is_update_needed(modbus_connection) or force:
+def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
+    if is_update_needed(modbus_connection, mode, branch_name) or force:
         fw_signature = modbus_connection.get_fw_signature()
+        downloaded_fw = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name).download(fw_signature, specified_fw_version)
         modbus_connection.reboot_to_bootloader()
         try:
-            flash_in_bootloader(updater, modbus_connection.port, modbus_connection.slaveid, fw_signature, specified_fw_version, erase_settings)
+            flash_in_bootloader(downloaded_fw, modbus_connection.port, modbus_connection.slaveid, erase_settings)
         except subprocess.CalledProcessError as e:
             fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
             logging.debug('Saving %s to %s' % (fw_signature, fpath))
