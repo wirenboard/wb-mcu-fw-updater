@@ -35,7 +35,7 @@ class StdoutFilter(HidingTracebackFilter):
 class StderrFilter(HidingTracebackFilter):
     def filter(self, record):
         self._hide_tb(record)
-        return record.levelno >= logging.ERROR
+        return logging.CRITICAL > record.levelno >= logging.ERROR
 
 
 class ColoredFormatter(logging.Formatter):
@@ -88,6 +88,11 @@ def setup_user_logger(least_visible_level):
     stderr_handler.addFilter(StderrFilter(hide_traceback))
     logging.getLogger().addHandler(stderr_handler)
 
+    unhandled_exception_handler = logging.StreamHandler(stream=sys.stderr)
+    unhandled_exception_handler.setLevel(logging.CRITICAL)
+    unhandled_exception_handler.setFormatter(user_formatter)
+    logging.getLogger().handlers.insert(0, unhandled_exception_handler)
+
 
 def setup_syslog_logger():
     """
@@ -100,9 +105,3 @@ def setup_syslog_logger():
         syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
         syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
         logging.getLogger().handlers.insert(0, syslog_handler)  # Each message should be formatted by syslog's handler at first
-
-
-def show_tb_in_other_handlers():
-    for handler in logging.getLogger().handlers:
-        if not any(isinstance(filt, HidingTracebackFilter) for filt in handler.filters):
-            handler.addFilter(HidingTracebackFilter(hide_tb=False))

@@ -31,14 +31,18 @@ class WBFWFlasher(object):
         :param restore_defaults: will all settings be erased during flashing or not, defaults to False
         :type restore_defaults: bool, optional
         """
-        if 0 <= slaveid <= 247:
+        if 0 < slaveid <= 247:
             pass
         else:
             die('Slaveid %d is not allowed!' % slaveid)
         if not os.path.exists(fpath):
-            die('%s not found!' % fpath)
+            die('FW file %s not found!' % fpath)
         cmd_str = '%s -a %d -f %s -t %.2f' % (self.known_cmd_part, slaveid, fpath, response_timeout)
         if restore_defaults:
             cmd_str += ' -e'
         logging.debug('Will run: %s' % cmd_str)
-        subprocess.check_call(cmd_str, shell=True)
+        try:
+            subprocess.check_call(cmd_str, shell=True)
+        except subprocess.CalledProcessError as e:
+            logging.error('Possibly, .wbfw file is wrong')
+            die(e)

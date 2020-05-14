@@ -5,12 +5,12 @@ import logging
 import json
 import subprocess
 from distutils.version import LooseVersion
-import wb_modbus
 from . import fw_flasher, fw_downloader, die, PYTHON2, CONFIG
+import wb_modbus
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 
-from wb_modbus.bindings import WBModbusDeviceBase
+from wb_modbus.bindings import WBModbusDeviceBase, close_all_modbus_ports
 
 
 if PYTHON2:
@@ -90,22 +90,18 @@ def get_devices_on_driver(driver_config_fname):
         die('No devices has found in %s' % driver_config_fname)
 
 
-def flash_in_bootloader(downloaded_fw_fpath, port, slaveid, erase_settings, response_timeout=2.0):
-    bootloader_connection = WBModbusDeviceBase(slaveid, port, debug=True)
-    if bootloader_connection.is_in_bootloader():
-        logging.debug('Device is in bootloader')
-        if bootloader_connection.device.serial.is_open:
-            logging.debug('Closing serial port before flashing')
-            bootloader_connection.device.serial.close()
-    else:
-        die("Seems, device is not in bootloader or disconnected.")
+def flash_in_bootloader(downloaded_fw_fpath, modbus_connection, erase_settings, response_timeout=2.0):
+    # if modbus_connection.is_in_bootloader():  # TODO: fix later
+    #     logging.debug('Device is in bootloader')
+    # else:
+    #     die("Seems, device is not in bootloader or is disconnected.")
     if erase_settings:
         if ask_user('All settings will be reset to defaults (1, 9600-8-N-2). Are you sure?'):
             pass
         else:
             die('Reset of settings was rejected')
-    flasher = fw_flasher.WBFWFlasher(port)
-    flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout)
+    flasher = fw_flasher.WBFWFlasher(modbus_connection.port)
+    flasher.flash(modbus_connection.slaveid, downloaded_fw_fpath, erase_settings, response_timeout)
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
@@ -114,13 +110,14 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         downloaded_fw = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name).download(fw_signature, specified_fw_version)
         modbus_connection.reboot_to_bootloader()
         try:
-            flash_in_bootloader(downloaded_fw, modbus_connection.port, modbus_connection.slaveid, erase_settings)
+            flash_in_bootloader(downloaded_fw, modbus_connection, erase_settings)
         except subprocess.CalledProcessError as e:
             fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
             logging.debug('Saving %s to %s' % (fw_signature, fpath))
             with open(fpath, 'w') as f:
                 f.write(fw_signature)
-            raise e
+            logging.error('Flashing has failed!')
+            die(e)
 
 
 def _send_signal_to_driver(signal):

@@ -6,7 +6,8 @@ import logging
 import atexit
 from subprocess import CalledProcessError
 from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
-from wb_modbus.bindings import WBModbusDeviceBase
+from wb_modbus.bindings import WBModbusDeviceBase, close_all_modbus_ports
+from wb_modbus.minimalmodbus import ModbusException
 
 
 def update_alive_device(args):
@@ -14,14 +15,23 @@ def update_alive_device(args):
     Updating device, working in normal mode. Port name is compulsory.
     """
     modbus_connection = WBModbusDeviceBase(args.slaveid, args.port, debug=True)
+    modbus_connection.set_port_settings(*update_monitor._parse_uart_params_str(args.uart_settings))
     if args.unknown_uart_settings:
         """
         Applying found uart settings to modbus_connection instance.
         """
-        uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        try:
+            uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        except RuntimeError as e:
+            logging.error('Device is disconnected or slaveid is wrong')
+            die(e)
         logging.info('Has found UART settings: %s' % str(uart_settings))
         modbus_connection.set_port_settings_raw(uart_settings)
-    update_monitor.flash_alive_device(modbus_connection, args.mode, args.branch_name, args.specified_version, args.force, args.erase_settings)
+    try:
+        update_monitor.flash_alive_device(modbus_connection, args.mode, args.branch_name, args.specified_version, args.force, args.erase_settings)
+    except ModbusException as e:
+        logging.error("Check device's connection, slaveid and UART settings!")
+        die(e)
 
 
 def recover(args):
@@ -31,20 +41,21 @@ def recover(args):
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     fw_version = 'latest'
     fw_signatures_list = fw_downloader.get_fw_signatures_list()
+    modbus_connection = WBModbusDeviceBase(args.slaveid, args.port, debug=True)
     if args.known_signature is None:
         fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
-        logging.info('Will try to recover fw signature from: %s' % fpath)
+        logging.warn('Will try to recover fw signature from: %s' % fpath)
         try:
             fw_signature = open(fpath).read().strip()
             downloaded_fw = downloader.download(fw_signature, fw_version)
-            update_monitor.flash_in_bootloader(downloaded_fw, args.port, args.slaveid, args.erase_settings)
+            update_monitor.flash_in_bootloader(downloaded_fw, modbus_connection, args.erase_settings)
         except (CalledProcessError, IOError) as e: # If file not found or fw_signature was wrong
-            logging.info('Failed. Will try all possigle fw signatures:')
+            logging.warn('Failed. Will try all possigle fw signatures:')
             for fw_signature in fw_signatures_list:
-                logging.info('Trying %s:' % fw_signature)
+                logging.debug('Trying %s:' % fw_signature)
                 downloaded_fw = downloader.download(fw_signature, fw_version)
                 try:
-                    update_monitor.flash_in_bootloader(downloaded_fw, args.port, args.slaveid, args.erase_settings, response_timeout=0.5)
+                    update_monitor.flash_in_bootloader(downloaded_fw, modbus_connection, args.erase_settings, response_timeout=0.5)
                     logging.info('Successfully recovered device with fw_signature: %s' % fw_signature)
                     return
                 except CalledProcessError:
@@ -53,7 +64,7 @@ def recover(args):
                 die('Valid fw_signature was not found!')
     elif args.known_signature in fw_signatures_list:
         downloaded_fw = downloader.download(args.known_signature, fw_version)
-        update_monitor.flash_in_bootloader(downloaded_fw, args.port, args.slaveid, args.erase_settings)
+        update_monitor.flash_in_bootloader(downloaded_fw, modbus_connection, args.erase_settings)
     else:
         die('Choose a fw_signature from : %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
 
@@ -70,7 +81,7 @@ def update_all(args):
         devices_on_port = port_params['devices']
         failed_devices = []
         for device_name, device_slaveid in devices_on_port:
-            logging.info('Trying to update %s with slaveid %d:' % (device_name, device_slaveid))
+            logging.debug('Trying to update %s with slaveid %d:' % (device_name, device_slaveid))
             modbus_connection = WBModbusDeviceBase(device_slaveid, port, *uart_params, debug=True)
             try:
                 update_monitor.flash_alive_device(modbus_connection, 'fw', '', fw_version, args.force, False)
@@ -152,10 +163,10 @@ if __name__ == "__main__":
 
         user_log.setup_syslog_logger()
         user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
-        user_log.show_tb_in_other_handlers()
 
         update_monitor.pause_driver()
         atexit.register(update_monitor.resume_driver)
+        atexit.register(close_all_modbus_ports)
 
         args.func(args)
 

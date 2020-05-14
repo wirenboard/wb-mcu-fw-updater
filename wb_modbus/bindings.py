@@ -9,9 +9,6 @@ from functools import wraps
 from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS
 
 
-minimalmodbus.CLOSE_PORT_AFTER_EACH_CALL = CLOSE_PORT_AFTER_EACH_CALL
-
-
 def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
     """
     A decorator, handling accidential connection errors on bus.
@@ -49,6 +46,15 @@ def _debug_info(message):
     logging.debug(message)
 
 
+def close_all_modbus_ports():
+    for serial_instance in minimalmodbus._serialports.values():
+        if serial_instance.is_open:
+            logging.debug('Closing serial instance: %s' % str(serial_instance))
+            serial_instance.close()
+        else:
+            logging.debug('Serial instance %s has already closed' % serial_instance)
+
+
 class MinimalModbusAPIWrapper(object):
     """
     A generic wrapper around minimalmodbus's api. Handles connection errors;
@@ -57,8 +63,11 @@ class MinimalModbusAPIWrapper(object):
     """
     def __init__(self, addr, port, baudrate, parity, stopbits, debug=False):
         minimalmodbus._print_out = _debug_info
-        self.device = minimalmodbus.Instrument(port, addr, debug=debug)
+        self.device = minimalmodbus.Instrument(port, addr, debug=debug, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL)
         self.set_port_settings(baudrate, parity, stopbits)
+        self.slaveid = addr
+        self.port = port
+        self.debug = debug
 
     def set_port_settings_raw(self, settings_dict):
         """
@@ -433,14 +442,13 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     FIRMWARE_SIGNATURE_LENGTH = 12
     BOOTLOADER_VERSION_LENGTH = 7
 
+    SERIAL_TIMEOUT = 0.1
+
     def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, debug=False):
         for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
             self._validate_param(param, allowed_row)
         super(WBModbusDeviceBase, self).__init__(addr, port, baudrate, parity, stopbits, debug)
-        self.device.serial.timeout = 0.1 # Workaround for WB-MSW devices
-        self.slaveid = addr
-        self.port = port
-        self.debug = debug
+        self.device.serial.timeout = self.SERIAL_TIMEOUT
 
     def _validate_param(self, param, sequence):
         if param not in sequence:
@@ -619,7 +627,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         uptime_before = self.get_uptime()
         try:
             self.device.write_register(self.COMMON_REGS_MAP['reboot'], to_write, 0, 6, False)
-        except IOError:
+        except minimalmodbus.ModbusException:
             pass #Device has rebooted and doesn't send responce (Fixed in latest FWs)
         time.sleep(bootloader_timeout)
         uptime_after = self.get_uptime()
@@ -635,7 +643,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.get_slave_addr() #To ensure, device has connection
         try:
             self.device.write_register(self.COMMON_REGS_MAP['reboot_to_bootloader'], 1, 0, 6, False)
-        except IOError:
+        except minimalmodbus.ModbusException:
             pass #Device has rebooted and doesn't send responce (Fixed in latest FWs)
         finally:
             time.sleep(0.5) #Delay before going to bootloader
@@ -655,16 +663,21 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: has device raised modbus error 04 or not
         :rtype: bool
         """
+        initial_port_settings = deepcopy(self.settings)
         bootloader_uart_params = [9600, 'N', 2]
-        bootloader_timeout = 0.5
-        bootloader_connection = MinimalModbusAPIWrapper(self.slaveid, self.port, *bootloader_uart_params, debug=self.debug)
-        bootloader_connection.device.serial.timeout = bootloader_timeout
+        logging.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
+        self.set_port_settings(*bootloader_uart_params)
+        self.device.serial.timeout = 0.5
         try:
-            bootloader_connection.write_u16_regs(0x1000, [0] * 16)  # A dummy payload
+            self.write_u16_regs(0x1000, [0] * 16)  # A dummy payload
         except minimalmodbus.SlaveReportedException:  # Err 04
             return True
         except minimalmodbus.ModbusException:
             return False
+        finally:
+            logging.debug('Setting params to port %s back' % self.port)
+            self.set_port_settings_raw(initial_port_settings)
+            self.device.serial.timeout = self.SERIAL_TIMEOUT
 
     def is_in_bootloader(self):
         """

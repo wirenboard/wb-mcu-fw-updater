@@ -4,12 +4,14 @@
 import logging
 import os
 from posixpath import join as urljoin
-from . import PYTHON2, CONFIG
+from . import PYTHON2, CONFIG, die
 
 if PYTHON2:
     import urllib2 as url_handler
+    from urllib2 import HTTPError
 else:
     import urllib.request as url_handler
+    from urllib.error import HTTPError as HTTPError
 
 
 def get_request_content(url_path):
@@ -48,7 +50,11 @@ class RemoteFileWatcher(object):
         :type branch_name: str, optional
         """
         self.mode = mode
-        url_handler.urlopen(CONFIG['ROOT_URL']) # Checking, user has internet connection
+        try:
+            url_handler.urlopen(CONFIG['ROOT_URL']) # Checking, user has internet connection
+        except HTTPError as e:
+            logging.error('Check internet connection')
+            die(e)
         self.parent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
         self.fw_source = CONFIG['DEFAULT_SOURCE']
         self.branch_name = branch_name
@@ -94,7 +100,11 @@ class RemoteFileWatcher(object):
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
-        content = get_request_content(url_path)
+        try:
+            content = get_request_content(url_path)
+        except HTTPError as e:
+            logging.error('fw_version or fw_signature is incorrect')
+            die(e)
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
         if not fname:
             if not os.path.isdir(file_saving_dir):

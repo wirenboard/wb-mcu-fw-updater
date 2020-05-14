@@ -51,6 +51,14 @@ def die(err=None, exitcode=1):
     sys.exit(exitcode)
 
 
+def logging_excepthook(exc_type, exc_value, exc_traceback):
+    """
+    Logging unhandled exceptions with critical level.
+    """
+    logging.getLogger().critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
+    die()
+
+
 def update_config(config_fname):
     """
     Only fields, existing in CONFIG will be updated.
@@ -71,3 +79,6 @@ def update_config(config_fname):
 
 
 update_config(CONFIG['EXTERNAL_CONFIG_FNAME'])
+
+
+sys.excepthook = logging_excepthook
