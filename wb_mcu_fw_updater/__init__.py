@@ -33,7 +33,9 @@ CONFIG = {
     'SYSLOG_MESSAGE_FMT' : 'wb-mcu-fw-updater:%(module)s.%(funcName)s[%(process)s]: %(message)s',
     'LOG_DATETIME_FMT' : '%Y-%m-%d|%H:%M:%S',
     'SYSLOG_LOGLEVEL' : 10,
-    'USER_LOGLEVEL' : 30
+    'USER_LOGLEVEL' : 30,
+    'MAX_DB_RECORDS' : 100,
+    'DB_FILE_LOCATION' : '/var/lib/wb-mcu-fw-updater/devices.jsondb'
 }
 
 

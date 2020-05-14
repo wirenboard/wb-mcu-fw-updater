@@ -4,8 +4,9 @@
 import logging
 import json
 import subprocess
+import atexit
 from distutils.version import LooseVersion
-from . import fw_flasher, fw_downloader, die, PYTHON2, CONFIG
+from . import fw_flasher, fw_downloader, jsondb, die, PYTHON2, CONFIG
 import wb_modbus
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
@@ -17,6 +18,10 @@ if PYTHON2:
     input_func = raw_input
 else:
     input_func = input
+
+
+db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
+atexit.register(db.dump)
 
 
 def ask_user(message):
@@ -107,17 +112,10 @@ def flash_in_bootloader(downloaded_fw_fpath, modbus_connection, erase_settings, 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
     if is_update_needed(modbus_connection, mode, branch_name) or force:
         fw_signature = modbus_connection.get_fw_signature()
+        db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
         downloaded_fw = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name).download(fw_signature, specified_fw_version)
         modbus_connection.reboot_to_bootloader()
-        try:
-            flash_in_bootloader(downloaded_fw, modbus_connection, erase_settings)
-        except subprocess.CalledProcessError as e:
-            fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
-            logging.debug('Saving %s to %s' % (fw_signature, fpath))
-            with open(fpath, 'w') as f:
-                f.write(fw_signature)
-            logging.error('Flashing has failed!')
-            die(e)
+        flash_in_bootloader(downloaded_fw, modbus_connection, erase_settings)
 
 
 def _send_signal_to_driver(signal):

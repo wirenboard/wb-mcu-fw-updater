@@ -121,7 +121,7 @@ def show_typical_usage(progname):
 
 
 def parse_args():
-    main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter, description='WirenBoard modbus devices firmware update tool')
+    main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter, description='WirenBoard modbus devices firmware update tool', add_help=True)
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const', const=10, help='Displaying all log records.')
     subparsers = main_parser.add_subparsers()
 

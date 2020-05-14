@@ -1,2 +1,3 @@
 wb-mcu-fw-updater usr/bin
 wb-mcu-fw-updater.conf etc
+devices.jsondb var/lib/wb-mcu-fw-updater
