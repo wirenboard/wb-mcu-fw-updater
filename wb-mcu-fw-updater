@@ -38,33 +38,16 @@ def recover(args):
     """
     Flashing device, stuck in the bootloader. Unstable FW branches are not allowed.
     """
-    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
-    fw_version = 'latest'
     fw_signatures_list = fw_downloader.get_fw_signatures_list()
-    modbus_connection = WBModbusDeviceBase(args.slaveid, args.port, debug=True)
     if args.known_signature is None:
-        fpath = CONFIG['LAST_FW_SIGNATURE_FNAME']
-        logging.warn('Will try to recover fw signature from: %s' % fpath)
-        try:
-            fw_signature = open(fpath).read().strip()
-            downloaded_fw = downloader.download(fw_signature, fw_version)
-            update_monitor.flash_in_bootloader(downloaded_fw, modbus_connection, args.erase_settings)
-        except (CalledProcessError, IOError) as e: # If file not found or fw_signature was wrong
-            logging.warn('Failed. Will try all possigle fw signatures:')
-            for fw_signature in fw_signatures_list:
-                logging.debug('Trying %s:' % fw_signature)
-                downloaded_fw = downloader.download(fw_signature, fw_version)
-                try:
-                    update_monitor.flash_in_bootloader(downloaded_fw, modbus_connection, args.erase_settings, response_timeout=0.5)
-                    logging.info('Successfully recovered device with fw_signature: %s' % fw_signature)
-                    return
-                except CalledProcessError:
-                    logging.error('Failed')
-            else:
-                die('Valid fw_signature was not found!')
+        logging.warning("Restoring device's fw_signature from db by slaveid: %d and port %s" % (args.slaveid, args.port))
+        fw_signature = update_monitor.db.get_fw_signature(args.slaveid, args.port)
+        if fw_signature:
+            update_monitor.recover_device_iteration(fw_signature, args.slaveid, args.port)
+        else:
+            die('No data has found. Specify fw_signature manually via --signature key')
     elif args.known_signature in fw_signatures_list:
-        downloaded_fw = downloader.download(args.known_signature, fw_version)
-        update_monitor.flash_in_bootloader(downloaded_fw, modbus_connection, args.erase_settings)
+        update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port)
     else:
         die('Choose a fw_signature from : %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
 

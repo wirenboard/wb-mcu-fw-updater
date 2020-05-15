@@ -9,7 +9,9 @@ logger = logging.getLogger()
 
 class FixedLengthList(list):
     """
-    A JsonDB default container
+    Removing elements from beginning, when <MAXLEN> has achieved.
+
+    A JsonDB's default inner container.
     """
     MAXLEN = CONFIG['MAX_DB_RECORDS']
 
@@ -36,6 +38,9 @@ class FixedLengthList(list):
 
 
 class JsonDB(object):
+    """
+    Storing information about device's fw_signature.
+    """
     _SLAVEID = 'slaveid'
     _PORT = 'port'
     _FW_SIGNATURE = 'fw_signature'
@@ -76,8 +81,9 @@ class JsonDB(object):
 
     def get_fw_signature(self, slaveid, port):
         """
-        Searching in a reversed shadow-copy of container
+        Searching in a reversed shadow-copy of container.
+        Lost devices are assumed to be neer the end.
         """
         sequence = self.container[::-1]
         found_index = self._find(slaveid, port, sequence)
-        return sequence[found_index][self._FW_SIGNATURE] if found_index else None
+        return sequence[found_index][self._FW_SIGNATURE] if found_index is not None else None

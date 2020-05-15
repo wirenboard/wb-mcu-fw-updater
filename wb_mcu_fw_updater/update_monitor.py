@@ -95,7 +95,14 @@ def get_devices_on_driver(driver_config_fname):
         die('No devices has found in %s' % driver_config_fname)
 
 
-def flash_in_bootloader(downloaded_fw_fpath, modbus_connection, erase_settings, response_timeout=2.0):
+def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0):
+    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
+    fw_version = 'latest'
+    downloaded_fw = downloader.download(fw_signature, fw_version)
+    flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout)
+
+
+def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, response_timeout=2.0):
     # if modbus_connection.is_in_bootloader():  # TODO: fix later
     #     logging.debug('Device is in bootloader')
     # else:
@@ -105,8 +112,8 @@ def flash_in_bootloader(downloaded_fw_fpath, modbus_connection, erase_settings, 
             pass
         else:
             die('Reset of settings was rejected')
-    flasher = fw_flasher.WBFWFlasher(modbus_connection.port)
-    flasher.flash(modbus_connection.slaveid, downloaded_fw_fpath, erase_settings, response_timeout)
+    flasher = fw_flasher.WBFWFlasher(port)
+    flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout)
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
@@ -115,7 +122,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
         downloaded_fw = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name).download(fw_signature, specified_fw_version)
         modbus_connection.reboot_to_bootloader()
-        flash_in_bootloader(downloaded_fw, modbus_connection, erase_settings)
+        flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
 def _send_signal_to_driver(signal):
