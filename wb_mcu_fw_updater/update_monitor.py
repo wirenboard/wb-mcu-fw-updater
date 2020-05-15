@@ -4,15 +4,15 @@
 import logging
 import json
 import subprocess
-import atexit
 from distutils.version import LooseVersion
 from . import fw_flasher, fw_downloader, jsondb, die, PYTHON2, CONFIG
-import wb_modbus
 
+import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
+wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
 
-from wb_modbus.bindings import WBModbusDeviceBase, close_all_modbus_ports
-from wb_modbus.minimalmodbus import ModbusException
+from wb_modbus import minimalmodbus, parse_uart_settings_str
+from wb_modbus.bindings import WBModbusDeviceBase
 
 
 if PYTHON2:
@@ -22,7 +22,9 @@ else:
 
 
 db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
-atexit.register(db.dump)
+
+
+ModbusError = minimalmodbus.ModbusException
 
 
 def ask_user(message):
@@ -34,7 +36,7 @@ def ask_user(message):
     :return: is user sure or not
     :rtype: bool
     """
-    message_str = '*** %s [Y/N] *** ' % (message)
+    message_str = '\n*** %s [Y/N] *** ' % (message)
     ret = input_func(message_str)
     return ret.upper().startswith('Y')
 
@@ -47,12 +49,7 @@ def compare_semver(first, second):
     :return: is first semver > second
     :rtype: bool
     """
-    return LooseVersion(first) > second
-
-
-def _parse_uart_params_str(uart_params_str, delimiter='-'):
-    baudrate, parity, stopbits = uart_params_str.strip().split(delimiter)
-    return [int(baudrate), parity, int(stopbits)]
+    return LooseVersion(vstring=str(first)) > str(second)
 
 
 def is_update_needed(modbus_connection, mode, branch_name=''):
@@ -71,6 +68,30 @@ def is_update_needed(modbus_connection, mode, branch_name=''):
         return False
 
 
+def get_correct_modbus_connection(slaveid, port, uart_settings_str, uart_settings_are_unknown):
+    if slaveid == 0:
+        die("Slaveid %d is not allowed in this mode!" % slaveid)  # Broadcast slaveid is available only in bootloader to prevent possible harm
+    modbus_connection = WBModbusDeviceBase(slaveid, port)
+    try:
+        uart_settings = parse_uart_settings_str(uart_settings_str)
+        modbus_connection.set_port_settings(*uart_settings)
+    except RuntimeError as e:
+        die(e)
+    if uart_settings_are_unknown:
+        """
+        Applying found uart settings to modbus_connection instance.
+        """
+        try:
+            logging.warning("UART settings are unknown. Trying to find it...")
+            uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        except RuntimeError as e:
+            logging.error('Device is disconnected or slaveid is wrong')
+            die(e)
+        logging.info('Has found UART settings: %s' % str(uart_settings_dict))
+        modbus_connection._set_port_settings_raw(uart_settings_dict)
+    return modbus_connection
+
+
 def get_devices_on_driver(driver_config_fname):
     """
     Parsing a driver's config file to get ports, their uart params and devices, connected to.
@@ -79,7 +100,10 @@ def get_devices_on_driver(driver_config_fname):
     :rtype: dict
     """
     found_devices = {}
-    config_dict = json.load(open(driver_config_fname, 'r'))
+    try:
+        config_dict = json.load(open(driver_config_fname, 'r'))
+    except FileNotFoundError as e:
+        die(e)
     for port in config_dict['ports']:
         port_name = port['path']
         uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
@@ -147,27 +171,24 @@ def all_devices_on_driver(f):
             if failed_devices:
                 overall_fails.update({port : failed_devices})
         if overall_fails:
-            die('Update has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
+            die('Operation has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
     return wrapper
 
 
 @all_devices_on_driver
 def _update_all(slaveid, port, uart_params, force):
-    modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params, debug=True)
+    modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params)
     flash_alive_device(modbus_connection, 'fw', '', 'latest', force, False)
 
 
 @all_devices_on_driver
 def _recover_all(slaveid, port, uart_params):
-    modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params, debug=True)
-    try:
-        modbus_connection.get_slave_addr()
-        raise RuntimeError('Device is not in bootloader')
-    except ModbusException:
-        pass
     fw_signature = db.get_fw_signature(slaveid, port)
     if fw_signature is None:
-        raise RuntimeError("Could not get fw_signature from db")
+        raise RuntimeError("Could not get fw_signature from db. Recover in manual mode, if needed!")
+    modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params)
+    if not modbus_connection.is_in_bootloader():
+        raise RuntimeError('Device %s (port: %s, slaveid: %d) is not in bootloader' % (fw_signature, port, slaveid))
     downloaded_fw = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').download(fw_signature, version='latest')
     flash_in_bootloader(downloaded_fw, slaveid, port, False)
 
@@ -182,7 +203,7 @@ def _send_signal_to_driver(signal):
     if CONFIG['SERIAL_DRIVER_PROCESS_NAME']:
         cmd_str = 'killall %s %s' % (signal, CONFIG['SERIAL_DRIVER_PROCESS_NAME'])
         logging.debug('Will run: %s' % cmd_str)
-        subprocess.call(cmd_str, shell=True)
+        subprocess.call(cmd_str, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def pause_driver():

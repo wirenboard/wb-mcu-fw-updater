@@ -83,7 +83,12 @@ class RemoteFileWatcher(object):
         :rtype: str
         """
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
-        return get_request_content(url_path).decode('utf-8')
+        try:
+            content = get_request_content(url_path).decode('utf-8')
+            return content
+        except HTTPError as e:
+            logging.error("Incorrect branch name or fw_signature!")
+            die(e)
 
     def download(self, name, version='latest', fname=None):
         """
@@ -113,7 +118,11 @@ class RemoteFileWatcher(object):
             fpath = os.path.join(file_saving_dir, fname)
         else:
             fpath = fname
-        logging.info('Downloading to: %s' % fpath)
-        with open(fpath, 'wb+') as fh:
+        logging.debug('Downloading to: %s' % fpath)
+        try:
+            fh = open(fpath, 'wb+')
             fh.write(content)
+            fh.close()
+        except PermissionError as e:
+            die(e)
         return fpath

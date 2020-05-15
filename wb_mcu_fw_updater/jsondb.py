@@ -58,7 +58,11 @@ class JsonDB(object):
             self.container = FixedLengthList()
 
     def dump(self):
-        json.dump(self.container, open(self.db_fname, "w+"))
+        try:
+            json.dump(self.container, open(self.db_fname, "w+"))
+            logger.debug("Has saved db to %s" % self.db_fname)
+        except PermissionError as e:
+            logger.error("Haven't rights to write %s! Try with sudo" % (self.db_fname), exc_info=True)
 
     def _find(self, slaveid, port, sequence):
         for index, device in enumerate(sequence):

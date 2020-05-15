@@ -6,28 +6,6 @@ import logging
 import atexit
 from subprocess import CalledProcessError
 from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
-from wb_modbus.bindings import WBModbusDeviceBase, close_all_modbus_ports
-from wb_modbus.minimalmodbus import ModbusException
-
-
-def get_correct_modbus_connection(args):
-    """
-    Updating device, working in normal mode. Port name is compulsory.
-    """
-    modbus_connection = WBModbusDeviceBase(args.slaveid, args.port, debug=True)
-    modbus_connection.set_port_settings(*update_monitor._parse_uart_params_str(args.uart_settings))
-    if args.unknown_uart_settings:
-        """
-        Applying found uart settings to modbus_connection instance.
-        """
-        try:
-            uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-        except RuntimeError as e:
-            logging.error('Device is disconnected or slaveid is wrong')
-            die(e)
-        logging.info('Has found UART settings: %s' % str(uart_settings))
-        modbus_connection.set_port_settings_raw(uart_settings)
-    return modbus_connection
 
 
 def update_fw(args):
@@ -35,10 +13,10 @@ def update_fw(args):
     Updating device's firmware.
     Could install specified fw_version from specified branch.
     """
-    modbus_connection = get_correct_modbus_connection(args)
+    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
-    except ModbusException as e:
+    except update_monitor.ModbusError as e:
         logging.error("Check device's connection, slaveid and UART settings!")
         die(e)
     except CalledProcessError as e:
@@ -51,10 +29,11 @@ def update_bootloader(args):
     Updating device's bootloader.
     Only latest version from stable branch is available.
     """
-    modbus_connection = get_correct_modbus_connection(args)
+    update_monitor.ask_user("Bootloader updating is a potentionally dangerous operation. It may brick the device and void the warranty! Are you sure?")
+    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
-    except ModbusException as e:
+    except update_monitor.ModbusError as e:
         logging.error("Check device's connection, slaveid and UART settings!")
         die(e)
     except CalledProcessError as e:
@@ -73,7 +52,7 @@ def recover_fw(args):
         if fw_signature:
             update_monitor.recover_device_iteration(fw_signature, args.slaveid, args.port)
         else:
-            die('No data has found. Specify fw_signature manually via --fw-sig key')
+            die('No data for device (%d : %s) has found. Specify fw_signature manually via --fw-sig key!' % (args.slaveid, args.port))
     elif args.known_signature in fw_signatures_list:
         update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port)
     else:
@@ -100,7 +79,7 @@ def parse_args():
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const',
                              const=10, help='Setting the least loglevel. (Default: %(default)s)')
     subparsers = main_parser.add_subparsers(
-        title='Actions', help='Choose functionality mode')
+        title='Actions', help='Choose mode:\n')
 
     """
     Updating firmware on single working device.
@@ -114,10 +93,10 @@ def parse_args():
     update_fw_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings',
                                   default=False, help="Erase all device's settings during update. (Default: %(default)s)")
     update_fw_parser.add_argument('--uart', metavar='<uart_settings_str>', type=str, dest='uart_settings',
-                                  default='9600-N-2', help='UART settings string. (Default: %(default)s)')
+                                  default='9600N2', help='UART settings string. (Default: %(default)s)')
     update_fw_parser.add_argument('--find-uart', action='store_true', dest='unknown_uart_settings',
                                   default=False, help='Automatically find UART settings of device. (Default: %(default)s)')
-    update_fw_parser.add_argument('--force', action='store_true', dest='force', default=False,
+    update_fw_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                   help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_fw_parser.add_argument(
         '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device.')
@@ -131,7 +110,7 @@ def parse_args():
     update_bootloader_parser = subparsers.add_parser(
         'update-bl', help='Update bootloader on single working device.')
     update_bootloader_parser.add_argument('--uart', type=str, metavar='<uart_settings_str>', dest='uart_settings',
-                                          default='9600-N-2', help='UART settings string. (Default: %(default)s)')
+                                          default='9600N2', help='UART settings string. (Default: %(default)s)')
     update_bootloader_parser.add_argument('--find-uart', action='store_true', dest='unknown_uart_settings',
                                           default=False, help='Automatically find UART settings of device. (Default: %(default)s)')
     update_bootloader_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
@@ -146,7 +125,7 @@ def parse_args():
     Flash single device, stuck in the bootloader.
     """
     recover_fw_parser = subparsers.add_parser(
-        'recover', help="Flash single device, stuck in bootloader to it's latest firmware. Device model name (or known firmware signature) is required!")
+        'recover', help="Restore the latest firmware on stuck in bootloader device.")
     recover_fw_parser.add_argument('--fw-sig', dest='known_signature', type=str, metavar='<fw_signature>', default=None,
                                    help="Force specify device's firmware signature. (Default: %(default)s)")
     recover_fw_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings',
@@ -161,8 +140,8 @@ def parse_args():
     Update firmware on all devices, found in wb-mqtt-serial config.
     """
     update_all_fw_parser = subparsers.add_parser(
-        'update-all', help="Trying to update all devices, added to wb-mqtt-serial's config.")
-    update_all_fw_parser.add_argument('--force', action='store_true', dest='force', default=False,
+        'update-all', help="Trying to update firmwares on all devices, added to wb-mqtt-serial's config.")
+    update_all_fw_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                       help='Perform force updates of all devices, even if firmwares are latest. (Default: %(default)s)')
     update_all_fw_parser.set_defaults(func=update_all)
 
@@ -174,22 +153,19 @@ def parse_args():
     if 'func' in vars(args):
         return args
     else:
-        main_parser.print_usage()
+        main_parser.print_help()
+        print("Each action supports <-h> key for help.")
         die('No action has chosen!')
 
 
 if __name__ == "__main__":
-    try:
-        args = parse_args()
+    args = parse_args()
 
-        user_log.setup_syslog_logger()
-        user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
+    user_log.setup_syslog_logger()
+    user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
 
-        update_monitor.pause_driver()
-        atexit.register(update_monitor.resume_driver)
-        atexit.register(close_all_modbus_ports)
+    update_monitor.pause_driver()
+    atexit.register(update_monitor.resume_driver)
+    atexit.register(update_monitor.db.dump)
 
-        args.func(args)
-
-    except KeyboardInterrupt as e:
-        die(e)
+    args.func(args)

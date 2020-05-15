@@ -31,7 +31,7 @@ class WBFWFlasher(object):
         :param restore_defaults: will all settings be erased during flashing or not, defaults to False
         :type restore_defaults: bool, optional
         """
-        if 0 < slaveid <= 247:
+        if 0 <= slaveid <= 247:
             pass
         else:
             die('Slaveid %d is not allowed!' % slaveid)

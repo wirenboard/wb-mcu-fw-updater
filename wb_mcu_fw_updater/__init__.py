@@ -19,6 +19,7 @@ logging.getLogger().setLevel(logging.NOTSET)
 CONFIG = {
     'EXTERNAL_CONFIG_FNAME' : '/etc/wb-mcu-fw-updater.conf',
     'ALLOWED_UNSUCCESSFUL_MODBUS_TRIES' : 2,
+    'MODBUS_DEBUG' : True,
     'SERIAL_DRIVER_PROCESS_NAME' : 'wb-mqtt-serial',
     'SERIAL_DRIVER_CONFIG_FNAME' : '/etc/wb-mqtt-serial.conf',
     'FLASHER_EXEC_NAME' : 'wb-mcu-fw-flasher',
@@ -56,7 +57,10 @@ def logging_excepthook(exc_type, exc_value, exc_traceback):
     """
     Logging unhandled exceptions with critical level.
     """
-    logging.getLogger().critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
+    if exc_type == KeyboardInterrupt:
+        pass
+    else:
+        logging.getLogger().critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
     die()
 
 
