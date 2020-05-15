@@ -41,8 +41,4 @@ class WBFWFlasher(object):
         if restore_defaults:
             cmd_str += ' -e'
         logging.debug('Will run: %s' % cmd_str)
-        try:
-            subprocess.check_call(cmd_str, shell=True)
-        except subprocess.CalledProcessError as e:
-            logging.error('Possibly, .wbfw file is wrong')
-            die(e)
+        subprocess.check_call(cmd_str, shell=True)

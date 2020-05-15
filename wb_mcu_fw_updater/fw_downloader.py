@@ -8,10 +8,10 @@ from . import PYTHON2, CONFIG, die
 
 if PYTHON2:
     import urllib2 as url_handler
-    from urllib2 import HTTPError
+    from urllib2 import HTTPError, URLError
 else:
     import urllib.request as url_handler
-    from urllib.error import HTTPError as HTTPError
+    from urllib.error import HTTPError, URLError
 
 
 def get_request_content(url_path):
@@ -52,7 +52,7 @@ class RemoteFileWatcher(object):
         self.mode = mode
         try:
             url_handler.urlopen(CONFIG['ROOT_URL']) # Checking, user has internet connection
-        except HTTPError as e:
+        except URLError as e:
             logging.error('Check internet connection')
             die(e)
         self.parent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)

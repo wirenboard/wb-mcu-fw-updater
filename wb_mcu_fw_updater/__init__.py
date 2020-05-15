@@ -25,7 +25,6 @@ CONFIG = {
     'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
     'FW_SIGNATURES_FILE_URL' : 'http://fw-releases.wirenboard.com/fw/by-signature/fw_signatures.txt',
     'FW_SAVING_DIR' : '/var/lib/wb-mcu-fw-updater/',
-    'LAST_FW_SIGNATURE_FNAME' : '/var/lib/wb-mcu-fw-updater/last_fw_signature.txt',
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',
     'DEFAULT_SOURCE' : 'stable',

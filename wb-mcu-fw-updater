@@ -32,6 +32,9 @@ def update_alive_device(args):
     except ModbusException as e:
         logging.error("Check device's connection, slaveid and UART settings!")
         die(e)
+    except CalledProcessError as e:
+        logging.error("Flashing has failed!")
+        die(e)
 
 
 def recover(args):
@@ -53,28 +56,11 @@ def recover(args):
 
 
 def update_all(args):
-    """
-    Parsing driver_config for a list of devices on all ports. Trying to update each device.
-    """
-    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
-    fw_version = 'latest'
-    overall_fails = {}
-    for port, port_params in update_monitor.get_devices_on_driver(CONFIG['SERIAL_DRIVER_CONFIG_FNAME']).items():
-        uart_params = port_params['uart_params']
-        devices_on_port = port_params['devices']
-        failed_devices = []
-        for device_name, device_slaveid in devices_on_port:
-            logging.debug('Trying to update %s with slaveid %d:' % (device_name, device_slaveid))
-            modbus_connection = WBModbusDeviceBase(device_slaveid, port, *uart_params, debug=True)
-            try:
-                update_monitor.flash_alive_device(modbus_connection, 'fw', '', fw_version, args.force, False)
-            except Exception as e:
-                logging.warn('Update for %s : %d failed!' % (device_name, device_slaveid), exc_info=True)
-                failed_devices.append([device_name, device_slaveid])
-        if failed_devices:
-            overall_fails.update({port : failed_devices})
-    if overall_fails:
-        die('Update has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
+    update_monitor._update_all(force=args.force)
+
+
+def recover_all(args):
+    update_monitor._recover_all()
 
 
 def show_typical_usage(progname):
@@ -130,6 +116,9 @@ def parse_args():
     update_all_parser = subparsers.add_parser('update-all', help="Trying to update all devices, added to wb-mqtt-serial's config.")
     update_all_parser.add_argument('--force', action='store_true', dest='force', default=False, help='Perform force device update, even if firmware is latest.')
     update_all_parser.set_defaults(func=update_all)
+
+    recover_all_parser = subparsers.add_parser('recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
+    recover_all_parser.set_defaults(func=recover_all)
 
     args = main_parser.parse_args()
     if 'func' in vars(args):
