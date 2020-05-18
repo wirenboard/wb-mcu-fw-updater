@@ -39,10 +39,10 @@ class StderrFilter(HidingTracebackFilter):
 
 
 class ColoredFormatter(logging.Formatter):
-    GREY = "\x1b[38;21m"
-    GREEN = "\x1b[32;21m"
-    YELLOW = "\x1b[33;21m"
-    RED = "\x1b[31;21m"
+    GREY = "\x1b[38;10m"
+    GREEN = "\x1b[32;10m"
+    YELLOW = "\x1b[33;10m"
+    RED = "\x1b[31;10m"
     RED_BOLD = "\x1b[31;1m"
     RESET_COLORS = "\x1b[0m"
 
