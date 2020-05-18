@@ -154,34 +154,38 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
-def all_devices_on_driver(f):
-    def wrapper(*args, **kwargs):
-        overall_fails = {}
-        for port, port_params in get_devices_on_driver(CONFIG['SERIAL_DRIVER_CONFIG_FNAME']).items():
-            uart_params = port_params['uart_params']
-            devices_on_port = port_params['devices']
-            failed_devices = []
-            for device_name, device_slaveid in devices_on_port:
-                logging.warn('Trying to perform operation on %s (port: %s, slaveid: %d):' % (device_name, port, device_slaveid))
-                try:
-                    f(device_slaveid, port, uart_params, *args, **kwargs)
-                except Exception as e:
-                    logging.warn('Operation for %s (port: %s, slaveid: %d) has failed!' % (device_name, port, device_slaveid), exc_info=True)
-                    failed_devices.append([device_name, device_slaveid])
-            if failed_devices:
-                overall_fails.update({port : failed_devices})
-        if overall_fails:
-            die('Operation has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
-    return wrapper
+def all_devices_on_driver(die_on_failure=True):
+    def real_decorator(f):
+        def wrapper(*args, **kwargs):
+            overall_fails = {}
+            for port, port_params in get_devices_on_driver(CONFIG['SERIAL_DRIVER_CONFIG_FNAME']).items():
+                uart_params = port_params['uart_params']
+                devices_on_port = port_params['devices']
+                failed_devices = []
+                for device_name, device_slaveid in devices_on_port:
+                    logging.warn('Trying device %s (port: %s, slaveid: %d)...' % (device_name, port, device_slaveid))
+                    try:
+                        f(device_slaveid, port, uart_params, *args, **kwargs)
+                        logging.info('Successful!')
+                    except Exception as e:
+                        logging.warn('Failed', exc_info=True)
+                        failed_devices.append([device_name, device_slaveid])
+                if failed_devices:
+                    overall_fails.update({port : failed_devices})
+            if overall_fails:
+                if die_on_failure:
+                    die('Operation has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
+        return wrapper
+    return real_decorator
 
 
-@all_devices_on_driver
+@all_devices_on_driver(die_on_failure=True)
 def _update_all(slaveid, port, uart_params, force):
     modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params)
     flash_alive_device(modbus_connection, 'fw', '', 'latest', force, False)
 
 
-@all_devices_on_driver
+@all_devices_on_driver(die_on_failure=False)
 def _recover_all(slaveid, port, uart_params):
     fw_signature = db.get_fw_signature(slaveid, port)
     if fw_signature is None:
