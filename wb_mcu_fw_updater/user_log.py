@@ -7,6 +7,24 @@ import logging
 from . import CONFIG
 
 
+ANSI_COLORS = {
+    "GREY" : "\x1b[38;2m",
+    "GREEN" : "\x1b[32;10m",
+    "YELLOW" : "\x1b[33;10m",
+    "RED" : "\x1b[31;10m",
+    "RED_BOLD" : "\x1b[31;1m",
+    "RESET" : "\x1b[0m"
+}
+
+
+def colorize(msg, color):
+    if not isinstance(msg, str):
+        raise RuntimeError('Only string could be colored!')
+    if color not in ANSI_COLORS.keys():
+        raise RuntimeError('Unsupported color %s. Try one of %s' % (color, ', '.join(ANSI_COLORS.keys())))
+    return ANSI_COLORS[color] + msg + ANSI_COLORS['RESET']
+
+
 class HidingTracebackFilter(logging.Filter):
     """
     A dummy filter, hiding record's exception traceback, if was not hidden already.
@@ -39,7 +57,7 @@ class StderrFilter(HidingTracebackFilter):
 
 
 class ColoredFormatter(logging.Formatter):
-    GREY = "\x1b[38;10m"
+    GREY = "\x1b[38;2m"
     GREEN = "\x1b[32;10m"
     YELLOW = "\x1b[33;10m"
     RED = "\x1b[31;10m"
@@ -49,11 +67,10 @@ class ColoredFormatter(logging.Formatter):
     FMT = CONFIG['USERLOG_MESSAGE_FMT']
 
     FORMATS = {
-        logging.DEBUG : GREY + FMT + RESET_COLORS,
-        logging.INFO : GREEN + FMT + RESET_COLORS,
-        logging.WARNING : YELLOW + FMT + RESET_COLORS,
-        logging.ERROR : RED + FMT + RESET_COLORS,
-        logging.CRITICAL : RED_BOLD + FMT + RESET_COLORS
+        logging.DEBUG : colorize(FMT, 'GREY'),
+        logging.WARNING : colorize(FMT, 'YELLOW'),
+        logging.ERROR : colorize(FMT, 'RED'),
+        logging.CRITICAL : colorize(FMT, 'RED_BOLD')
     }
 
     def format(self, record):

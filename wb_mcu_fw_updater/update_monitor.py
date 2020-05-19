@@ -5,7 +5,7 @@ import logging
 import json
 import subprocess
 from distutils.version import LooseVersion
-from . import fw_flasher, fw_downloader, jsondb, die, PYTHON2, CONFIG
+from . import fw_flasher, fw_downloader, user_log, jsondb, die, PYTHON2, CONFIG
 
 import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
@@ -37,7 +37,7 @@ def ask_user(message):
     :rtype: bool
     """
     message_str = '\n*** %s [Y/N] *** ' % (message)
-    ret = input_func(message_str)
+    ret = input_func(user_log.colorize(message_str, 'YELLOW'))
     return ret.upper().startswith('Y')
 
 
@@ -76,7 +76,7 @@ def get_devices_on_driver(driver_config_fname):
     found_devices = {}
     try:
         config_dict = json.load(open(driver_config_fname, 'r'))
-    except FileNotFoundError as e:
+    except IOError as e:
         die(e)
     for port in config_dict['ports']:
         port_name = port['path']
