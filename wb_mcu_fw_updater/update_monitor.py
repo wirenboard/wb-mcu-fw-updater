@@ -41,32 +41,6 @@ def ask_user(message):
     return ret.upper().startswith('Y')
 
 
-def compare_semver(first, second):
-    """
-    Comparing versions strings in semver.
-    Second is converted implicitly via LooseVersion.
-
-    :return: is first semver > second
-    :rtype: bool
-    """
-    return LooseVersion(vstring=str(first)) > str(second)
-
-
-def is_update_needed(modbus_connection, mode, branch_name=''):
-    """
-    Checking, whether update is needed or not by comparing version, stored in the device with remote.
-    """
-    downloader = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name)
-    meaningful_str = modbus_connection.get_fw_signature()
-    latest_remote_version = downloader.get_latest_version_number(meaningful_str)
-    current_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
-    if compare_semver(latest_remote_version, current_version):
-        logging.info('Update is needed (local %s version: %s; remote version: %s)' % (mode, current_version, latest_remote_version))
-        return True
-    else:
-        logging.info('Device has latest %s version (%s)!' % (mode, current_version))
-        return False
-
 
 def get_correct_modbus_connection(slaveid, port, uart_settings_str, uart_settings_are_unknown):
     if slaveid == 0:
@@ -142,16 +116,50 @@ def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, resp
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
-    if is_update_needed(modbus_connection, mode, branch_name) or force:
-        fw_signature = modbus_connection.get_fw_signature()
-        db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
-        downloaded_fw = fw_downloader.RemoteFileWatcher(mode, branch_name=branch_name).download(fw_signature, specified_fw_version)
-        modbus_connection.reboot_to_bootloader()
+    """
+    Checking for update, if branch is stable;
+    Just flashing specified fw version, if branch is unstable.
+    """
+    fw_signature = modbus_connection.get_fw_signature()
+    db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
+    downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
+    if branch_name:
+        logging.warning('Flashing %s version from unstable branch %s' % (specified_fw_version, branch_name))
+        _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+        return
+    if specified_fw_version == 'latest':
+        logging.debug('Retrieving latest %s version number for %s' % (mode, fw_signature))
+        specified_fw_version = downloader.get_latest_version_number(fw_signature)
+    device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
+    passed_fw_version = LooseVersion(specified_fw_version)
+    cmp_result = passed_fw_version._cmp(device_fw_version)
+    if cmp_result == 0:  # Versiona are equal
+        if force:
+            _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+        else:
+            logging.warning('Flashing device %s (slaveid: %s) was rejected. Launch with -f key, if you really need reflashing.' % (fw_signature, modbus_connection.slaveid))
+        return
+    elif cmp_result == -1:  # Specified version is < than in-device
+        logging.warning('Will flash older version! (specified: %s; in-device: %s)' % (str(passed_fw_version), device_fw_version))
+        _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+        return
+    elif cmp_result == 1:  # Specified version is > than in-device
+        logging.info('Will flash newer version! (specified: %s; in-device: %s)' % (str(passed_fw_version), device_fw_version))
+        _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+        return
+    else:
+        die('Something goes wrong with version checking!')
+
+
+def _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings):
+    logging.debug('Flashing approved')
+    fw_file = downloader.download(fw_signature, specified_fw_version)
+    modbus_connection.reboot_to_bootloader()
+    flash_in_bootloader(fw_file, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+    if mode == 'bootloader':
+        logging.info("Bootloader flashing was successful. Now flashing the latest stable FW:")
+        downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
         flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
-        if mode == 'bootloader':
-            logging.warning("Now flashing the latest FW:")
-            downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name=branch_name).download(fw_signature, 'latest')
-            flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
 def all_devices_on_driver(die_on_failure=True):
@@ -166,7 +174,6 @@ def all_devices_on_driver(die_on_failure=True):
                     logging.warn('Trying device %s (port: %s, slaveid: %d)...' % (device_name, port, device_slaveid))
                     try:
                         f(device_slaveid, port, uart_params, *args, **kwargs)
-                        logging.info('Successful!')
                     except Exception as e:
                         logging.warn('Failed', exc_info=True)
                         failed_devices.append([device_name, device_slaveid])
