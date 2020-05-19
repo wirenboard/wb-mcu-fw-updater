@@ -17,7 +17,7 @@ def update_fw(args):
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
     except update_monitor.ModbusError as e:
-        logging.error("Check device's connection, slaveid and UART settings!")
+        logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
     except CalledProcessError as e:
         logging.error("Flashing has failed!")
@@ -34,7 +34,7 @@ def update_bootloader(args):
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
     except update_monitor.ModbusError as e:
-        logging.error("Check device's connection, slaveid and UART settings!")
+        logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
     except CalledProcessError as e:
         logging.error("Flashing has failed!")
@@ -92,10 +92,10 @@ def parse_args():
                                   default='latest', help='Download a specified firmware version. (Default: %(default)s)')
     update_fw_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings',
                                   default=False, help="Erase all device's settings during update. (Default: %(default)s)")
-    update_fw_parser.add_argument('--uart', metavar='<uart_settings_str>', type=str, dest='uart_settings',
-                                  default='9600N2', help='UART settings string. (Default: %(default)s)')
-    update_fw_parser.add_argument('--find-uart', action='store_true', dest='unknown_uart_settings',
-                                  default=False, help='Automatically find UART settings of device. (Default: %(default)s)')
+    update_fw_parser.add_argument('--port-settings', metavar='<port_settings_str>', type=str, dest='uart_settings',
+                                  default='9600N2', help='Serial port settings string. (Default: %(default)s)')
+    update_fw_parser.add_argument('--find-port-settings', action='store_true', dest='unknown_uart_settings',
+                                  default=False, help='Automatically find serial port settings of device. (Default: %(default)s)')
     update_fw_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                   help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_fw_parser.add_argument(
@@ -109,10 +109,10 @@ def parse_args():
     """
     update_bootloader_parser = subparsers.add_parser(
         'update-bl', help='Update bootloader on single working device.')
-    update_bootloader_parser.add_argument('--uart', type=str, metavar='<uart_settings_str>', dest='uart_settings',
-                                          default='9600N2', help='UART settings string. (Default: %(default)s)')
-    update_bootloader_parser.add_argument('--find-uart', action='store_true', dest='unknown_uart_settings',
-                                          default=False, help='Automatically find UART settings of device. (Default: %(default)s)')
+    update_bootloader_parser.add_argument('--port-settings', type=str, metavar='<port_settings_str>', dest='uart_settings',
+                                          default='9600N2', help='Serial port settings string. (Default: %(default)s)')
+    update_bootloader_parser.add_argument('--find-port-settings', action='store_true', dest='unknown_uart_settings',
+                                          default=False, help='Automatically find serial port settings of device. (Default: %(default)s)')
     update_bootloader_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                           help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_bootloader_parser.add_argument(

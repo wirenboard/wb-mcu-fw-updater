@@ -421,9 +421,9 @@ def auto_find_uart_settings(method_to_decorate):
                 return method_to_decorate(self, *args, **kwargs)
             except IOError:
                 self.set_port_settings(*settings)
-                logging.debug('Trying UART settings: %s' % str(settings))
+                logging.debug('Trying serial port settings: %s' % str(settings))
         else:
-            raise RuntimeError('All UART settings were not successful! Check device slaveid/power!')
+            raise RuntimeError('All serial port settings were not successful! Check device slaveid/power!')
     return wrapper
 
 
@@ -478,11 +478,11 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                 self._set_port_settings_raw(initial_uart_settings)
                 return actual_uart_settings
             except IOError:
-                logging.debug('Trying UART settings: %s' % str(settings))
+                logging.debug('Trying serial port settings: %s' % str(settings))
                 self.set_port_settings(*settings)
                 continue
         else:
-            raise RuntimeError('All UART settings were not successful! Check device slaveid/power!')
+            raise RuntimeError('All serial port settings were not successful! Check device slaveid/power!')
 
     def get_serial_number(self):
         """

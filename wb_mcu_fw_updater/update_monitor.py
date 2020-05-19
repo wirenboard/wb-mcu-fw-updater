@@ -56,12 +56,12 @@ def get_correct_modbus_connection(slaveid, port, uart_settings_str, uart_setting
         Applying found uart settings to modbus_connection instance.
         """
         try:
-            logging.warning("UART settings are unknown. Trying to find it...")
+            logging.warning("Serial port settings are unknown. Trying to find it...")
             uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
         except RuntimeError as e:
             logging.error('Device is disconnected or slaveid is wrong')
             die(e)
-        logging.info('Has found UART settings: %s' % str(uart_settings_dict))
+        logging.info('Has found serial port settings: %s' % str(uart_settings_dict))
         modbus_connection._set_port_settings_raw(uart_settings_dict)
     return modbus_connection
 

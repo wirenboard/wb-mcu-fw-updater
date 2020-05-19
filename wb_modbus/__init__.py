@@ -23,4 +23,4 @@ def parse_uart_settings_str(settings_str):
         parity = settings_str.replace(baudrate, '').replace(stopbits, '').strip()
         return [int(baudrate), parity, int(stopbits)]
     else:
-        raise RuntimeError('Incorrect format of UART settings string. Should be like 9600N2')
+        raise RuntimeError('Incorrect format of serial port settings string. Should be like 9600N2')
