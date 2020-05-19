@@ -4,6 +4,7 @@
 import logging
 import json
 import subprocess
+from pprint import pformat
 from distutils.version import LooseVersion
 from . import fw_flasher, fw_downloader, user_log, jsondb, die, PYTHON2, CONFIG
 
@@ -98,11 +99,7 @@ def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0):
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     fw_version = 'latest'
     downloaded_fw = downloader.download(fw_signature, fw_version)
-    try:
-        flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout)
-    except subprocess.CalledProcessError as e:
-        logging.error("Flashing has failed!")
-        die(e)
+    flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout)
 
 
 def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, response_timeout=2.0):
@@ -152,7 +149,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
 
 
 def _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings):
-    logging.debug('Flashing approved')
+    logging.debug('Flashing approved for %s : %d' % (modbus_connection.port, modbus_connection.slaveid))
     fw_file = downloader.download(fw_signature, specified_fw_version)
     modbus_connection.reboot_to_bootloader()
     flash_in_bootloader(fw_file, modbus_connection.slaveid, modbus_connection.port, erase_settings)
@@ -162,46 +159,112 @@ def _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_ve
         flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
-def all_devices_on_driver(die_on_failure=True):
-    def real_decorator(f):
-        def wrapper(*args, **kwargs):
-            overall_fails = {}
-            for port, port_params in get_devices_on_driver(CONFIG['SERIAL_DRIVER_CONFIG_FNAME']).items():
-                uart_params = port_params['uart_params']
-                devices_on_port = port_params['devices']
-                failed_devices = []
-                for device_name, device_slaveid in devices_on_port:
-                    logging.warn('Trying device %s (port: %s, slaveid: %d)...' % (device_name, port, device_slaveid))
-                    try:
-                        f(device_slaveid, port, uart_params, *args, **kwargs)
-                    except Exception as e:
-                        logging.warn('Failed', exc_info=True)
-                        failed_devices.append([device_name, device_slaveid])
-                if failed_devices:
-                    overall_fails.update({port : failed_devices})
-            if overall_fails:
-                if die_on_failure:
-                    die('Operation has failed for:\n%s\nCheck syslog for more info' % (str(overall_fails)))
-        return wrapper
-    return real_decorator
+def probe_all_devices(driver_config_fname):
+    """
+    Acquiring states of all devies, added to config.
+    States could be:
+        alive - device is working in normal mode and answering to modbus commands
+        in_bootloader - device could not boot it's rom
+        disconnected - a dummy-record in config
+    """
+    alive = []
+    in_bootloader = []
+    disconnected = []
+    store_device = lambda name, slaveid, port, uart_params: {'name' : name, 'slaveid' : slaveid, 'port' : port, 'uart_settings' : uart_params}
+    logging.info('Will scan %s for states of all devices in' % driver_config_fname)
+    for port, port_params in get_devices_on_driver(driver_config_fname).items():
+        uart_params = port_params['uart_params']
+        devices_on_port = port_params['devices']
+        for device_name, device_slaveid in devices_on_port:
+            logging.debug('Probing device %s (port: %s, slaveid: %d)...' % (device_name, port, device_slaveid))
+            modbus_connection = WBModbusDeviceBase(device_slaveid, port, *uart_params)
+            if modbus_connection.is_in_bootloader():
+                in_bootloader.append(store_device(device_name, device_slaveid, port, uart_params))
+            else:
+                try:
+                    modbus_connection.get_slave_addr()
+                    alive.append(store_device(device_name, device_slaveid, port, uart_params))
+                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature())
+                except ModbusError:
+                    disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
+    return alive, in_bootloader, disconnected
 
 
-@all_devices_on_driver(die_on_failure=True)
-def _update_all(slaveid, port, uart_params, force):
-    modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params)
-    flash_alive_device(modbus_connection, 'fw', '', 'latest', force, False)
+def _update_all(force):
+    alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    update_was_skipped = [] # Device_info dicts
+    to_update = [] # modbus_connection clients
+    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
+    for device_info in alive:
+        slaveid, port, name = device_info['slaveid'], device_info['port'], device_info['name']
+        modbus_connection = WBModbusDeviceBase(slaveid, port, *device_info['uart_settings'])
+        fw_signature = modbus_connection.get_fw_signature()
+        latest_remote_version = LooseVersion(downloader.get_latest_version_number(fw_signature))
+        local_device_version = modbus_connection.get_fw_version()
+        if latest_remote_version == local_device_version:
+            if force:
+                logging.info("%s %s (port: %s; slaveid: %d) (has already latest fw)" % (user_log.colorize('Force update:', 'YELLOW'), name, port, slaveid))
+                device_info.update({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version)})
+                to_update.append(device_info)
+            else:
+                logging.info("Update skipped: %s (port: %s; slaveid: %d) (has already latest fw)" % (name, port, slaveid))
+                update_was_skipped.append(device_info)
+        else:
+            logging.info("%s %s (port: %s; slaveid: %d) (from %s to %s)" % (user_log.colorize('Update available:', 'GREEN'), name, port, slaveid, local_device_version, str(latest_remote_version)))
+            device_info.update({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version)})
+            to_update.append(device_info)
+
+    if to_update:
+        logging.info('Begin flashing:\n')
+        for device_info in to_update:
+            slaveid, port, mb_client, latest_remote_fw = device_info['slaveid'], device_info['port'], device_info['mb_client'], device_info['latest_remote_fw']
+            fw_signature = mb_client.get_fw_signature()
+            try:
+                _do_flash(downloader, mb_client, 'fw', fw_signature, latest_remote_fw, False)
+            except subprocess.CalledProcessError as e:
+                logging.exception(e)
+                in_bootloader.append(device_info)
+    else:
+        logging.info('%s' % user_log.colorize('Nothing to update! All devices have latest firmwares', 'GREEN'))
+
+    if update_was_skipped:
+        logging.warning('Update was skipped for:\n\t%s\nBecause of already latest fw.\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join(['%s (port: %s; slaveid: %d)' % (device['name'], device['port'], device['slaveid']) for device in update_was_skipped]))
+
+    if in_bootloader:
+        die('Possibly, some devices are in bootloader:\n\t%s' % '\n\t'.join(['%s (port: %s; slaveid: %d)' % (device['name'], device['port'], device['slaveid']) for device in in_bootloader]))
 
 
-@all_devices_on_driver(die_on_failure=False)
-def _recover_all(slaveid, port, uart_params):
-    fw_signature = db.get_fw_signature(slaveid, port)
-    if fw_signature is None:
-        raise RuntimeError("Could not get fw_signature from db. Recover in manual mode, if needed!")
-    modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_params)
-    if not modbus_connection.is_in_bootloader():
-        raise RuntimeError('Device %s (port: %s, slaveid: %d) is not in bootloader' % (fw_signature, port, slaveid))
-    downloaded_fw = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').download(fw_signature, version='latest')
-    flash_in_bootloader(downloaded_fw, slaveid, port, False)
+def _recover_all():
+    alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    recover_was_skipped = []
+    to_recover = []
+    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
+    for device_info in in_bootloader:
+        slaveid, port, name = device_info['slaveid'], device_info['port'], device_info['name']
+        fw_signature = db.get_fw_signature(slaveid, port)
+        if fw_signature is None:
+            logging.info('%s %s (port: %s; slaveid: %s)' % (user_log.colorize('Unknown fw_signature:', 'RED'), name, port, slaveid))
+            recover_was_skipped.append(device_info)
+        else:
+            logging.info('%s %s (port: %s; slaveid: %s)' % (user_log.colorize('Known fw_signature:', 'GREEN'), name, port, slaveid))
+            device_info.update({'fw_signature' : fw_signature})
+            to_recover.append(device_info)
+
+    if to_recover:
+        logging.info('Begin recovering:\n')
+        for device_info in to_recover:
+            fw_signature, slaveid, port = device_info['fw_signature'], device_info['slaveid'], device_info['port']
+            try:
+                recover_device_iteration(fw_signature, slaveid, port)
+            except subprocess.CalledProcessError as e:
+                logging.exception(e)
+                recover_was_skipped.append(device_info)
+    else:
+        logging.info('%s' % user_log.colorize('Nothing to recover! All devices are alive', 'GREEN'))
+
+    if recover_was_skipped:
+        die('Could not recover:\n\t%s\nLaunch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join(['%s (port: %s; slaveid: %d)' % (device['name'], device['port'], device['slaveid']) for device in recover_was_skipped]))
+
 
 
 def _send_signal_to_driver(signal):

@@ -50,11 +50,17 @@ def recover_fw(args):
         logging.warning("Restoring device's fw_signature from db by slaveid: %d and port %s" % (args.slaveid, args.port))
         fw_signature = update_monitor.db.get_fw_signature(args.slaveid, args.port)
         if fw_signature:
-            update_monitor.recover_device_iteration(fw_signature, args.slaveid, args.port)
+            try:
+                update_monitor.recover_device_iteration(fw_signature, args.slaveid, args.port)
+            except CalledProcessError as e:
+                die(e)
         else:
             die('No data for device (%d : %s) has found. Specify fw_signature manually via --fw-sig key!' % (args.slaveid, args.port))
     elif args.known_signature in fw_signatures_list:
-        update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port)
+        try:
+            update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port)
+        except CalledProcessError as e:
+            die(e)
     else:
         die('Choose a fw_signature from : %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
 
