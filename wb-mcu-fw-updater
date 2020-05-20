@@ -16,6 +16,7 @@ def update_fw(args):
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
+        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
     except update_monitor.ModbusError as e:
         logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
@@ -33,6 +34,7 @@ def update_bootloader(args):
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
+        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
     except update_monitor.ModbusError as e:
         logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
@@ -52,6 +54,7 @@ def recover_fw(args):
         if fw_signature:
             try:
                 update_monitor.recover_device_iteration(fw_signature, args.slaveid, args.port)
+                logging.info('%s' % user_log.colorize('Done', 'GREEN'))
             except CalledProcessError as e:
                 die(e)
         else:
@@ -59,6 +62,7 @@ def recover_fw(args):
     elif args.known_signature in fw_signatures_list:
         try:
             update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port)
+            logging.info('%s' % user_log.colorize('Done', 'GREEN'))
         except CalledProcessError as e:
             die(e)
     else:

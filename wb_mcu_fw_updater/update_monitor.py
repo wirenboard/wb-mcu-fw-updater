@@ -239,7 +239,7 @@ def _update_all(force):
             to_update.append(device_info)
 
     if to_update:
-        logging.info('Begin flashing:\n')
+        logging.info('Begin flashing:')
         for device_info in to_update:
             slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
             try:
@@ -247,6 +247,7 @@ def _update_all(force):
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 in_bootloader.append(device_info)
+        logging.info('Done')
 
     if update_was_skipped:
         logging.warning('Update was skipped for:\n\t%s\nBecause of already latest fw.\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
@@ -272,7 +273,7 @@ def _recover_all():
             to_recover.append(device_info)
 
     if to_recover:
-        logging.info('Begin recovering:\n')
+        logging.info('Begin recovering:')
         for device_info in to_recover:
             fw_signature, slaveid, port = device_info.get_multiple_props('fw_signature', 'slaveid', 'port')
             try:
@@ -280,9 +281,10 @@ def _recover_all():
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 recover_was_skipped.append(device_info)
+        logging.info('Done')
 
     if recover_was_skipped:
-        die('Could not recover:\n\t%s\nLaunch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in recover_was_skipped]))
+        die('Could not recover:\n\t%s\nTry again or launch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in recover_was_skipped]))
 
 
 def _send_signal_to_driver(signal):
