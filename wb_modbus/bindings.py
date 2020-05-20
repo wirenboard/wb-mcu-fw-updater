@@ -536,7 +536,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :param bd: serial port's speed
         :type bd: int
         """
-        self._validate_param(bd, ALLOWED_BAUDRATES)
+        _validate_param(bd, ALLOWED_BAUDRATES)
         to_write = int(bd / 100)
         self.write_u16(self.COMMON_REGS_MAP['baudrate'], to_write)
         serial_settings = {
@@ -551,7 +551,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :param parity: parity of serial port
         :type parity: str
         """
-        self._validate_param(parity, ALLOWED_PARITIES)
+        _validate_param(parity, ALLOWED_PARITIES)
         to_write = ALLOWED_PARITIES[parity]
         self.write_u16(self.COMMON_REGS_MAP['parity'], to_write)
         serial_settings = {
@@ -566,7 +566,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :param stopbits: stopbits of serial port
         :type stopbits: int
         """
-        self._validate_param(stopbits, ALLOWED_STOPBITS)
+        _validate_param(stopbits, ALLOWED_STOPBITS)
         self.write_u16(self.COMMON_REGS_MAP['stopbits'], stopbits)
         serial_settings = {
             'stopbits' : stopbits
@@ -717,7 +717,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :type stopbits: int
         """
         for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
-            self._validate_param(param, allowed_row)
+            _validate_param(param, allowed_row)
         self._write_port_settings(baudrate, ALLOWED_PARITIES[parity], stopbits)
         new_port_settings = {
             'baudrate' : baudrate,
