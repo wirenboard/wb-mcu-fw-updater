@@ -129,18 +129,17 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         specified_fw_version = downloader.get_latest_version_number(fw_signature)
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
     passed_fw_version = LooseVersion(specified_fw_version)
-    cmp_result = passed_fw_version._cmp(device_fw_version)
-    if cmp_result == 0:  # Versiona are equal
+    if passed_fw_version == device_fw_version:
         if force:
             _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         else:
             logging.warning('Flashing device %s (slaveid: %s) was rejected. Launch with -f key, if you really need reflashing.' % (fw_signature, modbus_connection.slaveid))
         return
-    elif cmp_result == -1:  # Specified version is < than in-device
+    elif passed_fw_version < device_fw_version:
         logging.warning('Will flash older version! (specified: %s; in-device: %s)' % (str(passed_fw_version), device_fw_version))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         return
-    elif cmp_result == 1:  # Specified version is > than in-device
+    elif passed_fw_version > device_fw_version:
         logging.info('Will flash newer version! (specified: %s; in-device: %s)' % (str(passed_fw_version), device_fw_version))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         return
@@ -247,10 +246,16 @@ def _update_all(force):
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 in_bootloader.append(device_info)
+            except ModbusError as e:
+                logging.exception(e)
+                dummy_records.append(device_info)
         logging.info('Done')
 
     if update_was_skipped:
         logging.warning('Update was skipped for:\n\t%s\nBecause of already latest fw.\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
+
+    if dummy_records:
+        logging.debug('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if in_bootloader:
         die('Possibly, some devices are in bootloader:\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
@@ -282,6 +287,9 @@ def _recover_all():
                 logging.exception(e)
                 recover_was_skipped.append(device_info)
         logging.info('Done')
+
+    if dummy_records:
+        logging.debug('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if recover_was_skipped:
         die('Could not recover:\n\t%s\nTry again or launch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in recover_was_skipped]))

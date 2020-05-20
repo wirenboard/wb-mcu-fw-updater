@@ -52,7 +52,7 @@ class RemoteFileWatcher(object):
         self.mode = mode
         try:
             url_handler.urlopen(CONFIG['ROOT_URL']) # Checking, user has internet connection
-        except URLError as e:
+        except (URLError, HTTPError) as e:
             logging.error('Check internet connection')
             die(e)
         self.parent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
