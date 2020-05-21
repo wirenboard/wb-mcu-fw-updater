@@ -454,6 +454,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     SERIAL_TIMEOUT = 0.1
 
+    INTERNAL_STRINGS_CODING = 'utf-8'
+
     def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2):
         super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits)
         self.device.serial.timeout = self.SERIAL_TIMEOUT
@@ -501,7 +503,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         return ((int_values[0] % 256) * 65536) + int_values[1]
 
     def get_fw_version(self):
-        return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH).strip()
+        ret = self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH)
+        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
 
     def get_slave_addr(self):
         return self.read_u16(self.COMMON_REGS_MAP['slaveid'])
@@ -580,9 +583,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: device signature string
         :rtype: str
         """
-        coding = 'utf-8'
         ret = self.read_string(self.COMMON_REGS_MAP['device_signature'], self.DEVICE_SIGNATURE_LENGTH)
-        return ret.encode().decode(coding).strip() #Python 2/3 compatibility
+        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
 
     def get_fw_signature(self):
         """
@@ -591,12 +593,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: firmware signature string
         :rtype: str
         """
-        coding = 'utf-8'
         ret = self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
-        return ret.encode().decode(coding).strip() #Python 2/3 compatibility
+        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
 
     def get_bootloader_version(self):
-        return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH).strip()
+        ret = self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH)
+        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
 
     def get_uptime(self):
         """
