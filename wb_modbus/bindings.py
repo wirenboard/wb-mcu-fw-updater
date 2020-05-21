@@ -657,7 +657,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except IOError:
             pass #Device is in bootloader mode and doesn't responce
 
-    def _has_bootloader_answered(self):
+    def _has_bootloader_answered(self, baudrate=9600):
         """
         Sending a dummy-payload to bootloader and looking into minimalmodbus's errors.
         Wiren Board modbus devices, while in bootloader, could answer to a dummy-payload via modbus error 04 (Slave Device Failure).
@@ -668,7 +668,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :rtype: bool
         """
         initial_port_settings = deepcopy(self.settings)
-        bootloader_uart_params = [9600, 'N', 2]
+        bootloader_uart_params = [baudrate, 'N', 2]
         logging.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
         self.set_port_settings(*bootloader_uart_params)
         self.device.serial.timeout = 0.5
@@ -683,7 +683,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             self._set_port_settings_raw(initial_port_settings)
             self.device.serial.timeout = self.SERIAL_TIMEOUT
 
-    def is_in_bootloader(self):
+    def is_in_bootloader(self, baudrate=9600):
         """
         If slaveid has got => device is in normal working mode.
         If slaveid has not got and bootloader has answered (raised modbus error 04) => device is in bootloader.
@@ -696,7 +696,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             self.get_slave_addr()
             return False  # Device is powered on and sending correct reply
         except minimalmodbus.ModbusException:
-            return self._has_bootloader_answered()  # Is device in bootloader or disconnected
+            return self._has_bootloader_answered(baudrate)  # Is device in bootloader or disconnected
 
     def _write_port_settings(self, baudrate, parity, stopbits):
         """
