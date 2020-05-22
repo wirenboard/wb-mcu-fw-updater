@@ -121,7 +121,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
     if branch_name:
-        logging.warning('Flashing %s version from unstable branch %s' % (specified_fw_version, branch_name))
+        logging.warning('Flashing %s v %s from unstable branch %s' % (mode, specified_fw_version, branch_name))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         return
     if specified_fw_version == 'latest':
@@ -132,16 +132,19 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     if passed_fw_version == device_fw_version:
         if force:
             _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+            logging.info('Has reflashed %s v %s' % (mode, device_fw_version))
         else:
-            logging.warning('Flashing device %s (slaveid: %s) was rejected. Launch with -f key, if you really need reflashing.' % (fw_signature, modbus_connection.slaveid))
+            logging.warning('Flashing device %s (slaveid: %s) was rejected (%s is a latest %s version). Launch with -f key, if you really need reflashing.' % (fw_signature, modbus_connection.slaveid, device_fw_version, mode))
         return
     elif passed_fw_version < device_fw_version:
-        logging.warning('Will flash older version! (specified: %s; in-device: %s)' % (str(passed_fw_version), device_fw_version))
+        logging.warning('Will flash older %s version! (specified: %s; in-device: %s)' % (mode, str(passed_fw_version), device_fw_version))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+        logging.info('Has flashed %s v %s over %s' % (mode, passed_fw_version, device_fw_version))
         return
     elif passed_fw_version > device_fw_version:
-        logging.info('Will flash newer version! (specified: %s; in-device: %s)' % (str(passed_fw_version), device_fw_version))
+        logging.info('Will flash newer %s version! (specified: %s; in-device: %s)' % (mode, str(passed_fw_version), device_fw_version))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+        logging.info('Has flashed %s v %s over %s' % (mode, passed_fw_version, device_fw_version))
         return
     else:
         die('Something goes wrong with version checking!')
@@ -230,12 +233,15 @@ def _update_all(force):
                 device_info._set_asdict({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version), 'fw_signature' : fw_signature})
                 to_update.append(device_info)
             else:
-                logging.info("Update skipped: %s (has already latest fw)" % str(device_info))
+                logging.info("Update skipped: %s (has already latest fw %s)" % (str(device_info), local_device_version))
                 update_was_skipped.append(device_info)
-        else:
+        elif latest_remote_version > local_device_version:
             logging.info("%s %s (from %s to %s)" % (user_log.colorize('Update available:', 'GREEN'), str(device_info), local_device_version, str(latest_remote_version)))
             device_info._set_asdict({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version), 'fw_signature' : fw_signature})
             to_update.append(device_info)
+        else:
+            logging.error("Remote fw version (%s) is less than local on %s (%s)" % (str(latest_remote_version), str(device_info), local_device_version))
+            update_was_skipped.append(device_info)
 
     if to_update:
         logging.info('Begin flashing:')
@@ -252,7 +258,7 @@ def _update_all(force):
         logging.info('Done')
 
     if update_was_skipped:
-        logging.warning('Update was skipped for:\n\t%s\nBecause of already latest fw.\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
+        logging.warning('Update was skipped for:\n\t%s\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
         logging.debug('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
