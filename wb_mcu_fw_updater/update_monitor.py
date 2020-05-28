@@ -3,6 +3,7 @@
 
 import logging
 import json
+from json.decoder import JSONDecodeError
 import subprocess
 from pprint import pformat
 from distutils.version import LooseVersion
@@ -77,18 +78,19 @@ def get_devices_on_driver(driver_config_fname):
     found_devices = {}
     try:
         config_dict = json.load(open(driver_config_fname, 'r'))
-    except IOError as e:
+    except (IOError, JSONDecodeError) as e:
         die(e)
     for port in config_dict['ports']:
-        port_name = port['path']
-        uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
-        devices_on_port = []
-        for serial_device in port['devices']:
-            device_name = serial_device.get('device_type', 'Unknown')
-            slaveid = serial_device['slave_id']
-            devices_on_port.append([device_name, int(slaveid)])
-        if devices_on_port:
-            found_devices.update({port_name : {'devices' : devices_on_port, 'uart_params' : uart_params_of_port}})
+        if port.get('enabled', False):
+            port_name = port['path']
+            uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
+            devices_on_port = []
+            for serial_device in port['devices']:
+                device_name = serial_device.get('device_type', 'Unknown')
+                slaveid = serial_device['slave_id']
+                devices_on_port.append([device_name, int(slaveid)])
+            if devices_on_port:
+                found_devices.update({port_name : {'devices' : devices_on_port, 'uart_params' : uart_params_of_port}})
     if found_devices:
         return found_devices
     else:
@@ -224,7 +226,12 @@ def _update_all(force):
     for device_info in alive:
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
         modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_settings)
-        fw_signature = modbus_connection.get_fw_signature()
+        try:
+            fw_signature = modbus_connection.get_fw_signature() # Too old devices
+        except ModbusError as e:
+            logging.error('Possibly, %s does not support FW update!' % str(device_info))
+            update_was_skipped.append(device_info)
+            continue
         latest_remote_version = LooseVersion(downloader.get_latest_version_number(fw_signature))
         local_device_version = modbus_connection.get_fw_version()
         if latest_remote_version == local_device_version:
