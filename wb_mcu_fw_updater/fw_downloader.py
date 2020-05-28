@@ -59,7 +59,6 @@ class RemoteFileWatcher(object):
         self.fw_source = CONFIG['DEFAULT_SOURCE']
         self.branch_name = branch_name
         if branch_name:
-            logging.warn('Looking to unstable branch: %s' % branch_name)
             self.fw_source = urljoin('unstable', branch_name)
 
     def _construct_urlpath(self, name):
@@ -108,7 +107,11 @@ class RemoteFileWatcher(object):
         try:
             content = get_request_content(url_path)
         except HTTPError as e:
-            logging.error('fw_version or fw_signature is incorrect')
+            logging.error('Could not find the firmware: signature %s, version %s, branch %s' % (
+                name,
+                version,
+                self.branch_name
+            ))
             die(e)
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
         if not fname:

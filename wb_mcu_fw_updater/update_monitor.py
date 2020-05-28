@@ -120,31 +120,37 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     fw_signature = modbus_connection.get_fw_signature()
     db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
+    mode_name = 'firmware' if mode == 'fw' else 'bootloader'
+
     if branch_name:
-        logging.warning('Flashing %s v %s from unstable branch %s' % (mode, specified_fw_version, branch_name))
+        logging.warn("Flashing unstable %s from branch \"%s\" is requested!" % (
+            mode_name,
+            branch_name)
+        )        
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         return
     if specified_fw_version == 'latest':
-        logging.debug('Retrieving latest %s version number for %s' % (mode, fw_signature))
+        logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
         specified_fw_version = downloader.get_latest_version_number(fw_signature)
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
     passed_fw_version = LooseVersion(specified_fw_version)
     if passed_fw_version == device_fw_version:
         if force:
             _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-            logging.info('Has reflashed %s v %s' % (mode, device_fw_version))
+            logging.info('Successfully reflashed %s (%s)' % (mode_name, device_fw_version))
         else:
-            logging.warning('Flashing device %s (slaveid: %s) was rejected (%s is a latest %s version). Launch with -f key, if you really need reflashing.' % (fw_signature, modbus_connection.slaveid, device_fw_version, mode))
+            logging.warning('%s is already the newest version (%s), will not update. Use -f to force.' % (mode_name.capitalize(), device_fw_version,))
+
         return
     elif passed_fw_version < device_fw_version:
-        logging.warning('Will flash older %s version! (specified: %s; in-device: %s)' % (mode, str(passed_fw_version), device_fw_version))
+        logging.warning('%s will be downgraded! Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-        logging.info('Has flashed %s v %s over %s' % (mode, passed_fw_version, device_fw_version))
+        logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
         return
     elif passed_fw_version > device_fw_version:
-        logging.info('Will flash newer %s version! (specified: %s; in-device: %s)' % (mode, str(passed_fw_version), device_fw_version))
+        logging.info('%s will be upgraded. Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-        logging.info('Has flashed %s v %s over %s' % (mode, passed_fw_version, device_fw_version))
+        logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
         return
     else:
         die('Something goes wrong with version checking!')
@@ -156,7 +162,7 @@ def _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_ve
     modbus_connection.reboot_to_bootloader()
     flash_in_bootloader(fw_file, modbus_connection.slaveid, modbus_connection.port, erase_settings)
     if mode == 'bootloader':
-        logging.info("Bootloader flashing was successful. Now flashing the latest stable FW:")
+        logging.info("Bootloader was successfully flashed. Will flash the latest stable firmware.")
         downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
         flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
@@ -197,7 +203,7 @@ def probe_all_devices(driver_config_fname):
     in_bootloader = []
     disconnected = []
     store_device = lambda name, slaveid, port, uart_params: DeviceInfo(name, slaveid, port, uart_settings=uart_params)
-    logging.info('Will scan %s for states of all devices in' % driver_config_fname)
+    logging.info('Will probe all devices defined in %s' % driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
         uart_params = port_params['uart_params']
         devices_on_port = port_params['devices']
@@ -218,6 +224,7 @@ def probe_all_devices(driver_config_fname):
 
 def _update_all(force):
     alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    ok_records = []
     update_was_skipped = [] # Device_info dicts
     to_update = [] # modbus_connection clients
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
@@ -244,9 +251,9 @@ def _update_all(force):
             update_was_skipped.append(device_info)
 
     if to_update:
-        logging.info('Begin flashing:')
         for device_info in to_update:
-            slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
+            name, slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('name', 'slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
+            logging.info('Flashing firmware to %s' % str(device_info))
             try:
                 _do_flash(downloader, mb_client, 'fw', fw_signature, latest_remote_fw, False)
             except subprocess.CalledProcessError as e:
@@ -255,22 +262,31 @@ def _update_all(force):
             except ModbusError as e:
                 logging.exception(e)
                 dummy_records.append(device_info)
-        logging.info('Done')
+            else:
+                ok_records.append(device_info)
 
     if update_was_skipped:
-        logging.warning('Update was skipped for:\n\t%s\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
+        logging.warning('The following devices have already the most recent firmware.\nRun "wb-mcu-fw-updater update-all -f" to force update:\n\t%s' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
-        logging.warning('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
+        logging.warning('No answer from the following devices:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if in_bootloader:
-        die('Possibly, some devices are in bootloader:\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
+        logging.error('The following devices are in bootloader mode.\nTry "wb-mcu-fw-updater recover-all":\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
+
+    logging.info("%s upgraded, %s already latest, %s stuck in bootloader and %s not answered." % (
+        user_log.colorize(str(len(ok_records)), 'GREEN' if ok_records else 'RED'),
+        user_log.colorize(str(len(update_was_skipped)), 'GREEN') if update_was_skipped else '0',
+        user_log.colorize(str(len(in_bootloader)), 'RED' if in_bootloader else 'GREEN'),
+        user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN')
+    ))
 
 
 def _recover_all():
     alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     recover_was_skipped = []
     to_recover = []
+    ok_records = []
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     for device_info in in_bootloader:
         slaveid, port, name = device_info.get_multiple_props('slaveid', 'port', 'name')
@@ -284,7 +300,7 @@ def _recover_all():
             to_recover.append(device_info)
 
     if to_recover:
-        logging.info('Begin recovering:')
+        logging.info('Flashing the most recent stable firmware:')
         for device_info in to_recover:
             fw_signature, slaveid, port = device_info.get_multiple_props('fw_signature', 'slaveid', 'port')
             try:
@@ -292,13 +308,23 @@ def _recover_all():
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 recover_was_skipped.append(device_info)
+            else:
+                ok_records.append(device_info)
         logging.info('Done')
 
     if dummy_records:
-        logging.debug('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
+        logging.debug('No answer from the following devices:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if recover_was_skipped:
-        die('Could not recover:\n\t%s\nTry again or launch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in recover_was_skipped]))
+        logging.error('Could not recover:\n\t%s\nTry again or launch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in recover_was_skipped]))
+
+    logging.info("%s recovered, %s was already working, %s not recovered and %s not answered." % (
+        user_log.colorize(str(len(ok_records)), 'GREEN' if (ok_records or (not to_recover and not recover_was_skipped)) else 'RED'),
+        user_log.colorize(str(len(alive)), 'GREEN') if alive else '0',
+        user_log.colorize(str(len(recover_was_skipped)), 'RED' if recover_was_skipped else 'GREEN'),
+        user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN')
+    ))
+
 
 
 def _send_signal_to_driver(signal):
