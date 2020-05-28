@@ -128,7 +128,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         logging.warn("Flashing unstable %s from branch \"%s\" is requested!" % (
             mode_name,
             branch_name)
-        )        
+        )
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         return
     if specified_fw_version == 'latest':
@@ -217,9 +217,13 @@ def probe_all_devices(driver_config_fname):
             else:
                 try:
                     modbus_connection.get_slave_addr()
+                except ModbusError: # Device is really disconnected
+                    disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
+                try:
+                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices could fail here
                     alive.append(store_device(device_name, device_slaveid, port, uart_params))
-                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature())
                 except ModbusError:
+                    logging.error('%s (slaveid: %d; port: %s) does not support firmware updates!' % (device_name, device_slaveid, port))
                     disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
     return alive, in_bootloader, disconnected
 
@@ -234,10 +238,9 @@ def _update_all(force):
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
         modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_settings)
         try:
-            fw_signature = modbus_connection.get_fw_signature() # Too old devices
-        except ModbusError as e:
+            fw_signature = modbus_connection.get_fw_signature()
+        except ModbusError as e:  # A device is too old and doesnt support updates
             logging.error('Possibly, %s does not support FW update!' % str(device_info))
-            update_was_skipped.append(device_info)
             continue
         latest_remote_version = LooseVersion(downloader.get_latest_version_number(fw_signature))
         local_device_version = modbus_connection.get_fw_version()
@@ -276,12 +279,12 @@ def _update_all(force):
         logging.warning('The following devices have already the most recent firmware.\nRun "wb-mcu-fw-updater update-all -f" to force update:\n\t%s' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
-        logging.warning('No answer from the following devices:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
+        logging.warning('No answer from the following devices:\n\t%s\nBecause of disconnect or too old firmware to update.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if in_bootloader:
         logging.error('The following devices are in bootloader mode.\nTry "wb-mcu-fw-updater recover-all":\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
 
-    logging.info("%s upgraded, %s already latest, %s stuck in bootloader and %s not answered." % (
+    logging.info("%s upgraded, %s already latest, %s stuck in bootloader and %s not answered to update cmd." % (
         user_log.colorize(str(len(ok_records)), 'GREEN' if ok_records else 'RED'),
         user_log.colorize(str(len(update_was_skipped)), 'GREEN') if update_was_skipped else '0',
         user_log.colorize(str(len(in_bootloader)), 'RED' if in_bootloader else 'GREEN'),
@@ -325,7 +328,7 @@ def _recover_all():
     if recover_was_skipped:
         logging.error('Could not recover:\n\t%s\nTry again or launch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in recover_was_skipped]))
 
-    logging.info("%s recovered, %s was already working, %s not recovered and %s not answered." % (
+    logging.info("%s recovered, %s was already working, %s not recovered and %s not answered to recover cmd." % (
         user_log.colorize(str(len(ok_records)), 'GREEN' if (ok_records or (not to_recover and not recover_was_skipped)) else 'RED'),
         user_log.colorize(str(len(alive)), 'GREEN') if alive else '0',
         user_log.colorize(str(len(recover_was_skipped)), 'RED' if recover_was_skipped else 'GREEN'),
