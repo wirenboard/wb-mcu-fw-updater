@@ -2,3 +2,12 @@
 *.pyc*
 *firmwares*
 *.wbfw*
+debian/python-wb-mcu-fw-updater
+debian/python3-wb-mcu-fw-updater
+debian/wb-mcu-fw-updater
+.pybuild
+debian/.debhelper/
+debian/*.debhelper.log
+debian/*.substvars
+debian/*.debhelper
+debian/files
