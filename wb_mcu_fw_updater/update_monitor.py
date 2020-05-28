@@ -261,7 +261,7 @@ def _update_all(force):
         logging.warning('Update was skipped for:\n\t%s\nLaunch update-all with -f key to force update all devices!' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
-        logging.debug('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
+        logging.warning('Possibly, some devices are disconnected from bus:\n\t%s' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if in_bootloader:
         die('Possibly, some devices are in bootloader:\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
