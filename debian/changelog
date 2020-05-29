@@ -1,0 +1,5 @@
+wb-mcu-fw-updater (1.0) stable; urgency=medium
+
+  * Initial release. Flashing devices via wb-mcu-fw-flasher binary.
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 06 May 2020 21:56:07 +0300
