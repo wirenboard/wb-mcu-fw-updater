@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.0.1) stable; urgency=medium
+
+  * Fixed possible signature missmatch in some devices
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 02 Jun 2020 18:58:07 +0300
+
 wb-mcu-fw-updater (1.0) stable; urgency=medium
 
   * Initial release. Flashing devices via wb-mcu-fw-flasher binary.
