@@ -26,7 +26,7 @@ def get_request_content(url_path):
     logging.debug('Looking to: %s' % url_path)
     responce = url_handler.urlopen(url_path)
     ret = responce.read()
-    return ret.strip()
+    return ret
 
 
 def get_fw_signatures_list():
