@@ -11,6 +11,9 @@ ALLOWED_PARITIES = OrderedDict([('N', 0), ('O', 1), ('E', 2)])
 DEBUG = False
 
 
+WBMAP_MARKER = re.compile('\S*MAP\d+\S*')  # *MAP%d* matches
+
+
 def parse_uart_settings_str(settings_str):
     """
     A unified one-launchkey uart settings standart for Wiren Board software is like 9600N2

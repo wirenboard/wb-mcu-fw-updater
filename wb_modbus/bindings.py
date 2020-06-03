@@ -6,7 +6,7 @@ import time
 from copy import deepcopy
 from itertools import product
 from functools import wraps
-from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG
+from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER
 
 
 def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
@@ -493,7 +493,9 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: serial number of device
         :rtype: int
         """
-        if self.get_device_signature().startswith('WBMAP'):
+        device_signature = str(self.get_device_signature())
+        if WBMAP_MARKER.match(device_signature):
+            logging.debug('Will calculate SN as WB-MAP*')
             return self._get_serial_number_map()
         else:
             return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
