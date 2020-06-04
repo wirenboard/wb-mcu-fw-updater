@@ -31,7 +31,7 @@ def get_request_content(url_path):
 
 def get_fw_signatures_list():
     contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
-    return str(contents).split('\n')
+    return str(contents).strip().split('\n')
 
 
 class RemoteFileWatcher(object):
@@ -84,7 +84,7 @@ class RemoteFileWatcher(object):
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
         try:
             content = get_request_content(url_path).decode('utf-8')
-            return content
+            return str(content).strip()
         except HTTPError as e:
             logging.error("Incorrect branch name or fw_signature!")
             die(e)

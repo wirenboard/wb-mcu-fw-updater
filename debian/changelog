@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.0.2) stable; urgency=medium
+
+  * Fixed fw_version length; Improved reading strings from modbus
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 03 Jun 2020 23:41:12 +0300
+
 wb-mcu-fw-updater (1.0.1) stable; urgency=medium
 
   * Fixed possible signature missmatch in some devices

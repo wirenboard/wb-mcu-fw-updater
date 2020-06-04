@@ -3,10 +3,11 @@
 #
 import logging
 import time
+from binascii import unhexlify
 from copy import deepcopy
 from itertools import product
 from functools import wraps
-from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG
+from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER
 
 
 def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
@@ -393,6 +394,7 @@ class MinimalModbusAPIWrapper(object):
     def read_string(self, addr, regs_lenght):
         """
         Reading a row of consecutive uint16 holding registers and interpreting row as a string.
+        Wiren Board devices store a placeholder + char per one u16 reg (ex: '\x00A1' or '\xFFA1' in some roms)
 
         :param addr: address of first register
         :type addr: int
@@ -401,8 +403,15 @@ class MinimalModbusAPIWrapper(object):
         :return: a string with cut trailing null-bytes
         :rtype: str
         """
-        ret = self.device.read_string(addr, regs_lenght, 3)
-        return str(ret).replace('\x00', '')
+        empty_chars_placeholders = ('00', 'FF', ' ')
+        ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
+        for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
+            ret = ret.replace(placeholder, '')  # 'A1B2C3' bytes-only string
+        try:
+            return str(unhexlify(ret).decode('utf-8')).strip()
+        except UnicodeDecodeError as e:
+            logging.exception(e)
+            return None
 
 
 def auto_find_uart_settings(method_to_decorate):
@@ -447,14 +456,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         'bootloader_version' : 330
     }
 
-    FIRMWARE_VERSION_LENGTH = 8
-    DEVICE_SIGNATURE_LENGTH = 6
-    FIRMWARE_SIGNATURE_LENGTH = 12
-    BOOTLOADER_VERSION_LENGTH = 7
+    FIRMWARE_VERSION_LENGTH = 16  # 250-265 u16 regs
+    DEVICE_SIGNATURE_LENGTH = 6  # 200-205 u16 regs
+    FIRMWARE_SIGNATURE_LENGTH = 12  # 290-301 u16 regs
+    BOOTLOADER_VERSION_LENGTH = 8  # 330-337 u16 regs
 
     SERIAL_TIMEOUT = 0.1
-
-    INTERNAL_STRINGS_CODING = 'utf-8'
 
     def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2):
         super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits)
@@ -493,7 +500,9 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: serial number of device
         :rtype: int
         """
-        if self.get_device_signature().startswith('WBMAP'):
+        device_signature = str(self.get_device_signature())
+        if WBMAP_MARKER.match(device_signature):
+            logging.debug('Will calculate SN as WB-MAP*')
             return self._get_serial_number_map()
         else:
             return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
@@ -503,8 +512,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         return ((int_values[0] % 256) * 65536) + int_values[1]
 
     def get_fw_version(self):
-        ret = self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH)
-        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
+        return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH)
 
     def get_slave_addr(self):
         return self.read_u16(self.COMMON_REGS_MAP['slaveid'])
@@ -583,8 +591,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: device signature string
         :rtype: str
         """
-        ret = self.read_string(self.COMMON_REGS_MAP['device_signature'], self.DEVICE_SIGNATURE_LENGTH)
-        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
+        return self.read_string(self.COMMON_REGS_MAP['device_signature'], self.DEVICE_SIGNATURE_LENGTH)
 
     def get_fw_signature(self):
         """
@@ -593,12 +600,10 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: firmware signature string
         :rtype: str
         """
-        ret = self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
-        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
+        return self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
 
     def get_bootloader_version(self):
-        ret = self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH)
-        return ret.encode().decode(self.INTERNAL_STRINGS_CODING).strip() #Python 2/3 compatibility
+        return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH - 1)  # The last char is STM type
 
     def get_uptime(self):
         """
