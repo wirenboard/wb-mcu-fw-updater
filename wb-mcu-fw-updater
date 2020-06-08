@@ -56,7 +56,7 @@ def recover_fw(args):
             update_monitor.recover_device_iteration(fw_sig, slaveid, port)
             logging.info('%s' % user_log.colorize('Done', 'GREEN'))
             return True
-        except CalledProcessError as e:
+        except (CalledProcessError, RuntimeError) as e:
             logging.exception(e)
             return False
 

@@ -100,7 +100,7 @@ class RemoteFileWatcher(object):
         :param fname: custom path, file will be saved, defaults to None
         :type fname: str, optional
         :return: path of saved file
-        :rtype: str
+        :rtype: str (if succeed) or None (if not)
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
@@ -112,7 +112,8 @@ class RemoteFileWatcher(object):
                 version,
                 self.branch_name
             ))
-            die(e)
+            logging.exception(e)
+            return None
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
         if not fname:
             if not os.path.isdir(file_saving_dir):
@@ -127,5 +128,6 @@ class RemoteFileWatcher(object):
             fh.write(content)
             fh.close()
         except PermissionError as e:
-            die(e)
+            logging.exception(e)
+            return None
         return fpath
