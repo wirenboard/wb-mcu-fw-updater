@@ -182,4 +182,8 @@ if __name__ == "__main__":
     atexit.register(update_monitor.resume_driver)
     atexit.register(update_monitor.db.dump)
 
+    if 'port' in vars(args):
+        initial_port_settings = update_monitor.get_port_settings(args.port)
+        atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
+
     args.func(args)

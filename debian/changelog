@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.0.4) stable; urgency=medium
+
+  * Restoring initial serial port settings
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 08 Jun 2020 17:08:21 +0300
+
 wb-mcu-fw-updater (1.0.3) stable; urgency=medium
 
   * Too-old-for-update devices are showing explicitly

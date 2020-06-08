@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import termios
 import json
 from json.decoder import JSONDecodeError
 import subprocess
@@ -361,3 +362,24 @@ def pause_driver():
 
 def resume_driver():
     _send_signal_to_driver('-CONT')
+
+
+def get_port_settings(port_fname):
+    """
+    python-serial does not remember initial port settings (bd, parity, etc...)
+    => restoring it manually after all operations to let wb-mqtt-serial work again
+    """
+    try:
+        with open(port_fname) as port:
+            fd = port.fileno()
+            return termios.tcgetattr(fd)
+    except Exception as e:
+        die(e)
+
+
+def set_port_settings(port_fname, termios_settings):
+    try:
+        with open(port_fname) as port:
+            termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)
+    except Exception as e:
+        die(e)
