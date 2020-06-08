@@ -14,8 +14,6 @@ class TooOldDeviceError(minimalmodbus.ModbusException):
     """
     Some Wiren Board devices do not support in-filed firmware upudate, because they haven't bootloader.
     """
-    def __init__(self, value):
-        logging.error('%s: %s' % (self.__class__.__name__, repr(value)))
 
 
 def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):

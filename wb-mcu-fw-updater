@@ -17,6 +17,8 @@ def update_fw(args):
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
         logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+    except update_monitor.TooOldDeviceError as e:
+        die(e)
     except update_monitor.ModbusError as e:
         logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
@@ -35,6 +37,8 @@ def update_bootloader(args):
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
         logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+    except update_monitor.TooOldDeviceError as e:
+        die(e)
     except update_monitor.ModbusError as e:
         logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)

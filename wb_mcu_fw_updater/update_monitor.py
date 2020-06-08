@@ -13,8 +13,7 @@ import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
 
-from wb_modbus import minimalmodbus, parse_uart_settings_str
-from wb_modbus.bindings import WBModbusDeviceBase
+from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
 
 
 if PYTHON2:
@@ -27,6 +26,7 @@ db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
 
 
 ModbusError = minimalmodbus.ModbusException
+TooOldDeviceError = bindings.TooOldDeviceError
 
 
 def ask_user(message):
@@ -47,7 +47,7 @@ def ask_user(message):
 def get_correct_modbus_connection(slaveid, port, uart_settings_str, uart_settings_are_unknown):
     if slaveid == 0:
         die("Slaveid %d is not allowed in this mode!" % slaveid)  # Broadcast slaveid is available only in bootloader to prevent possible harm
-    modbus_connection = WBModbusDeviceBase(slaveid, port)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
     try:
         uart_settings = parse_uart_settings_str(uart_settings_str)
         modbus_connection.set_port_settings(*uart_settings)
@@ -204,6 +204,7 @@ def probe_all_devices(driver_config_fname):
     alive = []
     in_bootloader = []
     disconnected = []
+    too_old_to_update = []
     store_device = lambda name, slaveid, port, uart_params: DeviceInfo(name, slaveid, port, uart_settings=uart_params)
     logging.info('Will probe all devices defined in %s' % driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
@@ -211,7 +212,7 @@ def probe_all_devices(driver_config_fname):
         devices_on_port = port_params['devices']
         for device_name, device_slaveid in devices_on_port:
             logging.debug('Probing device %s (port: %s, slaveid: %d)...' % (device_name, port, device_slaveid))
-            modbus_connection = WBModbusDeviceBase(device_slaveid, port, *uart_params)
+            modbus_connection = bindings.WBModbusDeviceBase(device_slaveid, port, *uart_params)
             if modbus_connection.is_in_bootloader():
                 in_bootloader.append(store_device(device_name, device_slaveid, port, uart_params))
             else:
@@ -220,23 +221,23 @@ def probe_all_devices(driver_config_fname):
                 except ModbusError: # Device is really disconnected
                     disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
                 try:
-                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices could fail here
+                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices haven't fw_signatures
                     alive.append(store_device(device_name, device_slaveid, port, uart_params))
-                except ModbusError:
-                    logging.error('%s (slaveid: %d; port: %s) does not support firmware updates!' % (device_name, device_slaveid, port))
-                    disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
-    return alive, in_bootloader, disconnected
+                except TooOldDeviceError:
+                    logging.error('%s (slaveid: %d; port: %s) is too old and does not support firmware updates!' % (device_name, device_slaveid, port))
+                    too_old_to_update.append(store_device(device_name, device_slaveid, port, uart_params))
+    return alive, in_bootloader, disconnected, too_old_to_update
 
 
 def _update_all(force):
-    alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     ok_records = []
     update_was_skipped = [] # Device_info dicts
     to_update = [] # modbus_connection clients
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     for device_info in alive:
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
-        modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_settings)
+        modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
         try:
             fw_signature = modbus_connection.get_fw_signature()
         except ModbusError as e:  # A device is too old and doesnt support updates
@@ -260,7 +261,7 @@ def _update_all(force):
             logging.error("Remote fw version (%s) is less than local on %s (%s)" % (str(latest_remote_version), str(device_info), local_device_version))
             update_was_skipped.append(device_info)
 
-    if to_update:
+    if to_update:  # Devices, were alive and supported fw_updates
         for device_info in to_update:
             name, slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('name', 'slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
             logging.info('Flashing firmware to %s' % str(device_info))
@@ -269,7 +270,7 @@ def _update_all(force):
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 in_bootloader.append(device_info)
-            except ModbusError as e:
+            except ModbusError as e:  # Device was connected at the probing time, but is disconnected now
                 logging.exception(e)
                 dummy_records.append(device_info)
             else:
@@ -279,16 +280,20 @@ def _update_all(force):
         logging.warning('The following devices have already the most recent firmware.\nRun "wb-mcu-fw-updater update-all -f" to force update:\n\t%s' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
-        logging.warning('No answer from the following devices:\n\t%s\nBecause of disconnect or too old firmware to update.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
+        logging.warning('No answer from the following devices:\n\t%s\nDevices are possibly disconnected.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if in_bootloader:
         logging.error('The following devices are in bootloader mode.\nTry "wb-mcu-fw-updater recover-all":\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
 
-    logging.info("%s upgraded, %s already latest, %s stuck in bootloader and %s not answered to update cmd." % (
+    if too_old_devices:
+        logging.error("Devices, which are too old for firmware updates:\n\t%s" % '\n\t'.join([str(device_info) for device_info in too_old_devices]))
+
+    logging.info("%s upgraded, %s already latest, %s stuck in bootloader, %s disconnected and %s too old for any updates." % (
         user_log.colorize(str(len(ok_records)), 'GREEN' if ok_records else 'RED'),
         user_log.colorize(str(len(update_was_skipped)), 'GREEN') if update_was_skipped else '0',
         user_log.colorize(str(len(in_bootloader)), 'RED' if in_bootloader else 'GREEN'),
-        user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN')
+        user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN'),
+        user_log.colorize(str(len(too_old_devices)), 'RED' if too_old_devices else 'GREEN')
     ))
 
 
