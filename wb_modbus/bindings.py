@@ -10,6 +10,14 @@ from functools import wraps
 from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER
 
 
+class TooOldDeviceError(minimalmodbus.ModbusException):
+    """
+    Some Wiren Board devices do not support in-filed firmware upudate, because they haven't bootloader.
+    """
+    def __init__(self, value):
+        logging.error('%s: %s' % (self.__class__.__name__, repr(value)))
+
+
 def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
     """
     A decorator, handling accidential connection errors on bus.
@@ -600,10 +608,16 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: firmware signature string
         :rtype: str
         """
-        return self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
+        try:
+            return self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
+        except minimalmodbus.IllegalRequestError:
+            raise TooOldDeviceError("Device is too old and haven't fw_signature in regs!")
 
     def get_bootloader_version(self):
-        return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH - 1)  # The last char is STM type
+        try:
+            return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH - 1)  # The last char is STM type
+        except minimalmodbus.IllegalRequestError:
+            raise TooOldDeviceError("Device is too old and haven't bootloader version in regs!")
 
     def get_uptime(self):
         """
@@ -653,15 +667,15 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         self.get_slave_addr() #To ensure, device has connection
         try:
-            self.device.write_register(self.COMMON_REGS_MAP['reboot_to_bootloader'], 1, 0, 6, False)
+            self.write_u16(self.COMMON_REGS_MAP['reboot_to_bootloader'], 1)
         except minimalmodbus.ModbusException:
             pass #Device has rebooted and doesn't send responce (Fixed in latest FWs)
         finally:
             time.sleep(0.5) #Delay before going to bootloader
         try:
-            self.device.read_register(self.COMMON_REGS_MAP['slaveid'], 0, 3, False)
-            raise RuntimeError('Device has not rebooted to bootloader!')
-        except IOError:
+            self.get_slave_addr()
+            raise TooOldDeviceError('Device has not rebooted to bootloader!')
+        except minimalmodbus.ModbusException:
             pass #Device is in bootloader mode and doesn't responce
 
     def _has_bootloader_answered(self, baudrate=9600):
