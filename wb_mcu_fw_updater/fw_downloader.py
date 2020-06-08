@@ -86,8 +86,8 @@ class RemoteFileWatcher(object):
             content = get_request_content(url_path).decode('utf-8')
             return str(content).strip()
         except HTTPError as e:
-            logging.error("Incorrect branch name or fw_signature!")
-            die(e)
+            logging.error("Not Found: %s" % url_path)
+            return None
 
     def download(self, name, version='latest', fname=None):
         """

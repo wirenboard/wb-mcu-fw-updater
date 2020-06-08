@@ -125,6 +125,9 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
     mode_name = 'firmware' if mode == 'fw' else 'bootloader'
 
+    """
+    Flashing specified fw version (without any update-checking), if branch is unstable
+    """
     if branch_name:
         logging.warn("Flashing unstable %s from branch \"%s\" is requested!" % (
             mode_name,
@@ -132,9 +135,21 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         )
         _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
         return
+    else:
+        branch_name = 'stable'
+
+    """
+    Retrieving, which <latest> version actually is
+    """
     if specified_fw_version == 'latest':
         logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
         specified_fw_version = downloader.get_latest_version_number(fw_signature)
+        if specified_fw_version is None:  # No latest.txt file
+            die('Could not retrieve latest %s version in branch: %s' % (mode_name, branch_name))
+
+    """
+    Reflashing with update-checking
+    """
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
     passed_fw_version = LooseVersion(specified_fw_version)
     if passed_fw_version == device_fw_version:
@@ -143,7 +158,6 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             logging.info('Successfully reflashed %s (%s)' % (mode_name, device_fw_version))
         else:
             logging.warning('%s is already the newest version (%s), will not update. Use -f to force.' % (mode_name.capitalize(), device_fw_version,))
-
         return
     elif passed_fw_version < device_fw_version:
         logging.warning('%s will be downgraded! Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
@@ -239,12 +253,12 @@ def _update_all(force):
     for device_info in alive:
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
         modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
-        try:
-            fw_signature = modbus_connection.get_fw_signature()
-        except ModbusError as e:  # A device is too old and doesnt support updates
-            logging.error('Possibly, %s does not support FW update!' % str(device_info))
+        fw_signature = modbus_connection.get_fw_signature()
+        _latest_remote_version = downloader.get_latest_version_number(fw_signature)
+        if _latest_remote_version is None:
+            update_was_skipped.append(device_info)
             continue
-        latest_remote_version = LooseVersion(downloader.get_latest_version_number(fw_signature))
+        latest_remote_version = LooseVersion(_latest_remote_version)
         local_device_version = modbus_connection.get_fw_version()
         if latest_remote_version == local_device_version:
             if force:
@@ -289,9 +303,9 @@ def _update_all(force):
     if too_old_devices:
         logging.error("Devices, which are too old for firmware updates:\n\t%s" % '\n\t'.join([str(device_info) for device_info in too_old_devices]))
 
-    logging.info("%s upgraded, %s already latest, %s stuck in bootloader, %s disconnected and %s too old for any updates." % (
+    logging.info("%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s too old for any updates." % (
         user_log.colorize(str(len(ok_records)), 'GREEN' if ok_records else 'RED'),
-        user_log.colorize(str(len(update_was_skipped)), 'GREEN') if update_was_skipped else '0',
+        user_log.colorize(str(len(update_was_skipped)), 'YELLOW' if update_was_skipped else 'GREEN'),
         user_log.colorize(str(len(in_bootloader)), 'RED' if in_bootloader else 'GREEN'),
         user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN'),
         user_log.colorize(str(len(too_old_devices)), 'RED' if too_old_devices else 'GREEN')
