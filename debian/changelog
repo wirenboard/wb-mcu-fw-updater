@@ -1,3 +1,11 @@
+wb-mcu-fw-updater (1.1.0) stable; urgency=medium
+
+  * Auto-searching serial port settings in update modes
+  * Trying all possible fw_signatures in recover mode
+  * Bash-autocompletion for args
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 09 Jun 2020 15:37:37 +0300
+
 wb-mcu-fw-updater (1.0.4) stable; urgency=medium
 
   * Restoring initial serial port settings

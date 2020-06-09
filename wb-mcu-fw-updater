@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
+
 # -*- coding: utf-8 -*-
 
 import argcomplete
@@ -10,10 +12,9 @@ update_bootloader = None
 recover_fw = None
 recover_all = None
 update_all = None
-die = None
 
 
-def parse_args():
+def init_parser():
     main_parser = ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=ArgumentDefaultsHelpFormatter,
                                           description='Wiren Board modbus devices firmware/bootloader update tool.', add_help=True)
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const',
@@ -81,28 +82,29 @@ def parse_args():
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.set_defaults(func=recover_all)
 
-    argcomplete.autocomplete(main_parser)
-    args = main_parser.parse_args()
-
-    if 'func' in vars(args):
-        return args
-    else:
-        main_parser.print_help()
-        print("Each action supports <-h> key for help.")
-        die('No action has chosen!')
+    return main_parser
 
 
 if __name__ == "__main__":
-    args = parse_args()  # Autocompletion acts here
+    main_parser = init_parser()
+    argcomplete.autocomplete(main_parser)
 
     import atexit
-    from wb_mcu_fw_updater import update_monitor, user_log, CONFIG, die
+    from wb_mcu_fw_updater import update_monitor, user_log, CONFIG
 
     update_all = update_monitor.update_all
     update_fw = update_monitor.update_fw
     update_bootloader = update_monitor.update_bootloader
     recover_fw = update_monitor.recover_fw
     recover_all = update_monitor.recover_all
+
+    args = main_parser.parse_args()
+
+    if 'func' in vars(args):
+        pass
+    else:
+        main_parser.print_help()
+        main_parser.error('No action has chosen')
 
     user_log.setup_syslog_logger()
     user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
