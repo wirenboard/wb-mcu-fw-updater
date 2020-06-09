@@ -1,110 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
-import logging
-import atexit
-from subprocess import CalledProcessError
-from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
-from wb_modbus.bindings import WBModbusDeviceBase
+import argcomplete
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
-def update_fw(args):
-    """
-    Updating device's firmware.
-    Could install specified fw_version from specified branch.
-    """
-    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
-    try:
-        update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
-        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
-    except update_monitor.TooOldDeviceError as e:
-        die(e)
-    except update_monitor.ModbusError as e:
-        logging.error("Check device's connection, slaveid and serial port settings!")
-        die(e)
-    except CalledProcessError as e:
-        logging.error("Flashing has failed!")
-        die(e)
-
-
-def update_bootloader(args):
-    """
-    Updating device's bootloader.
-    Only latest version from stable branch is available.
-    """
-    update_monitor.ask_user("Updating bootloader is a dangerous operation.  Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?")
-    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
-    try:
-        update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
-        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
-    except update_monitor.TooOldDeviceError as e:
-        die(e)
-    except update_monitor.ModbusError as e:
-        logging.error("Check device's connection, slaveid and serial port settings!")
-        die(e)
-    except CalledProcessError as e:
-        logging.error("Flashing has failed!")
-        die(e)
-
-
-def recover_fw(args):  # TODO: add check, is device in bootloader or not
-    """
-    Recovering the device, stuck in the bootloader
-    """
-    def _flash_in_bl(fw_sig, slaveid, port):
-        try:
-            update_monitor.recover_device_iteration(fw_sig, slaveid, port)
-            logging.info('%s' % user_log.colorize('Done', 'GREEN'))
-            return True
-        except (CalledProcessError, RuntimeError) as e:
-            logging.exception(e)
-            return False
-
-    if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
-        device = WBModbusDeviceBase(args.slaveid, args.port)
-        if not device.is_in_bootloader():
-            die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port" % (args.port, args.slaveid))
-
-    fw_signatures_list = fw_downloader.get_fw_signatures_list()
-
-    if args.known_signature in fw_signatures_list:  # fw_signature was specified manually
-        if not _flash_in_bl(args.known_signature, args.slaveid, args.port):
-            die()
-
-    elif args.known_signature is None:  # A default value from args
-        logging.debug("Will try to restore fw_signature from db by slaveid: %d and port %s" % (args.slaveid, args.port))
-        fw_signature = update_monitor.db.get_fw_signature(args.slaveid, args.port)
-        if fw_signature:
-            if _flash_in_bl(fw_signature, args.slaveid, args.port):
-                return
-        if update_monitor.ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
-            for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
-                logging.info('Trying %s:' % fw_sig)
-                if _flash_in_bl(fw_sig, args.slaveid, args.port):
-                    return
-        die('Recovering the device (%d : %s) was not successful' % (args.slaveid, args.port))
-
-    else:
-        die('Choose a fw_signature from allowed: %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
-
-
-def update_all(args):
-    """
-    Updating firmwares for all devices, specified in wb-mqtt-serial's config.
-    """
-    update_monitor._update_all(force=args.force)
-
-
-def recover_all(args):
-    """
-    Trying to recover all devices, specified in wb-mqtt-serial's config.
-    """
-    update_monitor._recover_all()
+update_fw = None
+update_bootloader = None
+recover_fw = None
+recover_all = None
+update_all = None
+die = None
 
 
 def parse_args():
-    main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    main_parser = ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=ArgumentDefaultsHelpFormatter,
                                           description='Wiren Board modbus devices firmware/bootloader update tool.', add_help=True)
     main_parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const',
                              const=10, help='Setting the least loglevel. (Default: %(default)s)')
@@ -171,7 +81,9 @@ def parse_args():
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.set_defaults(func=recover_all)
 
+    argcomplete.autocomplete(main_parser)
     args = main_parser.parse_args()
+
     if 'func' in vars(args):
         return args
     else:
@@ -181,7 +93,16 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = parse_args()  # Autocompletion acts here
+
+    import atexit
+    from wb_mcu_fw_updater import update_monitor, user_log, CONFIG, die
+
+    update_all = update_monitor.update_all
+    update_fw = update_monitor.update_fw
+    update_bootloader = update_monitor.update_bootloader
+    recover_fw = update_monitor.recover_fw
+    recover_all = update_monitor.recover_all
 
     user_log.setup_syslog_logger()
     user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))

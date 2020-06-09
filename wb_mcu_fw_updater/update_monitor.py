@@ -401,3 +401,100 @@ def set_port_settings(port_fname, termios_settings):
             termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)
     except Exception as e:
         die(e)
+
+
+"""
+Top-level funcs, called from subparsers
+"""
+def update_fw(args):
+    """
+    Updating device's firmware.
+    Could install specified fw_version from specified branch.
+    """
+    modbus_connection = get_correct_modbus_connection(args.slaveid, args.port)
+    try:
+        flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
+        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+    except TooOldDeviceError as e:
+        die(e)
+    except ModbusError as e:
+        logging.error("Check device's connection, slaveid and serial port settings!")
+        die(e)
+    except subprocess.CalledProcessError as e:
+        logging.error("Flashing has failed!")
+        die(e)
+
+
+def update_bootloader(args):
+    """
+    Updating device's bootloader.
+    Only latest version from stable branch is available.
+    """
+    ask_user("Updating bootloader is a dangerous operation. Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?")
+    modbus_connection = get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
+    try:
+        flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
+        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+    except TooOldDeviceError as e:
+        die(e)
+    except ModbusError as e:
+        logging.error("Check device's connection, slaveid and serial port settings!")
+        die(e)
+    except subprocess.CalledProcessError as e:
+        logging.error("Flashing has failed!")
+        die(e)
+
+
+def recover_fw(args):  # TODO: add check, is device in bootloader or not
+    """
+    Recovering the device, stuck in the bootloader
+    """
+    def _flash_in_bl(fw_sig, slaveid, port):
+        try:
+            recover_device_iteration(fw_sig, slaveid, port)
+            logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+            return True
+        except (subprocess.CalledProcessError, RuntimeError) as e:
+            logging.exception(e)
+            return False
+
+    if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
+        device = bindings.WBModbusDeviceBase(args.slaveid, args.port)
+        if not device.is_in_bootloader():
+            die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port" % (args.port, args.slaveid))
+
+    fw_signatures_list = fw_downloader.get_fw_signatures_list()
+
+    if args.known_signature in fw_signatures_list:  # fw_signature was specified manually
+        if not _flash_in_bl(args.known_signature, args.slaveid, args.port):
+            die()
+
+    elif args.known_signature is None:  # A default value from args
+        logging.debug("Will try to restore fw_signature from db by slaveid: %d and port %s" % (args.slaveid, args.port))
+        fw_signature = db.get_fw_signature(args.slaveid, args.port)
+        if fw_signature:
+            if _flash_in_bl(fw_signature, args.slaveid, args.port):
+                return
+        if ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
+            for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
+                logging.info('Trying %s:' % fw_sig)
+                if _flash_in_bl(fw_sig, args.slaveid, args.port):
+                    return
+        die('Recovering the device (%d : %s) was not successful' % (args.slaveid, args.port))
+
+    else:
+        die('Choose a fw_signature from allowed: %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
+
+
+def update_all(args):
+    """
+    Updating firmwares for all devices, specified in wb-mqtt-serial's config.
+    """
+    _update_all(force=args.force)
+
+
+def recover_all(args):
+    """
+    Trying to recover all devices, specified in wb-mqtt-serial's config.
+    """
+    _recover_all()
