@@ -44,28 +44,18 @@ def ask_user(message):
     return ret.upper().startswith('Y')
 
 
-
-def get_correct_modbus_connection(slaveid, port, uart_settings_str, uart_settings_are_unknown):
+def get_correct_modbus_connection(slaveid, port):
     if slaveid == 0:
         die("Slaveid %d is not allowed in this mode!" % slaveid)  # Broadcast slaveid is available only in bootloader to prevent possible harm
     modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
     try:
-        uart_settings = parse_uart_settings_str(uart_settings_str)
-        modbus_connection.set_port_settings(*uart_settings)
+        logging.info("Will find serial port settings for (%s : %d)..." % (port, slaveid))
+        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
     except RuntimeError as e:
-        die(e)
-    if uart_settings_are_unknown:
-        """
-        Applying found uart settings to modbus_connection instance.
-        """
-        try:
-            logging.warning("Serial port settings are unknown. Trying to find it...")
-            uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-        except RuntimeError as e:
-            logging.error('Device is disconnected or slaveid is wrong')
-            die(e)
-        logging.info('Has found serial port settings: %s' % str(uart_settings_dict))
-        modbus_connection._set_port_settings_raw(uart_settings_dict)
+        logging.error('Device is disconnected or slaveid/port is wrong')
+        die()
+    logging.info('Has found serial port settings: %s' % str(uart_settings_dict))
+    modbus_connection._set_port_settings_raw(uart_settings_dict)
     return modbus_connection
 
 
