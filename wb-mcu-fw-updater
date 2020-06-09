@@ -14,7 +14,7 @@ def update_fw(args):
     Updating device's firmware.
     Could install specified fw_version from specified branch.
     """
-    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
+    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
         logging.info('%s' % user_log.colorize('Done', 'GREEN'))
@@ -34,7 +34,7 @@ def update_bootloader(args):
     Only latest version from stable branch is available.
     """
     update_monitor.ask_user("Updating bootloader is a dangerous operation.  Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?")
-    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port, args.uart_settings, args.unknown_uart_settings)
+    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
         logging.info('%s' % user_log.colorize('Done', 'GREEN'))
@@ -64,7 +64,7 @@ def recover_fw(args):  # TODO: add check, is device in bootloader or not
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
         device = WBModbusDeviceBase(args.slaveid, args.port)
         if not device.is_in_bootloader():
-            die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port")
+            die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port" % (args.port, args.slaveid))
 
     fw_signatures_list = fw_downloader.get_fw_signatures_list()
 
@@ -122,10 +122,6 @@ def parse_args():
                                   default='latest', help='Download a specified firmware version. (Default: %(default)s)')
     update_fw_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings',
                                   default=False, help="Erase all device's settings during update. (Default: %(default)s)")
-    update_fw_parser.add_argument('--port-settings', metavar='<port_settings_str>', type=str, dest='uart_settings',
-                                  default='9600N2', help='Serial port settings string. (Default: %(default)s)')
-    update_fw_parser.add_argument('--find-port-settings', action='store_true', dest='unknown_uart_settings',
-                                  default=False, help='Automatically find serial port settings of device. (Default: %(default)s)')
     update_fw_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                   help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_fw_parser.add_argument(
@@ -139,10 +135,6 @@ def parse_args():
     """
     update_bootloader_parser = subparsers.add_parser(
         'update-bl', help='Update bootloader on single working device.')
-    update_bootloader_parser.add_argument('--port-settings', type=str, metavar='<port_settings_str>', dest='uart_settings',
-                                          default='9600N2', help='Serial port settings string. (Default: %(default)s)')
-    update_bootloader_parser.add_argument('--find-port-settings', action='store_true', dest='unknown_uart_settings',
-                                          default=False, help='Automatically find serial port settings of device. (Default: %(default)s)')
     update_bootloader_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                           help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_bootloader_parser.add_argument(
