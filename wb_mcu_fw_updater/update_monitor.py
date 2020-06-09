@@ -371,7 +371,6 @@ def _recover_all():
     ))
 
 
-
 def _send_signal_to_driver(signal):
     """
     Use pausing/resuming of process, found by name (instead of killing/starting)

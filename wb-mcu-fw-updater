@@ -6,6 +6,7 @@ import logging
 import atexit
 from subprocess import CalledProcessError
 from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
+from wb_modbus.bindings import WBModbusDeviceBase
 
 
 def update_fw(args):
@@ -47,7 +48,7 @@ def update_bootloader(args):
         die(e)
 
 
-def recover_fw(args):
+def recover_fw(args):  # TODO: add check, is device in bootloader or not
     """
     Recovering the device, stuck in the bootloader
     """
@@ -59,6 +60,11 @@ def recover_fw(args):
         except (CalledProcessError, RuntimeError) as e:
             logging.exception(e)
             return False
+
+    if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
+        device = WBModbusDeviceBase(args.slaveid, args.port)
+        if not device.is_in_bootloader():
+            die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port")
 
     fw_signatures_list = fw_downloader.get_fw_signatures_list()
 
@@ -72,14 +78,15 @@ def recover_fw(args):
         if fw_signature:
             if _flash_in_bl(fw_signature, args.slaveid, args.port):
                 return
-        for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
-            logging.info('Trying %s:' % fw_sig)
-            if _flash_in_bl(fw_sig, args.slaveid, args.port):
-                return
-        die('No one from all possible fw_signatures has succeed!\nPossibly, device (%d : %s) is disconnected or slaveid is wrong.' % (args.slaveid, args.port))
+        if update_monitor.ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
+            for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
+                logging.info('Trying %s:' % fw_sig)
+                if _flash_in_bl(fw_sig, args.slaveid, args.port):
+                    return
+        die('Recovering the device (%d : %s) was not successful' % (args.slaveid, args.port))
 
     else:
-        die('Choose a fw_signature from : %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
+        die('Choose a fw_signature from allowed: %s' % (', '.join(fw_signatures_list))) #DO NOT use argparse's choices! (logging could be incorrect)
 
 
 def update_all(args):
