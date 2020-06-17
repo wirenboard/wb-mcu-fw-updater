@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import termios
 import json
 from json.decoder import JSONDecodeError
 import subprocess
@@ -13,8 +14,7 @@ import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
 
-from wb_modbus import minimalmodbus, parse_uart_settings_str
-from wb_modbus.bindings import WBModbusDeviceBase
+from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
 
 
 if PYTHON2:
@@ -27,6 +27,7 @@ db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
 
 
 ModbusError = minimalmodbus.ModbusException
+TooOldDeviceError = bindings.TooOldDeviceError
 
 
 def ask_user(message):
@@ -43,28 +44,18 @@ def ask_user(message):
     return ret.upper().startswith('Y')
 
 
-
-def get_correct_modbus_connection(slaveid, port, uart_settings_str, uart_settings_are_unknown):
+def get_correct_modbus_connection(slaveid, port):
     if slaveid == 0:
         die("Slaveid %d is not allowed in this mode!" % slaveid)  # Broadcast slaveid is available only in bootloader to prevent possible harm
-    modbus_connection = WBModbusDeviceBase(slaveid, port)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
     try:
-        uart_settings = parse_uart_settings_str(uart_settings_str)
-        modbus_connection.set_port_settings(*uart_settings)
+        logging.info("Will find serial port settings for (%s : %d)..." % (port, slaveid))
+        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
     except RuntimeError as e:
-        die(e)
-    if uart_settings_are_unknown:
-        """
-        Applying found uart settings to modbus_connection instance.
-        """
-        try:
-            logging.warning("Serial port settings are unknown. Trying to find it...")
-            uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-        except RuntimeError as e:
-            logging.error('Device is disconnected or slaveid is wrong')
-            die(e)
-        logging.info('Has found serial port settings: %s' % str(uart_settings_dict))
-        modbus_connection._set_port_settings_raw(uart_settings_dict)
+        logging.error('Device is disconnected or slaveid/port is wrong')
+        die()
+    logging.info('Has found serial port settings: %s' % str(uart_settings_dict))
+    modbus_connection._set_port_settings_raw(uart_settings_dict)
     return modbus_connection
 
 
@@ -101,6 +92,8 @@ def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0):
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     fw_version = 'latest'
     downloaded_fw = downloader.download(fw_signature, fw_version)
+    if downloaded_fw is None:
+        raise RuntimeError('FW file was not downloaded!')
     flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout)
 
 
@@ -124,48 +117,72 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
     mode_name = 'firmware' if mode == 'fw' else 'bootloader'
 
+    """
+    Flashing specified fw version (without any update-checking), if branch is unstable
+    """
     if branch_name:
         logging.warn("Flashing unstable %s from branch \"%s\" is requested!" % (
             mode_name,
             branch_name)
         )
-        _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-        return
+        try:
+            _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+            return
+        except RuntimeError as e:
+            die(e)
+    else:
+        branch_name = 'stable'
+
+    """
+    Retrieving, which <latest> version actually is
+    """
     if specified_fw_version == 'latest':
         logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
         specified_fw_version = downloader.get_latest_version_number(fw_signature)
+        if specified_fw_version is None:  # No latest.txt file
+            die('Could not retrieve latest %s version in branch: %s' % (mode_name, branch_name))
+
+    """
+    Reflashing with update-checking
+    """
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
     passed_fw_version = LooseVersion(specified_fw_version)
-    if passed_fw_version == device_fw_version:
-        if force:
+    try:
+        if passed_fw_version == device_fw_version:
+            if force:
+                _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+                logging.info('Successfully reflashed %s (%s)' % (mode_name, device_fw_version))
+            else:
+                logging.warning('%s is already the newest version (%s), will not update. Use -f to force.' % (mode_name.capitalize(), device_fw_version,))
+            return
+        elif passed_fw_version < device_fw_version:
+            logging.warning('%s will be downgraded! Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
             _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-            logging.info('Successfully reflashed %s (%s)' % (mode_name, device_fw_version))
+            logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
+            return
+        elif passed_fw_version > device_fw_version:
+            logging.info('%s will be upgraded. Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
+            _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+            logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
+            return
         else:
-            logging.warning('%s is already the newest version (%s), will not update. Use -f to force.' % (mode_name.capitalize(), device_fw_version,))
-
-        return
-    elif passed_fw_version < device_fw_version:
-        logging.warning('%s will be downgraded! Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
-        _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-        logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
-        return
-    elif passed_fw_version > device_fw_version:
-        logging.info('%s will be upgraded. Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
-        _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-        logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
-        return
-    else:
-        die('Something goes wrong with version checking!')
+            die('Something goes wrong with version checking!')
+    except RuntimeError as e:  # TODO: maybe separate errors for downloader and flasher?
+        die(e)
 
 
 def _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings):
     logging.debug('Flashing approved for %s : %d' % (modbus_connection.port, modbus_connection.slaveid))
     fw_file = downloader.download(fw_signature, specified_fw_version)
+    if fw_file is None:
+        raise RuntimeError("%s file was not downloaded!" % mode)
     modbus_connection.reboot_to_bootloader()
     flash_in_bootloader(fw_file, modbus_connection.slaveid, modbus_connection.port, erase_settings)
     if mode == 'bootloader':
         logging.info("Bootloader was successfully flashed. Will flash the latest stable firmware.")
         downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
+        if downloaded_fw is None:
+            raise RuntimeError("fw file was not downloaded!")
         flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
@@ -204,6 +221,7 @@ def probe_all_devices(driver_config_fname):
     alive = []
     in_bootloader = []
     disconnected = []
+    too_old_to_update = []
     store_device = lambda name, slaveid, port, uart_params: DeviceInfo(name, slaveid, port, uart_settings=uart_params)
     logging.info('Will probe all devices defined in %s' % driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
@@ -211,7 +229,7 @@ def probe_all_devices(driver_config_fname):
         devices_on_port = port_params['devices']
         for device_name, device_slaveid in devices_on_port:
             logging.debug('Probing device %s (port: %s, slaveid: %d)...' % (device_name, port, device_slaveid))
-            modbus_connection = WBModbusDeviceBase(device_slaveid, port, *uart_params)
+            modbus_connection = bindings.WBModbusDeviceBase(device_slaveid, port, *uart_params)
             if modbus_connection.is_in_bootloader():
                 in_bootloader.append(store_device(device_name, device_slaveid, port, uart_params))
             else:
@@ -219,30 +237,31 @@ def probe_all_devices(driver_config_fname):
                     modbus_connection.get_slave_addr()
                 except ModbusError: # Device is really disconnected
                     disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
+                    continue
                 try:
-                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices could fail here
+                    db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices haven't fw_signatures
                     alive.append(store_device(device_name, device_slaveid, port, uart_params))
-                except ModbusError:
-                    logging.error('%s (slaveid: %d; port: %s) does not support firmware updates!' % (device_name, device_slaveid, port))
-                    disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
-    return alive, in_bootloader, disconnected
+                except TooOldDeviceError:
+                    logging.error('%s (slaveid: %d; port: %s) is too old and does not support firmware updates!' % (device_name, device_slaveid, port))
+                    too_old_to_update.append(store_device(device_name, device_slaveid, port, uart_params))
+    return alive, in_bootloader, disconnected, too_old_to_update
 
 
 def _update_all(force):
-    alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     ok_records = []
     update_was_skipped = [] # Device_info dicts
     to_update = [] # modbus_connection clients
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     for device_info in alive:
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
-        modbus_connection = WBModbusDeviceBase(slaveid, port, *uart_settings)
-        try:
-            fw_signature = modbus_connection.get_fw_signature()
-        except ModbusError as e:  # A device is too old and doesnt support updates
-            logging.error('Possibly, %s does not support FW update!' % str(device_info))
+        modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
+        fw_signature = modbus_connection.get_fw_signature()
+        _latest_remote_version = downloader.get_latest_version_number(fw_signature)
+        if _latest_remote_version is None:
+            update_was_skipped.append(device_info)
             continue
-        latest_remote_version = LooseVersion(downloader.get_latest_version_number(fw_signature))
+        latest_remote_version = LooseVersion(_latest_remote_version)
         local_device_version = modbus_connection.get_fw_version()
         if latest_remote_version == local_device_version:
             if force:
@@ -260,7 +279,7 @@ def _update_all(force):
             logging.error("Remote fw version (%s) is less than local on %s (%s)" % (str(latest_remote_version), str(device_info), local_device_version))
             update_was_skipped.append(device_info)
 
-    if to_update:
+    if to_update:  # Devices, were alive and supported fw_updates
         for device_info in to_update:
             name, slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('name', 'slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
             logging.info('Flashing firmware to %s' % str(device_info))
@@ -269,9 +288,12 @@ def _update_all(force):
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 in_bootloader.append(device_info)
-            except ModbusError as e:
+            except ModbusError as e:  # Device was connected at the probing time, but is disconnected now
                 logging.exception(e)
                 dummy_records.append(device_info)
+            except RuntimeError as e:
+                logging.exception(e)
+                update_was_skipped.append(device_info)
             else:
                 ok_records.append(device_info)
 
@@ -279,21 +301,25 @@ def _update_all(force):
         logging.warning('The following devices have already the most recent firmware.\nRun "wb-mcu-fw-updater update-all -f" to force update:\n\t%s' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
-        logging.warning('No answer from the following devices:\n\t%s\nBecause of disconnect or too old firmware to update.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
+        logging.warning('No answer from the following devices:\n\t%s\nDevices are possibly disconnected.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
 
     if in_bootloader:
         logging.error('The following devices are in bootloader mode.\nTry "wb-mcu-fw-updater recover-all":\n\t%s' % '\n\t'.join([str(device_info) for device_info in in_bootloader]))
 
-    logging.info("%s upgraded, %s already latest, %s stuck in bootloader and %s not answered to update cmd." % (
+    if too_old_devices:
+        logging.error("Devices, which are too old for firmware updates:\n\t%s" % '\n\t'.join([str(device_info) for device_info in too_old_devices]))
+
+    logging.info("%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s too old for any updates." % (
         user_log.colorize(str(len(ok_records)), 'GREEN' if ok_records else 'RED'),
-        user_log.colorize(str(len(update_was_skipped)), 'GREEN') if update_was_skipped else '0',
+        user_log.colorize(str(len(update_was_skipped)), 'YELLOW' if update_was_skipped else 'GREEN'),
         user_log.colorize(str(len(in_bootloader)), 'RED' if in_bootloader else 'GREEN'),
-        user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN')
+        user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN'),
+        user_log.colorize(str(len(too_old_devices)), 'RED' if too_old_devices else 'GREEN')
     ))
 
 
 def _recover_all():
-    alive, in_bootloader, dummy_records = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    alive, in_bootloader, dummy_records, _ = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     recover_was_skipped = []
     to_recover = []
     ok_records = []
@@ -315,7 +341,7 @@ def _recover_all():
             fw_signature, slaveid, port = device_info.get_multiple_props('fw_signature', 'slaveid', 'port')
             try:
                 recover_device_iteration(fw_signature, slaveid, port)
-            except subprocess.CalledProcessError as e:
+            except (subprocess.CalledProcessError, RuntimeError) as e:
                 logging.exception(e)
                 recover_was_skipped.append(device_info)
             else:
@@ -334,7 +360,6 @@ def _recover_all():
         user_log.colorize(str(len(recover_was_skipped)), 'RED' if recover_was_skipped else 'GREEN'),
         user_log.colorize(str(len(dummy_records)), 'RED' if dummy_records else 'GREEN')
     ))
-
 
 
 def _send_signal_to_driver(signal):
@@ -356,3 +381,24 @@ def pause_driver():
 
 def resume_driver():
     _send_signal_to_driver('-CONT')
+
+
+def get_port_settings(port_fname):
+    """
+    python-serial does not remember initial port settings (bd, parity, etc...)
+    => restoring it manually after all operations to let wb-mqtt-serial work again
+    """
+    try:
+        with open(port_fname) as port:
+            fd = port.fileno()
+            return termios.tcgetattr(fd)
+    except Exception as e:
+        die(e)
+
+
+def set_port_settings(port_fname, termios_settings):
+    try:
+        with open(port_fname) as port:
+            termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)
+    except Exception as e:
+        die(e)

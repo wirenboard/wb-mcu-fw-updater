@@ -30,8 +30,12 @@ def get_request_content(url_path):
 
 
 def get_fw_signatures_list():
-    contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
-    return str(contents).strip().split('\n')
+    try:
+        contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
+        return str(contents).strip().split('\n')
+    except (URLError, HTTPError) as e:
+        logging.exception(e)
+        return None
 
 
 class RemoteFileWatcher(object):
@@ -86,8 +90,8 @@ class RemoteFileWatcher(object):
             content = get_request_content(url_path).decode('utf-8')
             return str(content).strip()
         except HTTPError as e:
-            logging.error("Incorrect branch name or fw_signature!")
-            die(e)
+            logging.error("Not Found: %s" % url_path)
+            return None
 
     def download(self, name, version='latest', fname=None):
         """
@@ -100,7 +104,7 @@ class RemoteFileWatcher(object):
         :param fname: custom path, file will be saved, defaults to None
         :type fname: str, optional
         :return: path of saved file
-        :rtype: str
+        :rtype: str (if succeed) or None (if not)
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
@@ -112,7 +116,8 @@ class RemoteFileWatcher(object):
                 version,
                 self.branch_name
             ))
-            die(e)
+            logging.exception(e)
+            return None
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
         if not fname:
             if not os.path.isdir(file_saving_dir):
@@ -127,5 +132,6 @@ class RemoteFileWatcher(object):
             fh.write(content)
             fh.close()
         except PermissionError as e:
-            die(e)
+            logging.exception(e)
+            return None
         return fpath
