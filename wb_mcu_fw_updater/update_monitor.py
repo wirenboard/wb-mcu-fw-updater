@@ -237,6 +237,7 @@ def probe_all_devices(driver_config_fname):
                     modbus_connection.get_slave_addr()
                 except ModbusError: # Device is really disconnected
                     disconnected.append(store_device(device_name, device_slaveid, port, uart_params))
+                    continue
                 try:
                     db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices haven't fw_signatures
                     alive.append(store_device(device_name, device_slaveid, port, uart_params))

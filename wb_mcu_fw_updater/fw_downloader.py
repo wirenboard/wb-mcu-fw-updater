@@ -30,8 +30,12 @@ def get_request_content(url_path):
 
 
 def get_fw_signatures_list():
-    contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
-    return str(contents).strip().split('\n')
+    try:
+        contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
+        return str(contents).strip().split('\n')
+    except (URLError, HTTPError) as e:
+        logging.exception(e)
+        return None
 
 
 class RemoteFileWatcher(object):

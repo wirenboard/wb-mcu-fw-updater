@@ -67,6 +67,8 @@ def recover_fw(args):  # TODO: add check, is device in bootloader or not
             die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port" % (args.port, args.slaveid))
 
     fw_signatures_list = fw_downloader.get_fw_signatures_list()
+    if fw_signatures_list is None:
+        die('Unable to get allowed fw_signatures')
 
     if args.known_signature in fw_signatures_list:  # fw_signature was specified manually
         if not _flash_in_bl(args.known_signature, args.slaveid, args.port):
