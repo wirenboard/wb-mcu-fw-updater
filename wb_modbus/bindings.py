@@ -73,9 +73,9 @@ class MinimalModbusAPIWrapper(object):
     Allows changing serial connection settings on-the-fly;
     Redirects minimalmodbus's debug messages to logging.
     """
-    def __init__(self, addr, port, baudrate, parity, stopbits):
+    def __init__(self, addr, port, baudrate, parity, stopbits, instrument=minimalmodbus.Instrument):
         minimalmodbus._print_out = _debug_info
-        self.device = minimalmodbus.Instrument(port, addr, debug=DEBUG, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL)
+        self.device = instrument(port, addr, debug=DEBUG, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL)
         self.slaveid = addr
         self.port = port
         self.set_port_settings(baudrate, parity, stopbits)
@@ -469,9 +469,10 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     SERIAL_TIMEOUT = 0.1
 
-    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2):
-        super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits)
+    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, instrument=minimalmodbus.Instrument):
+        super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument)
         self.device.serial.timeout = self.SERIAL_TIMEOUT
+        self.instrument = instrument
 
     def find_uart_settings(self, probe_method_callable, *args, **kwargs):
         """
@@ -541,7 +542,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.ModbusException:
             pass
         baudrate, parity, stopbits = self.settings['baudrate'], self.settings['parity'], self.settings['stopbits']
-        checking_device = MinimalModbusAPIWrapper(to_write, self.port, baudrate, parity, stopbits)
+        checking_device = MinimalModbusAPIWrapper(to_write, self.port, baudrate, parity, stopbits, self.instrument)
         checking_device.read_u16(self.COMMON_REGS_MAP['slaveid']) #Raises minimalmodbus.ModbusException, if <to_write> was not written
         self.device = checking_device.device #Updating current instrument
         self.slaveid = to_write
