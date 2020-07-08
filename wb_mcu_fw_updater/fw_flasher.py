@@ -27,7 +27,7 @@ class WBFWFlasher(object):
             self.out_buffer = sys.stdout.buffer
 
 
-    def flash(self, slaveid, fpath, restore_defaults=False, response_timeout=2.0):
+    def flash(self, slaveid, fpath, restore_defaults=False, response_timeout=2.0, custom_bl_speed=None):
         """Flashing .wbfw file via constructing and calling wb-mcu-fw-flasher command.
 
         :param slaveid: slave addr of device
@@ -45,6 +45,8 @@ class WBFWFlasher(object):
             die('FW file %s not found!' % fpath)
         cmd_args = self.known_cmd_args[::]
         cmd_args.extend(['-a', str(slaveid), '-f', fpath, '-t', str(response_timeout)])
+        if custom_bl_speed:
+            cmd_args.extend(['-B', str(custom_bl_speed)])
         if restore_defaults:
             cmd_args.append('-e')
         logging.debug('Will run: %s' % str(cmd_args))

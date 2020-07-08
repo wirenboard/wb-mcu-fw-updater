@@ -88,23 +88,23 @@ def get_devices_on_driver(driver_config_fname):
         die('No devices has found in %s' % driver_config_fname)
 
 
-def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0):
+def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0, custom_bl_speed=None):
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     fw_version = 'latest'
     downloaded_fw = downloader.download(fw_signature, fw_version)
     if downloaded_fw is None:
         raise RuntimeError('FW file was not downloaded!')
-    flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout)
+    flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout, custom_bl_speed=custom_bl_speed)
 
 
-def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, response_timeout=2.0):
+def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, response_timeout=2.0, custom_bl_speed=None):
     if erase_settings:
         if ask_user('All settings will be reset to defaults (1, 9600-8-N-2). Are you sure?'):
             pass
         else:
             die('Reset of settings was rejected')
     flasher = fw_flasher.WBFWFlasher(port)
-    flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout)
+    flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout, custom_bl_speed)
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
