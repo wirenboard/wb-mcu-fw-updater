@@ -52,9 +52,9 @@ def recover_fw(args):  # TODO: add check, is device in bootloader or not
     """
     Recovering the device, stuck in the bootloader
     """
-    def _flash_in_bl(fw_sig, slaveid, port):
+    def _flash_in_bl(fw_sig, slaveid, port, custom_speed=None):
         try:
-            update_monitor.recover_device_iteration(fw_sig, slaveid, port)
+            update_monitor.recover_device_iteration(fw_sig, slaveid, port, custom_bl_speed=custom_speed)
             logging.info('%s' % user_log.colorize('Done', 'GREEN'))
             return True
         except (CalledProcessError, RuntimeError) as e:
@@ -71,19 +71,19 @@ def recover_fw(args):  # TODO: add check, is device in bootloader or not
         die('Unable to get allowed fw_signatures')
 
     if args.known_signature in fw_signatures_list:  # fw_signature was specified manually
-        if not _flash_in_bl(args.known_signature, args.slaveid, args.port):
+        if not _flash_in_bl(args.known_signature, args.slaveid, args.port, args.custom_bl_speed):
             die()
 
     elif args.known_signature is None:  # A default value from args
         logging.debug("Will try to restore fw_signature from db by slaveid: %d and port %s" % (args.slaveid, args.port))
         fw_signature = update_monitor.db.get_fw_signature(args.slaveid, args.port)
         if fw_signature:
-            if _flash_in_bl(fw_signature, args.slaveid, args.port):
+            if _flash_in_bl(fw_signature, args.slaveid, args.port, args.custom_bl_speed):
                 return
         if update_monitor.ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
             for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
                 logging.info('Trying %s:' % fw_sig)
-                if _flash_in_bl(fw_sig, args.slaveid, args.port):
+                if _flash_in_bl(fw_sig, args.slaveid, args.port, args.custom_bl_speed):
                     return
         die('Recovering the device (%d : %s) was not successful' % (args.slaveid, args.port))
 
@@ -154,6 +154,7 @@ def parse_args():
                                    help="Force specify device's firmware signature. (Default: %(default)s)")
     recover_fw_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings',
                                    default=False, help="Erase all device's settings during flashing. (Default: %(default)s)")
+    recover_fw_parser.add_argument('-B', dest='custom_bl_speed', type=int, default=None, help=argparse.SUPPRESS)  # A hidden arg for internal usage
     recover_fw_parser.add_argument(
         '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device.')
     recover_fw_parser.add_argument(

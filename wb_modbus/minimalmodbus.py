@@ -94,7 +94,7 @@ _ALL_PAYLOADFORMATS = [
 # ######################## #
 
 
-class Instrument:
+class Instrument(object):
     """Instrument class for talking to instruments (slaves).
 
     Uses the Modbus RTU or ASCII protocols (via RS485 or RS232).
