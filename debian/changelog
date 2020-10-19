@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.0.6) stable; urgency=medium
+
+  * Wb-mqtt-serial's config is opening in utf-8 by default
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 19 Oct 2020 12:02:39 +0300
+
 wb-mcu-fw-updater (1.0.5) stable; urgency=medium
 
   * Ability to use custom minimalmodbus instances in wb_modbus library
