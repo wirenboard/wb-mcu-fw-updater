@@ -68,7 +68,7 @@ def get_devices_on_driver(driver_config_fname):
     """
     found_devices = {}
     try:
-        config_dict = json.load(open(driver_config_fname, 'r'))
+        config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
     except (IOError, JSONDecodeError) as e:
         die(e)
     for port in config_dict['ports']:
