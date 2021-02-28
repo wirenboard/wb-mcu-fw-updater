@@ -6,6 +6,7 @@ XS-Python-Version: >= 2.7
 Build-Depends: python, dh-python, python-setuptools, debhelper (>= 9), python3, python3-setuptools
 Standards-Version: 3.9.1
 X-Python-Version: >= 2.7
+X-Python3-Version: >= 3.2
 
 Package: python-wb-mcu-fw-updater
 Architecture: all
@@ -14,7 +15,7 @@ Description: Wiren Board modbus devices firmware update and modbus bindings pyth
 
 Package: python3-wb-mcu-fw-updater
 Architecture: all
-Depends: ${python3:Depends} | python3.5, ${misc:Depends}, python3-serial, wb-mcu-fw-flasher (>= 1.0.7)
+Depends: ${python3:Depends}, ${misc:Depends}, python3-serial, wb-mcu-fw-flasher (>= 1.0.7)
 Description: Wiren Board modbus devices firmware update and modbus bindings python libraries (python 3)
 
 Package: wb-mcu-fw-updater

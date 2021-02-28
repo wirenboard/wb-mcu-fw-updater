@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.0.8) stable; urgency=medium
+
+  * fix dependencies on wheezy
+
+ -- Evgeny Boger <boger@contactless.ru>  Sun, 28 Feb 2021 23:28:55 +0300
+
 wb-mcu-fw-updater (1.0.7) stable; urgency=medium
 
   * Fixed python3 dependency in WB5
