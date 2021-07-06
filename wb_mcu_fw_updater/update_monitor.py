@@ -69,19 +69,22 @@ def get_devices_on_driver(driver_config_fname):
     found_devices = {}
     try:
         config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
-    except (IOError, JSONDecodeError) as e:
+    except (IOError, JSONDecodeError) as e:  # file not found or is incorrect
         die(e)
     for port in config_dict['ports']:
-        if port.get('enabled', False):
+        if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
             port_name = port['path']
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
-            devices_on_port = []
+            devices_on_port = set()
             for serial_device in port['devices']:
                 device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
-                devices_on_port.append([device_name, int(slaveid)])
+                if device_name.startswith('WBIO-'):
+                    logging.debug("Has found WBIO device: %s" % device_name)
+                    device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
+                devices_on_port.add((device_name, int(slaveid)))
             if devices_on_port:
-                found_devices.update({port_name : {'devices' : devices_on_port, 'uart_params' : uart_params_of_port}})
+                found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port}})
     if found_devices:
         return found_devices
     else:
