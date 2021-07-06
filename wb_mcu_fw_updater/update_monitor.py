@@ -318,6 +318,20 @@ def _update_all(force):
     ))
 
 
+def _restore_fw_signature(slaveid, port):
+    """
+    Getting fw_signature of devices in bootloader
+    """
+    try:
+        logging.debug("Will ask a bootloader for fw_signature")
+        fw_signature = bindings.WBModbusDeviceBase(slaveid, port).get_fw_signature()  # latest bootloaders could answer a fw_signature
+    except ModbusError as e:
+        logging.debug("Will try to restore fw_signature from db by slaveid: %d and port %s" % (slaveid, port))
+        fw_signature = db.get_fw_signature(slaveid, port)
+    logging.debug("FW signature for %d : %s is %s" % (slaveid, port, str(fw_signature)))
+    return fw_signature
+
+
 def _recover_all():
     alive, in_bootloader, dummy_records, _ = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     recover_was_skipped = []
@@ -326,7 +340,7 @@ def _recover_all():
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     for device_info in in_bootloader:
         slaveid, port, name = device_info.get_multiple_props('slaveid', 'port', 'name')
-        fw_signature = db.get_fw_signature(slaveid, port)
+        fw_signature = _restore_fw_signature(slaveid, port)
         if fw_signature is None:
             logging.info('%s %s' % (user_log.colorize('Unknown fw_signature:', 'RED'), str(device_info)))
             recover_was_skipped.append(device_info)

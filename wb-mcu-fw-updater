@@ -75,16 +75,8 @@ def recover_fw(args):
             die()
 
     elif args.known_signature is None:  # A default value from args
-        try:
-            logging.debug("Will ask a bootloader for fw_signature")
-            fw_signature = WBModbusDeviceBase(args.slaveid, args.port).get_fw_signature()  # Newest bootloaders could answer fw_sig by 0 slaveid
-        except update_monitor.ModbusError as e:
-            logging.debug(e)
-            logging.debug("Will try to restore fw_signature from db by slaveid: %d and port %s" % (args.slaveid, args.port))
-            fw_signature = update_monitor.db.get_fw_signature(args.slaveid, args.port)
-
+        fw_signature = update_monitor._restore_fw_signature(args.slaveid, args.port)
         if fw_signature:
-            logging.debug("FW_signature for %d : %s is %s" % (args.slaveid, args.port, fw_signature))
             if _flash_in_bl(fw_signature, args.slaveid, args.port, args.custom_bl_speed):
                 return
 
