@@ -69,10 +69,10 @@ def get_devices_on_driver(driver_config_fname):
     found_devices = {}
     try:
         config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
-    except (IOError, JSONDecodeError) as e:
+    except (IOError, JSONDecodeError) as e:  # file not found or is incorrect
         die(e)
     for port in config_dict['ports']:
-        if port.get('enabled', False):
+        if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
             port_name = port['path']
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
             devices_on_port = []
