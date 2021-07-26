@@ -19,5 +19,5 @@ Description: Wiren Board modbus devices firmware update and modbus bindings pyth
 
 Package: wb-mcu-fw-updater
 Architecture: all
-Depends: ${misc:Depends}, python3-wb-mcu-fw-updater (>= 1.0.10)
+Depends: ${misc:Depends}, python3-wb-mcu-fw-updater (= ${binary:Version})
 Description: Wiren Board modbus devices firmware update tool (python 3)
