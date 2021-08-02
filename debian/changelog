@@ -1,4 +1,10 @@
-wb-mcu-fw-updater (1.0.10) stable; urgency=medium
+wb-mcu-fw-updater (1.0.11) stable; urgency=medium
+
+  * updated build-depends: on python2 or python3 (instead of both)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Sun, 01 Aug 2021 11:41:21 +0300
+
+wwb-mcu-fw-updater (1.0.10) stable; urgency=medium
 
   * trying to read fw_signature from bootloader in all recover cases
 
