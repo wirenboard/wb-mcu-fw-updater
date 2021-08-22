@@ -106,6 +106,10 @@ def recover_all(args):
     update_monitor._recover_all()
 
 
+def print_all(args):
+    update_monitor._print_all()
+
+
 def parse_args():
     main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                           description='Wiren Board modbus devices firmware/bootloader update tool.', add_help=True)
@@ -174,6 +178,10 @@ def parse_args():
     recover_all_parser = subparsers.add_parser(
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.set_defaults(func=recover_all)
+
+    print_all_parser = subparsers.add_parser(
+        'print-all', help="Print firmware version of all devices, added to wb-mqtt-serial's config.")
+    print_all_parser.set_defaults(func=print_all)
 
     args = main_parser.parse_args()
     if 'func' in vars(args):
