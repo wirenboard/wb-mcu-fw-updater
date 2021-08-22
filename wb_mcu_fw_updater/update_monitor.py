@@ -77,6 +77,8 @@ def get_devices_on_driver(driver_config_fname):
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
             devices_on_port = set()
             for serial_device in port['devices']:
+                if not serial_device.get('enabled', True):
+                    continue;
                 device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
                 if device_name.startswith('WBIO-'):
