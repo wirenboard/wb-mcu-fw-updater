@@ -8,7 +8,8 @@ from json.decoder import JSONDecodeError
 import subprocess
 from pprint import pformat
 from distutils.version import LooseVersion
-from . import fw_flasher, fw_downloader, user_log, jsondb, die, PYTHON2, CONFIG
+from yaml import safe_load
+from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, PYTHON2, CONFIG
 
 import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
@@ -42,6 +43,19 @@ def ask_user(message):
     message_str = '\n*** %s [Y/N] *** ' % (message)
     ret = input_func(user_log.colorize(message_str, 'YELLOW'))
     return ret.upper().startswith('Y')
+
+
+def get_released_fw_version(fw_signature, release_info=releases.RELEASE_INFO):
+    for url in releases.get_release_file_urls(release_info=release_info):
+        contents = fw_downloader.get_releases_info(url)
+        if contents:
+            ret = safe_load(contents).get('releases')
+            ret = ret.get(fw_signature).get(release_info['SUITE'])
+            if ret:
+                logging.debug("FW version for %s on release %s: %s")
+                return ret
+    else:
+        return None
 
 
 def get_correct_modbus_connection(slaveid, port):
@@ -93,7 +107,7 @@ def get_devices_on_driver(driver_config_fname):
 
 def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0, custom_bl_speed=None):
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
-    fw_version = 'latest'
+    fw_version = get_released_fw_version(fw_signature) or 'latest'
     downloaded_fw = downloader.download(fw_signature, fw_version)
     if downloaded_fw is None:
         raise RuntimeError('FW file was not downloaded!')
@@ -128,6 +142,9 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             mode_name,
             branch_name)
         )
+        if specified_fw_version == 'release':
+            logging.warning('FW version "%s" is not supported for %s branch\nWill use "latest" instead' % (specified_fw_version, branch_name))
+            specified_fw_version = 'latest'
         try:
             _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
             return
@@ -137,13 +154,16 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         branch_name = 'stable'
 
     """
-    Retrieving, which <latest> version actually is
+    Retrieving, which passed version actually is
     """
     if specified_fw_version == 'latest':
-        logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
+        # logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
         specified_fw_version = downloader.get_latest_version_number(fw_signature)
-        if specified_fw_version is None:  # No latest.txt file
-            die('Could not retrieve latest %s version in branch: %s' % (mode_name, branch_name))
+    elif specified_fw_version == 'release':
+        specified_fw_version = get_released_fw_version(fw_signature)
+
+    if specified_fw_version is None:  # No latest.txt file
+        die('Could not retrieve specified %s version in branch: %s' % (mode_name, branch_name))
 
     """
     Reflashing with update-checking
@@ -260,7 +280,7 @@ def _update_all(force):
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
         modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
         fw_signature = modbus_connection.get_fw_signature()
-        _latest_remote_version = downloader.get_latest_version_number(fw_signature)
+        _latest_remote_version = get_released_fw_version(fw_signature) or downloader.get_latest_version_number(fw_signature)
         if _latest_remote_version is None:
             update_was_skipped.append(device_info)
             continue

@@ -38,6 +38,15 @@ def get_fw_signatures_list():
         return None
 
 
+def get_releases_info(remote_fname=CONFIG['FW_RELEASES_FILE_URL']):
+    try:
+        contents = get_request_content(remote_fname).decode('utf-8')
+        return str(contents).strip()
+    except (URLError, HTTPError) as e:
+        logging.exception(e)
+        return None
+
+
 class RemoteFileWatcher(object):
     """
     A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
