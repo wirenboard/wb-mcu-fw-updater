@@ -31,6 +31,9 @@ ModbusError = minimalmodbus.ModbusException
 TooOldDeviceError = bindings.TooOldDeviceError
 
 
+RELEASE_INFO = None
+
+
 def ask_user(message):
     """
     Asking user before potentionally dangerous action.
@@ -45,8 +48,8 @@ def ask_user(message):
     return ret.upper().startswith('Y')
 
 
-def get_released_fw_version(fw_signature, release_info=releases.RELEASE_INFO):
-    for url in releases.get_release_file_urls(release_info=release_info):
+def get_released_fw_version(fw_signature, release_info):
+    for url in releases.get_release_file_urls(release_info):
         contents = fw_downloader.get_releases_info(url)
         if contents:
             ret = safe_load(contents).get('releases')
@@ -107,7 +110,7 @@ def get_devices_on_driver(driver_config_fname):
 
 def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0, custom_bl_speed=None):
     downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
-    fw_version = get_released_fw_version(fw_signature) or 'latest'
+    fw_version = get_released_fw_version(fw_signature, RELEASE_INFO) or 'latest'
     downloaded_fw = downloader.download(fw_signature, fw_version)
     if downloaded_fw is None:
         raise RuntimeError('FW file was not downloaded!')
@@ -160,7 +163,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         # logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
         specified_fw_version = downloader.get_latest_version_number(fw_signature)
     elif specified_fw_version == 'release':
-        specified_fw_version = get_released_fw_version(fw_signature)
+        specified_fw_version = get_released_fw_version(fw_signature, RELEASE_INFO)
 
     if specified_fw_version is None:  # No latest.txt file
         die('Could not retrieve specified %s version in branch: %s' % (mode_name, branch_name))
@@ -280,7 +283,7 @@ def _update_all(force):
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
         modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
         fw_signature = modbus_connection.get_fw_signature()
-        _latest_remote_version = get_released_fw_version(fw_signature) or downloader.get_latest_version_number(fw_signature)
+        _latest_remote_version = get_released_fw_version(fw_signature, RELEASE_INFO) or downloader.get_latest_version_number(fw_signature)
         if _latest_remote_version is None:
             update_was_skipped.append(device_info)
             continue

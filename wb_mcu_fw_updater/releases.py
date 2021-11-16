@@ -29,10 +29,7 @@ def parse_releases(fname=CONFIG['RELEASES_FNAME']):
     return ret
 
 
-RELEASE_INFO = parse_releases()
-
-
-def get_release_file_urls(release_info=RELEASE_INFO, default_releases_file_url=CONFIG['FW_RELEASES_FILE_URL']):
+def get_release_file_urls(release_info, default_releases_file_url=CONFIG['FW_RELEASES_FILE_URL']):
     """
     Returns a list of remote release-file urls: [with-repo-prefix (if exists), default]
     """

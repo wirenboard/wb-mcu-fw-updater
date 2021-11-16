@@ -5,7 +5,7 @@ import argparse
 import logging
 import atexit
 from subprocess import CalledProcessError
-from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
+from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, releases, die, CONFIG
 from wb_modbus.bindings import WBModbusDeviceBase
 
 
@@ -193,6 +193,8 @@ if __name__ == "__main__":
     update_monitor.pause_driver()
     atexit.register(update_monitor.resume_driver)
     atexit.register(update_monitor.db.dump)
+
+    update_monitor.RELEASE_INFO = releases.parse_releases()
 
     if 'port' in vars(args):
         initial_port_settings = update_monitor.get_port_settings(args.port)
