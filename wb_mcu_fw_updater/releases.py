@@ -40,3 +40,17 @@ def get_release_file_urls(release_info, default_releases_file_url=CONFIG['FW_REL
         ret.append(default_releases_file_url.replace('.yaml', '.%s.yaml' % fname_suffix))
     ret.append(default_releases_file_url)
     return ret
+
+
+def parse_fw_version(endpoint_url):
+    """
+    Parsing fw version from endpoint url, stored in releases file
+    """
+    extension = CONFIG['FW_EXTENSION']
+    re_str = '.+/(.+)%s' % extension
+    mat = re.match(re_str, endpoint_url)  # matches .../*.wbfw
+    if mat:
+        return mat.group(1)
+    else:
+        logging.warning("Could not parse fw version from %s by regexp %s" % (endpoint_url, re_str))
+        return None
