@@ -24,27 +24,40 @@ def get_request_content(url_path):
     :rtype: bytestring
     """
     logging.debug('Looking to: %s' % url_path)
-    responce = url_handler.urlopen(url_path)
-    ret = responce.read()
-    return ret
-
-
-def get_fw_signatures_list():
     try:
-        contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
-        return str(contents).strip().split('\n')
+        responce = url_handler.urlopen(url_path)
+        return responce.read()
     except (URLError, HTTPError) as e:
-        logging.exception(e)
+        logging.exception()
         return None
+
+
+def get_string(url_path, coding='utf-8'):
+    ret = get_request_content(url_path)
+    return str(ret.decode(coding)).strip() if ret else None
 
 
 def get_releases_info(remote_fname=CONFIG['FW_RELEASES_FILE_URL']):
-    try:
-        contents = get_request_content(remote_fname).decode('utf-8')
-        return str(contents).strip()
-    except (URLError, HTTPError) as e:
-        logging.exception(e)
-        return None
+    return get_string(remote_fname)
+
+
+def get_fw_signatures_list():
+    ret = get_string(CONFIG['FW_SIGNATURES_FILE_URL'])
+    return ret.split('\n') if ret else None
+
+
+def download_file(file_path, url_path):
+    contents = get_request_content(url_path)
+    if contents:
+        logging.debug("Downloading to %s" % file_path)
+        try:
+            fh = open(file_path, 'wb+')
+            fh.write(contents)
+            fh.close()
+            return file_path
+        except PermissionError as e:
+            logging.exception()
+    return None
 
 
 class RemoteFileWatcher(object):
@@ -95,12 +108,7 @@ class RemoteFileWatcher(object):
         :rtype: str
         """
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
-        try:
-            content = get_request_content(url_path).decode('utf-8')
-            return str(content).strip()
-        except HTTPError as e:
-            logging.error("Not Found: %s" % url_path)
-            return None
+        return get_string(url_path)
 
     def download(self, name, version='latest', fname=None):
         """
@@ -117,30 +125,22 @@ class RemoteFileWatcher(object):
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
-        try:
-            content = get_request_content(url_path)
-        except HTTPError as e:
-            logging.error('Could not find the firmware: signature %s, version %s, branch %s' % (
-                name,
-                version,
-                self.branch_name
-            ))
-            logging.exception(e)
-            return None
+
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
         if not fname:
             if not os.path.isdir(file_saving_dir):
                 os.mkdir(file_saving_dir)
-            fname = '%s_%s_%s' % (name, self.branch_name, fw_ver)
+            fname = '%s_%s_%s' % (name, self.branch_name, fw_ver)  # a default one
             fpath = os.path.join(file_saving_dir, fname)
         else:
             fpath = fname
-        logging.debug('Downloading to: %s' % fpath)
-        try:
-            fh = open(fpath, 'wb+')
-            fh.write(content)
-            fh.close()
-        except PermissionError as e:
-            logging.exception(e)
+
+        if download_file(fpath, url_path):
+            return fpath
+        else:
+            logging.error('Could not download fw: signature %s, version %s, branch %s' % (
+                name,
+                version,
+                self.branch_name
+            ))
             return None
-        return fpath
