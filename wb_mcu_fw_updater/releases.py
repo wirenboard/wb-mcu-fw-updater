@@ -21,7 +21,7 @@ def parse_releases(fname=CONFIG['RELEASES_FNAME']):
 
     logging.debug("Reading %s for releases info" % fname)
     if os.path.exists(fname):
-        ret = {k: v for k, v in (l.split('=', 1) for l in open(fname))}
+        ret = {k.strip(): v.strip() for k, v in (l.split('=', 1) for l in open(fname))}
         logging.debug("Got releases info:\n%s" % str(ret))
     else:
         logging.warning("Releases file %s not found" % fname)
