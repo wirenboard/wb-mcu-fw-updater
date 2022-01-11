@@ -178,16 +178,17 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     """
     Retrieving, which passed version actually is
     """
-    if specified_fw_version == 'latest':
-        # logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
-        downloaded_fw = downloader.download(fw_signature, specified_fw_version)
-        specified_fw_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
-    elif specified_fw_version == 'release':
+    if specified_fw_version == 'release':
         specified_fw_version, _ = get_released_fw(fw_signature, RELEASE_INFO)
         downloaded_fw = download_fw_fallback(fw_signature)
+    elif specified_fw_version == 'latest':
+        # logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
+        specified_fw_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
 
     if specified_fw_version is None:  # No latest.txt file
         die('Could not retrieve specified %s version in branch: %s' % (mode_name, branch_name))
+
+    downloaded_fw = downloaded_fw or downloader.download(fw_signature, specified_fw_version)
 
     """
     Reflashing with update-checking
@@ -296,6 +297,9 @@ def probe_all_devices(driver_config_fname):
 
 
 def _update_all(force):
+    if not RELEASE_INFO:
+        die('"update-all" mode works only for releases!\nPossible solutions:\n\trun "apt update; apt upgrade" and migrate to releases system\n\tmanually update each device "wb-mcu-fw-updater update-fw -a <Addr> <Port> --version latest"')
+
     alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     ok_records = []
     update_was_skipped = [] # Device_info dicts
