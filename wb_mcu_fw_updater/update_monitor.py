@@ -111,10 +111,17 @@ def get_devices_on_driver(driver_config_fname):
 
 
 def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0, custom_bl_speed=None):
-    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
-    fw_version, _ = get_released_fw(fw_signature, RELEASE_INFO) or 'latest'
-    downloaded_fw = downloader.download(fw_signature, fw_version)
-    if downloaded_fw is None:
+    downloaded_fw = None
+
+    released_fw_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
+    if released_fw_endpoint:
+        downloaded_fw = fw_downloader.download_file(fw_downloader.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint), CONFIG['FW_SAVING_DIR'])
+    else:
+        fw_version = 'latest'
+        if ask_user('No fw for "%s" in current release found! Will try to download "%s" fw (may be unstable). Are you sure? (Y/N)' % (fw_signature, fw_version)):
+            downloaded_fw = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').download(fw_signature, fw_version)
+
+    if not downloaded_fw:
         raise RuntimeError('FW file was not downloaded!')
     flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout, custom_bl_speed=custom_bl_speed)
 
