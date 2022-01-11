@@ -46,19 +46,25 @@ def get_fw_signatures_list():
     return ret.split('\n') if ret else None
 
 
-def download_file(url_path, file_path=None):
+def download_file(url_path, saving_dir=None, fname=None):
     ret = get_request(url_path)
-
     if ret:
         content = ret.read()
-        if not file_path:
-            logging.debug("Trying to get fname from content-disposition")
-            default_fname = ret.info().get('Content-Disposition')
-            logging.debug("Got fname from content-disposition: %s" % str(default_fname))
-            file_path = os.path.join(CONFIG['FW_SAVING_DIR'], default_fname.split('filename=')[1]) if default_fname else None
+    else:
+        logging.error("Could not download from %s" % url_path)
+        return None
+
+    saving_dir = saving_dir or CONFIG['FW_SAVING_DIR']
+    if not fname:
+        logging.debug("Trying to get fname from content-disposition")
+        default_fname = ret.info().get('Content-Disposition')
+        fname = default_fname.split('filename=')[1].strip('"\'') if default_fname else None
+        logging.debug("Got fname from content-disposition: %s" % str(fname))
+    if fname:
+        file_path = os.path.join(saving_dir, fname)
         logging.debug("Downloading to %s" % file_path)
     else:
-        logging.warning("Could not download from %s" % url_path)
+        logging.error("Fname to save fw was not specified")
         return None
 
     try:
@@ -121,7 +127,7 @@ class RemoteFileWatcher(object):
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
         return get_string(url_path)
 
-    def download(self, name, version='latest', fname=None):
+    def download(self, name, version='latest', fpath=None):
         """
         Downloading a firmware/bootloader file with specified version to specified fname.
 
@@ -137,17 +143,14 @@ class RemoteFileWatcher(object):
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
 
-        file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
-        if not fname:
+        if not fpath:
+            file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
             if not os.path.isdir(file_saving_dir):
                 os.mkdir(file_saving_dir)
-            fname = '%s_%s_%s' % (name, self.branch_name, fw_ver)  # a default one
-            fpath = os.path.join(file_saving_dir, fname)
-        else:
-            fpath = fname
 
-        if download_file(url_path, fpath):
-            return fpath
+        saved_fpath = download_file(url_path, file_saving_dir)
+        if saved_fpath:
+            return saved_fpath
         else:
             logging.error('Could not download fw: signature %s, version %s, branch %s' % (
                 name,
