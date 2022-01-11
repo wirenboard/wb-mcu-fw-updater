@@ -14,7 +14,7 @@ else:
     from urllib.error import HTTPError, URLError
 
 
-def get_request_content(url_path):
+def get_request(url_path):
     """
     Sending GET request to url; returning responce's content.
 
@@ -26,15 +26,15 @@ def get_request_content(url_path):
     logging.debug('Looking to: %s' % url_path)
     try:
         responce = url_handler.urlopen(url_path)
-        return responce.read()
+        return responce
     except (URLError, HTTPError) as e:
         logging.exception()
         return None
 
 
 def get_string(url_path, coding='utf-8'):
-    ret = get_request_content(url_path)
-    return str(ret.decode(coding)).strip() if ret else None
+    ret = get_request(url_path)
+    return str(ret.read().decode(coding)).strip() if ret else None
 
 
 def get_releases_info(remote_fname=CONFIG['FW_RELEASES_FILE_URL']):
@@ -46,18 +46,29 @@ def get_fw_signatures_list():
     return ret.split('\n') if ret else None
 
 
-def download_file(file_path, url_path):
-    contents = get_request_content(url_path)
-    if contents:
+def download_file(url_path, file_path=None):
+    ret = get_request(url_path)
+
+    if ret:
+        content = ret.read()
+        if not file_path:
+            logging.debug("Trying to get fname from content-disposition")
+            default_fname = ret.info().get('Content-Disposition')
+            logging.debug("Got fname from content-disposition: %s" % str(default_fname))
+            file_path = os.path.join(CONFIG['FW_SAVING_DIR'], default_fname.split('filename=')[1]) if default_fname else None
         logging.debug("Downloading to %s" % file_path)
-        try:
-            fh = open(file_path, 'wb+')
-            fh.write(contents)
-            fh.close()
-            return file_path
-        except PermissionError as e:
-            logging.exception()
-    return None
+    else:
+        logging.warning("Could not download from %s" % url_path)
+        return None
+
+    try:
+        fh = open(file_path, 'wb+')
+        fh.write(content)
+        fh.close()
+        return file_path
+    except OSError as e:
+        logging.exception()
+        return None
 
 
 class RemoteFileWatcher(object):
@@ -135,7 +146,7 @@ class RemoteFileWatcher(object):
         else:
             fpath = fname
 
-        if download_file(fpath, url_path):
+        if download_file(url_path, fpath):
             return fpath
         else:
             logging.error('Could not download fw: signature %s, version %s, branch %s' % (
