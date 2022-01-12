@@ -1,8 +1,8 @@
-wb-mcu-fw-updater (1.0.11) stable; urgency=medium
+wb-mcu-fw-updater (1.1.0) stable; urgency=medium
 
-  * trying to guess default fw version from releases
+  * added fw releases support: trying to guess target fw version from releases, when updating fw
 
- -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 16 Nov 2021 11:00:31 +0300
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 12 Jan 2022 15:55:29 +0300
 
 wb-mcu-fw-updater (1.0.10) stable; urgency=medium
 
