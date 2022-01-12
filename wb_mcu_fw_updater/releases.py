@@ -39,6 +39,7 @@ def get_release_file_urls(release_info, default_releases_file_url=CONFIG['FW_REL
         fname_suffix = re.sub('[\W_]+', '~', fname_suffix)  # changing non letters or numbers to ~
         ret.append(default_releases_file_url.replace('.yaml', '.%s.yaml' % fname_suffix))
     ret.append(default_releases_file_url)
+    logging.debug("FW releases files: %s" % str(ret))
     return ret
 
 

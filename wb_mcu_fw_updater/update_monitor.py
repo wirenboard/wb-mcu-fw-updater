@@ -49,12 +49,20 @@ def ask_user(message):
 
 
 def get_released_fw(fw_signature, release_info):
-    for url in releases.get_release_file_urls(release_info):
+    """
+    Looking for released-fw:
+        version
+        url on fw-releases
+    By:
+        fw_signature
+        release suite
+    """
+    for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
         suite = release_info['SUITE']
+        logging.debug("Looking to %s (suite: %s)" % (url, str(suite)))
         contents = fw_downloader.get_releases_info(url)
         if contents:
-            fw_endpoint = safe_load(contents).get('releases')
-            fw_endpoint = fw_endpoint.get(fw_signature).get(suite)
+            fw_endpoint = safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
             if fw_endpoint:
                 fw_version = releases.parse_fw_version(fw_endpoint)
                 logging.debug("FW version for %s on release %s: %s\nEndpoint: %s" % (fw_signature, suite, fw_version, fw_endpoint))
@@ -67,7 +75,7 @@ def download_fw_fallback(fw_signature):
     _, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
     if released_fw_endpoint:
         downloaded_fw = fw_downloader.download_file(fw_downloader.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
-    elif ask_user('No releases for "%s" found.\nPerform downloading fw from latest master (could possibly have bugs)? (Y/N)' % fw_signature):
+    elif ask_user('No releases for "%s" found.\nPerform downloading fw from latest master (could possibly have bugs)?' % fw_signature):
         downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
     else:
         downloaded_fw = None
@@ -178,15 +186,19 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     """
     Retrieving, which passed version actually is
     """
-    if specified_fw_version == 'release':
-        specified_fw_version, _ = get_released_fw(fw_signature, RELEASE_INFO)
-        downloaded_fw = download_fw_fallback(fw_signature)
-    elif specified_fw_version == 'latest':
-        # logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
+    if specified_fw_version == 'release':  # triggered updating from releases
+        downloaded_fw = download_fw_fallback(fw_signature)  # from releases or latest (if confirmed)
+        if not downloaded_fw:
+            die()  # No releases; updating from latest/stable has rejected
+        specified_fw_version, _ = get_released_fw(fw_signature, RELEASE_INFO)  # to compare versions in update-check;  could be None, if no releases
+        specified_fw_version = specified_fw_version or downloader.get_latest_version_number(fw_signature)
+
+    if specified_fw_version == 'latest':
+        logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
         specified_fw_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
 
-    if specified_fw_version is None:  # No latest.txt file
-        die('Could not retrieve specified %s version in branch: %s' % (mode_name, branch_name))
+    if specified_fw_version is None:
+        die('Could not retrieve %s for %s in branch: %s' % (mode_name, fw_signature, branch_name))
 
     downloaded_fw = downloaded_fw or downloader.download(fw_signature, specified_fw_version)
 
@@ -296,7 +308,7 @@ def probe_all_devices(driver_config_fname):
     return alive, in_bootloader, disconnected, too_old_to_update
 
 
-def _update_all(force):
+def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
     if not RELEASE_INFO:
         die('"update-all" mode works only for releases!\nPossible solutions:\n\trun "apt update; apt upgrade" and migrate to releases system\n\tmanually update each device "wb-mcu-fw-updater update-fw -a <Addr> <Port> --version latest"')
 
@@ -311,8 +323,11 @@ def _update_all(force):
         fw_signature = modbus_connection.get_fw_signature()
         _latest_remote_version, _ = get_released_fw(fw_signature, RELEASE_INFO)  # auto-updating only from releases
         if _latest_remote_version is None:
+            logging.info("Update skipped: %s (no releases; local fw version: %s)" % (str(device_info), local_device_version))
             update_was_skipped.append(device_info)
             continue
+        elif _latest_remote_version == 'latest':  # Could be written in release
+            _latest_remote_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
         latest_remote_version = LooseVersion(_latest_remote_version)
         local_device_version = modbus_connection.get_fw_version()
         if latest_remote_version == local_device_version:
