@@ -194,7 +194,12 @@ if __name__ == "__main__":
     atexit.register(update_monitor.resume_driver)
     atexit.register(update_monitor.db.dump)
 
-    update_monitor.RELEASE_INFO = releases.parse_releases()
+    releases_fname = CONFIG['RELEASES_FNAME']
+    try:
+        update_monitor.RELEASE_INFO = releases.parse_releases(releases_fname)
+    except Exception as e:
+        logging.error("Critical error in %s file!\nContact the support!" % releases_fname)
+        raise e
 
     if 'port' in vars(args):
         initial_port_settings = update_monitor.get_port_settings(args.port)

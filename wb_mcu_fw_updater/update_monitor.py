@@ -72,9 +72,6 @@ def get_released_fw(fw_signature, release_info):
 
 
 def download_fw_fallback(fw_signature, release_info):
-    if not release_info:
-        return fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
-
     downloaded_fw = None
     _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
     if released_fw_endpoint:
@@ -311,9 +308,6 @@ def probe_all_devices(driver_config_fname):
 
 
 def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
-    if not RELEASE_INFO:
-        die('"update-all" mode works only for releases!\nPossible solutions:\n\trun "apt update; apt upgrade" and migrate to releases system\n\tmanually update each device "wb-mcu-fw-updater update-fw -a <Addr> <Port> --version latest"')
-
     alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     ok_records = []
     update_was_skipped = [] # Device_info dicts

@@ -9,7 +9,7 @@ from posixpath import join as urljoin
 from . import CONFIG
 
 
-def parse_releases(fname=CONFIG['RELEASES_FNAME']):
+def parse_releases(fname=CONFIG['RELEASES_FNAME']):  # TODO: look at wb-update-manager package
     """
     WirenBoard controllers have releases info, stored in file <CONFIG['RELEASES_FNAME']>
     Releases info file usually contains:
@@ -21,13 +21,10 @@ def parse_releases(fname=CONFIG['RELEASES_FNAME']):
     ret = defaultdict(lambda: None)
 
     logging.debug("Reading %s for releases info" % fname)
-    if os.path.exists(fname):
-        ret.update({k.strip(): v.strip() for k, v in (l.split('=', 1) for l in open(fname))})
+    with open(fname) as fp:
+        ret.update({k.strip(): v.strip() for k, v in (l.split('=', 1) for l in fp)})
         logging.debug("Got releases info:\n%s" % str(ret))
-    else:
-        logging.warning("Releases file %s not found" % fname)
-
-    return ret
+        return ret
 
 
 def get_release_file_urls(release_info, default_releases_file_url=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
