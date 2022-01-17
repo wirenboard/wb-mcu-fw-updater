@@ -28,7 +28,7 @@ def get_request(url_path):
         responce = url_handler.urlopen(url_path)
         return responce
     except (URLError, HTTPError) as e:
-        logging.exception()
+        logging.exception(url_path)
         return None
 
 

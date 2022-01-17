@@ -81,7 +81,7 @@ def recover_fw(args):
                 return
 
         # No fw_signature has provided
-        if update_monitor.ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
+        elif update_monitor.ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
             for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
                 logging.info('Trying %s:' % fw_sig)
                 if _flash_in_bl(fw_sig, args.slaveid, args.port, args.custom_bl_speed):

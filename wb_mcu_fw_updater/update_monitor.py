@@ -71,13 +71,16 @@ def get_released_fw(fw_signature, release_info):
         return None, None
 
 
-def download_fw_fallback(fw_signature, release_info):
+def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
     downloaded_fw = None
     _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
+
     if released_fw_endpoint:
         downloaded_fw = fw_downloader.download_file(fw_downloader.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
-    elif ask_user('No releases for "%s" found.\nPerform downloading fw from latest master (could possibly have bugs)?' % fw_signature):
-        downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
+    else:
+        logging.warning('Device "%s" is not supported in release "%s %s"' % (fw_signature, str(release_info.get('SUITE')), str(release_info.get('RELEASE_NAME'))))
+        if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway?')):
+            downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
     return downloaded_fw
 
 
@@ -164,21 +167,25 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     Flashing specified fw version (without any update-checking), if branch is unstable
     """
     if branch_name:
-        logging.warn("Flashing unstable %s from branch \"%s\" is requested!" % (
-            mode_name,
-            branch_name)
-        )
-        if specified_fw_version == 'release':
-            logging.warning('FW version "%s" is not supported for %s branch\nWill use "latest" instead' % (specified_fw_version, branch_name))
+
+        if specified_fw_version == 'release':  # default fw_version now is 'release'; will flash latest, if branch has specified
             specified_fw_version = 'latest'
 
-        downloaded_fw = downloader.download(fw_signature, specified_fw_version)
+        if ask_user('Flashing device: "%s" branch: "%s" version: "%s" is requested.\nStability cannot be guaranteed! Flash at your own risk?' % (
+            fw_signature,
+            branch_name,
+            specified_fw_version)
+        ):
+            downloaded_fw = downloader.download(fw_signature, specified_fw_version)
+            try:
+                _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
+                return
+            except RuntimeError as e:
+                die(e)
 
-        try:
-            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
-            return
-        except RuntimeError as e:
-            die(e)
+        else:
+            die()  # Flashing has rejected
+
     else:
         branch_name = 'stable'
 
@@ -186,9 +193,9 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     Retrieving, which passed version actually is
     """
     if specified_fw_version == 'release':  # triggered updating from releases
-        downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)  # from releases or latest (if confirmed)
+        downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO, ask_for_latest=False)
         if not downloaded_fw:
-            die()  # No releases; updating from latest/stable has rejected
+            die()  # TODO: check, is fw present in latest release
         specified_fw_version, _ = get_released_fw(fw_signature, RELEASE_INFO)  # to compare versions in update-check;  could be None, if no releases
         specified_fw_version = specified_fw_version or downloader.get_latest_version_number(fw_signature)
 
@@ -319,7 +326,7 @@ def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to pre
         fw_signature = modbus_connection.get_fw_signature()
         _latest_remote_version, _ = get_released_fw(fw_signature, RELEASE_INFO)  # auto-updating only from releases
         if _latest_remote_version is None:
-            logging.info("Update skipped: %s (no releases)" % str(device_info))
+            logging.info("Update skipped: %s (not supported in %s %s)" % (str(device_info), RELEASE_INFO['SUITE'], RELEASE_INFO['RELEASE_NAME']))  # TODO: check, is device supported in latest release or not
             update_was_skipped.append(device_info)
             continue
         elif _latest_remote_version == 'latest':  # Could be written in release
