@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from collections import defaultdict
+from posixpath import join as urljoin
 from . import CONFIG
 
 
@@ -29,7 +30,7 @@ def parse_releases(fname=CONFIG['RELEASES_FNAME']):
     return ret
 
 
-def get_release_file_urls(release_info, default_releases_file_url=CONFIG['FW_RELEASES_FILE_URL']):
+def get_release_file_urls(release_info, default_releases_file_url=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
     """
     Returns a list of remote release-file urls: [with-repo-prefix (if exists), default]
     """

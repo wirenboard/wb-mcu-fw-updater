@@ -38,8 +38,8 @@ CONFIG = {
 
     # fw-releases.wirenboard.com endpoints
     'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
-    'FW_SIGNATURES_FILE_URL' : 'http://fw-releases.wirenboard.com/fw/by-signature/fw_signatures.txt',
-    'FW_RELEASES_FILE_URL' : 'http://fw-releases.wirenboard.com/fw/by-signature/release-versions.yaml',
+    'FW_SIGNATURES_FILE_URI' : 'fw/by-signature/fw_signatures.txt',
+    'FW_RELEASES_FILE_URI' : 'fw/by-signature/release-versions.yaml',
 }
 
 

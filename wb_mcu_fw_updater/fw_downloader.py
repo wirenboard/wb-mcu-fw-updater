@@ -37,12 +37,12 @@ def get_string(url_path, coding='utf-8'):
     return str(ret.read().decode(coding)).strip() if ret else None
 
 
-def get_releases_info(remote_fname=CONFIG['FW_RELEASES_FILE_URL']):
+def get_release_versions(remote_fname=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
     return get_string(remote_fname)
 
 
 def get_fw_signatures_list():
-    ret = get_string(CONFIG['FW_SIGNATURES_FILE_URL'])
+    ret = get_string(urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
     return ret.split('\n') if ret else None
 
 
@@ -67,14 +67,9 @@ def download_file(url_path, saving_dir=None, fname=None):
         logging.error("Fname to save fw was not specified")
         return None
 
-    try:
-        fh = open(file_path, 'wb+')
+    with open(file_path, 'wb+') as fh:
         fh.write(content)
-        fh.close()
         return file_path
-    except OSError as e:
-        logging.exception()
-        return None
 
 
 class RemoteFileWatcher(object):
@@ -145,8 +140,7 @@ class RemoteFileWatcher(object):
 
         if not fpath:
             file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
-            if not os.path.isdir(file_saving_dir):
-                os.mkdir(file_saving_dir)
+            os.makedirs(file_saving_dir, exist_ok=True)
 
         saved_fpath = download_file(url_path, file_saving_dir)
         if saved_fpath:

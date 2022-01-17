@@ -4,11 +4,11 @@
 import logging
 import termios
 import json
+import yaml
 from json.decoder import JSONDecodeError
 import subprocess
 from pprint import pformat
 from distutils.version import LooseVersion
-from yaml import safe_load
 from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, PYTHON2, CONFIG
 
 import wb_modbus  # Setting up module's params
@@ -60,9 +60,9 @@ def get_released_fw(fw_signature, release_info):
     for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
         suite = release_info['SUITE']
         logging.debug("Looking to %s (suite: %s)" % (url, str(suite)))
-        contents = fw_downloader.get_releases_info(url)
+        contents = fw_downloader.get_release_versions(url)
         if contents:
-            fw_endpoint = safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
+            fw_endpoint = yaml.safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
             if fw_endpoint:
                 fw_version = releases.parse_fw_version(fw_endpoint)
                 logging.debug("FW version for %s on release %s: %s\nEndpoint: %s" % (fw_signature, suite, fw_version, fw_endpoint))
