@@ -48,11 +48,7 @@ def get_fw_signatures_list():
 
 def download_file(url_path, saving_dir=None, fname=None):
     ret = get_request(url_path)
-    if ret:
-        content = ret.read()
-    else:
-        logging.error("Could not download from %s" % url_path)
-        return None
+    content = ret.read()
 
     saving_dir = saving_dir or CONFIG['FW_SAVING_DIR']
     if not fname:
@@ -142,13 +138,12 @@ class RemoteFileWatcher(object):
             file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
             os.makedirs(file_saving_dir, exist_ok=True)
 
-        saved_fpath = download_file(url_path, file_saving_dir)
-        if saved_fpath:
-            return saved_fpath
-        else:
-            logging.error('Could not download fw: signature %s, version %s, branch %s' % (
+        try:
+            return download_file(url_path, file_saving_dir)
+        except Exception as e:
+            logging.error('Could not download: signature %s, version %s, branch %s' % (
                 name,
                 version,
                 self.branch_name
             ))
-            return None
+            raise e
