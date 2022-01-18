@@ -79,7 +79,7 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
         downloaded_fw = fw_downloader.download_file(fw_downloader.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
     else:
         logging.warning('Device "%s" is not supported in release "%s %s"' % (fw_signature, str(release_info.get('SUITE')), str(release_info.get('RELEASE_NAME'))))
-        if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway?')):
+        if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway (may cause unstable behaviour; proceed at your own risk)?')):
             downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
     return downloaded_fw
 
@@ -314,7 +314,7 @@ def probe_all_devices(driver_config_fname):
     return alive, in_bootloader, disconnected, too_old_to_update
 
 
-def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
+def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
     alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     ok_records = []
     update_was_skipped = [] # Device_info dicts
@@ -333,6 +333,7 @@ def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to pre
             _latest_remote_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
         latest_remote_version = LooseVersion(_latest_remote_version)
         local_device_version = modbus_connection.get_fw_version()
+
         if latest_remote_version == local_device_version:
             if force:
                 logging.info("%s %s (has already latest fw)" % (user_log.colorize('Force update:', 'YELLOW'), str(device_info)))
@@ -345,8 +346,12 @@ def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to pre
             logging.info("%s %s (from %s to %s)" % (user_log.colorize('Update available:', 'GREEN'), str(device_info), local_device_version, str(latest_remote_version)))
             device_info._set_asdict({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version), 'fw_signature' : fw_signature})
             to_update.append(device_info)
+        elif allow_downgrade:
+            logging.info("%s %s (from %s to %s)" % (user_log.colorize('Downgrade:', 'YELLOW'), str(device_info), local_device_version, str(latest_remote_version)))
+            device_info._set_asdict({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version), 'fw_signature' : fw_signature})
+            to_update.append(device_info)
         else:
-            logging.error("Remote fw version (%s) is less than local on %s (%s)" % (str(latest_remote_version), str(device_info), local_device_version))
+            logging.error('Remote fw version (%s) is less than local on %s (%s)\nStability cannot be guaranteed! Try to launch with "--allow-downgrade" arg' % (str(latest_remote_version), str(device_info), local_device_version))
             update_was_skipped.append(device_info)
 
     if to_update:  # Devices, were alive and supported fw_updates
@@ -369,8 +374,8 @@ def _update_all(force):  # TODO: maybe store fw endpoint in device_info? (to pre
             else:
                 ok_records.append(device_info)
 
-    if update_was_skipped:
-        logging.warning('The following devices have already the most recent firmware.\nRun "wb-mcu-fw-updater update-all -f" to force update:\n\t%s' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
+    if update_was_skipped:  # TODO: maybe split by reasons?
+        logging.warning('The following devices were not updated:\n\t%s\nYou may try to:\n\trun with "-f" arg to force reflash devices\n\trun with "--allow-downgrade" arg to flash devices to released FWs\n\tswitch to newer release to get support of new devices' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
         logging.warning('No answer from the following devices:\n\t%s\nDevices are possibly disconnected.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
