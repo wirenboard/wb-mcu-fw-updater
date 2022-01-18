@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
 import logging
 import termios
 import json
@@ -55,9 +54,10 @@ def fill_release_info():  # TODO: make a class, storing a release-info context
     wb-mcu-fw-updater supposed to be launched only on devices, supporting wb-releases
     incorrect wb-releases file indicates strange erroneous behavior
     """
+    global RELEASE_INFO
     releases_fname = CONFIG['RELEASES_FNAME']
     try:
-        sys.modules[__name__].RELEASE_INFO = releases.parse_releases(releases_fname)  # instead of global
+        RELEASE_INFO = releases.parse_releases(releases_fname)
     except Exception as e:
         logging.error("Critical error in %s file!\nContact the support!" % releases_fname)
         raise
