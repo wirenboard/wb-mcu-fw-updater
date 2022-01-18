@@ -3,7 +3,7 @@
 
 import logging
 import os
-from posixpath import join as urljoin
+from posixpath import join as urljoin  # py2/3 compatibility
 from . import PYTHON2, CONFIG, die
 
 if PYTHON2:
@@ -146,4 +146,4 @@ class RemoteFileWatcher(object):
                 version,
                 self.branch_name
             ))
-            raise e
+            raise

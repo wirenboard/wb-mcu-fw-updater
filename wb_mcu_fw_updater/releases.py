@@ -5,7 +5,7 @@ import logging
 import os
 import re
 from collections import defaultdict
-from posixpath import join as urljoin
+from posixpath import join as urljoin  # py2/3 compatibility
 from . import CONFIG
 
 
