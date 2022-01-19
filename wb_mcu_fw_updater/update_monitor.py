@@ -82,6 +82,9 @@ def get_devices_on_driver(driver_config_fname):
                 if device_name.startswith('WBIO-'):
                     logging.debug("Has found WBIO device: %s" % device_name)
                     device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
+                if device_name.startswith('Dooya '):
+                    logging.debug('Dooya device found, skipping')
+                    continue                    
                 devices_on_port.add((device_name, int(slaveid)))
             if devices_on_port:
                 found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port}})
