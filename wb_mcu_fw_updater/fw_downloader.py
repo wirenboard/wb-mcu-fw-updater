@@ -3,6 +3,7 @@
 
 import logging
 import os
+import errno
 from posixpath import join as urljoin  # py2/3 compatibility
 from . import PYTHON2, CONFIG, die
 
@@ -136,8 +137,11 @@ class RemoteFileWatcher(object):
 
         if not fpath:
             file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
-            os.makedirs(file_saving_dir, exist_ok=True)
-
+            try:
+                os.makedirs(file_saving_dir)  # py2 has not exist_ok param
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
         try:
             return download_file(url_path, file_saving_dir)
         except Exception as e:

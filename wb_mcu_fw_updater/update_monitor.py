@@ -5,7 +5,6 @@ import logging
 import termios
 import json
 import yaml
-from json.decoder import JSONDecodeError
 import subprocess
 from pprint import pformat
 from distutils.version import LooseVersion
@@ -21,7 +20,9 @@ from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
 
 if PYTHON2:
     input_func = raw_input
+    JSONDecodeError = ValueError  # py2 raises ValueError instead of JSONDecodeError
 else:
+    from json.decoder import JSONDecodeError
     input_func = input
 
 
