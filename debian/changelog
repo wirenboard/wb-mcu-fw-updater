@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.1.0) stable; urgency=medium
+
+  * added fw releases support: trying to guess target fw version from releases, when updating fw
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 12 Jan 2022 15:55:29 +0300
+
 wb-mcu-fw-updater (1.0.10) stable; urgency=medium
 
   * trying to read fw_signature from bootloader in all recover cases

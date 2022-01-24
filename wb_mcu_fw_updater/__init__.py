@@ -23,8 +23,6 @@ CONFIG = {
     'SERIAL_DRIVER_PROCESS_NAME' : 'wb-mqtt-serial',
     'SERIAL_DRIVER_CONFIG_FNAME' : '/etc/wb-mqtt-serial.conf',
     'FLASHER_EXEC_NAME' : 'wb-mcu-fw-flasher',
-    'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
-    'FW_SIGNATURES_FILE_URL' : 'http://fw-releases.wirenboard.com/fw/by-signature/fw_signatures.txt',
     'FW_SAVING_DIR' : '/var/lib/wb-mcu-fw-updater/',
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',
@@ -35,7 +33,13 @@ CONFIG = {
     'SYSLOG_LOGLEVEL' : 10,
     'USER_LOGLEVEL' : 30,
     'MAX_DB_RECORDS' : 100,
-    'DB_FILE_LOCATION' : '/var/lib/wb-mcu-fw-updater/devices.jsondb'
+    'DB_FILE_LOCATION' : '/var/lib/wb-mcu-fw-updater/devices.jsondb',
+    'RELEASES_FNAME' : '/usr/lib/wb-release',
+
+    # fw-releases.wirenboard.com endpoints
+    'ROOT_URL' : 'http://fw-releases.wirenboard.com/',
+    'FW_SIGNATURES_FILE_URI' : 'fw/by-signature/fw_signatures.txt',
+    'FW_RELEASES_FILE_URI' : 'fw/by-signature/release-versions.yaml',
 }
 
 

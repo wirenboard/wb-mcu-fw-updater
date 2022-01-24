@@ -3,7 +3,8 @@
 
 import logging
 import os
-from posixpath import join as urljoin
+import errno
+from posixpath import join as urljoin  # py2/3 compatibility
 from . import PYTHON2, CONFIG, die
 
 if PYTHON2:
@@ -14,7 +15,7 @@ else:
     from urllib.error import HTTPError, URLError
 
 
-def get_request_content(url_path):
+def get_request(url_path):
     """
     Sending GET request to url; returning responce's content.
 
@@ -24,18 +25,48 @@ def get_request_content(url_path):
     :rtype: bytestring
     """
     logging.debug('Looking to: %s' % url_path)
-    responce = url_handler.urlopen(url_path)
-    ret = responce.read()
-    return ret
+    try:
+        responce = url_handler.urlopen(url_path)
+        return responce
+    except (URLError, HTTPError) as e:
+        logging.exception(url_path)
+        return None
+
+
+def get_string(url_path, coding='utf-8'):
+    ret = get_request(url_path)
+    return str(ret.read().decode(coding)).strip() if ret else None
+
+
+def get_release_versions(remote_fname=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
+    return get_string(remote_fname)
 
 
 def get_fw_signatures_list():
-    try:
-        contents = get_request_content(CONFIG['FW_SIGNATURES_FILE_URL']).decode('utf-8')
-        return str(contents).strip().split('\n')
-    except (URLError, HTTPError) as e:
-        logging.exception(e)
+    ret = get_string(urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
+    return ret.split('\n') if ret else None
+
+
+def download_file(url_path, saving_dir=None, fname=None):
+    ret = get_request(url_path)
+    content = ret.read()
+
+    saving_dir = saving_dir or CONFIG['FW_SAVING_DIR']
+    if not fname:
+        logging.debug("Trying to get fname from content-disposition")
+        default_fname = ret.info().get('Content-Disposition')
+        fname = default_fname.split('filename=')[1].strip('"\'') if default_fname else None
+        logging.debug("Got fname from content-disposition: %s" % str(fname))
+    if fname:
+        file_path = os.path.join(saving_dir, fname)
+        logging.debug("Downloading to %s" % file_path)
+    else:
+        logging.error("Fname to save fw was not specified")
         return None
+
+    with open(file_path, 'wb+') as fh:
+        fh.write(content)
+        return file_path
 
 
 class RemoteFileWatcher(object):
@@ -86,14 +117,9 @@ class RemoteFileWatcher(object):
         :rtype: str
         """
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
-        try:
-            content = get_request_content(url_path).decode('utf-8')
-            return str(content).strip()
-        except HTTPError as e:
-            logging.error("Not Found: %s" % url_path)
-            return None
+        return get_string(url_path)
 
-    def download(self, name, version='latest', fname=None):
+    def download(self, name, version='latest', fpath=None):
         """
         Downloading a firmware/bootloader file with specified version to specified fname.
 
@@ -108,30 +134,20 @@ class RemoteFileWatcher(object):
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
+
+        if not fpath:
+            file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
+            try:
+                os.makedirs(file_saving_dir)  # py2 has not exist_ok param
+            except OSError as e:
+                if e.errno != errno.EEXIST:
+                    raise
         try:
-            content = get_request_content(url_path)
-        except HTTPError as e:
-            logging.error('Could not find the firmware: signature %s, version %s, branch %s' % (
+            return download_file(url_path, file_saving_dir)
+        except Exception as e:
+            logging.error('Could not download: signature %s, version %s, branch %s' % (
                 name,
                 version,
                 self.branch_name
             ))
-            logging.exception(e)
-            return None
-        file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
-        if not fname:
-            if not os.path.isdir(file_saving_dir):
-                os.mkdir(file_saving_dir)
-            fname = '%s_%s_%s' % (name, self.branch_name, fw_ver)
-            fpath = os.path.join(file_saving_dir, fname)
-        else:
-            fpath = fname
-        logging.debug('Downloading to: %s' % fpath)
-        try:
-            fh = open(fpath, 'wb+')
-            fh.write(content)
-            fh.close()
-        except PermissionError as e:
-            logging.exception(e)
-            return None
-        return fpath
+            raise

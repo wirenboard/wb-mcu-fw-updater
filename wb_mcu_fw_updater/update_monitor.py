@@ -4,11 +4,12 @@
 import logging
 import termios
 import json
-from json.decoder import JSONDecodeError
+import yaml
 import subprocess
 from pprint import pformat
 from distutils.version import LooseVersion
-from . import fw_flasher, fw_downloader, user_log, jsondb, die, PYTHON2, CONFIG
+from posixpath import join as urljoin  # py2/3 compatibility
+from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, PYTHON2, CONFIG
 
 import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
@@ -19,7 +20,9 @@ from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
 
 if PYTHON2:
     input_func = raw_input
+    JSONDecodeError = ValueError  # py2 raises ValueError instead of JSONDecodeError
 else:
+    from json.decoder import JSONDecodeError
     input_func = input
 
 
@@ -28,6 +31,9 @@ db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
 
 ModbusError = minimalmodbus.ModbusException
 TooOldDeviceError = bindings.TooOldDeviceError
+
+
+RELEASE_INFO = None
 
 
 def ask_user(message):
@@ -42,6 +48,56 @@ def ask_user(message):
     message_str = '\n*** %s [Y/N] *** ' % (message)
     ret = input_func(user_log.colorize(message_str, 'YELLOW'))
     return ret.upper().startswith('Y')
+
+
+def fill_release_info():  # TODO: make a class, storing a release-info context
+    """
+    wb-mcu-fw-updater supposed to be launched only on devices, supporting wb-releases
+    incorrect wb-releases file indicates strange erroneous behavior
+    """
+    global RELEASE_INFO
+    releases_fname = CONFIG['RELEASES_FNAME']
+    try:
+        RELEASE_INFO = releases.parse_releases(releases_fname)
+    except Exception as e:
+        logging.error("Critical error in %s file!\nContact the support!" % releases_fname)
+        raise
+
+
+def get_released_fw(fw_signature, release_info):
+    """
+    Looking for released-fw:
+        version
+        url on fw-releases
+    By:
+        fw_signature
+        release suite
+    """
+    for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
+        suite = release_info['SUITE']
+        logging.debug("Looking to %s (suite: %s)" % (url, str(suite)))
+        contents = fw_downloader.get_release_versions(url)
+        if contents:
+            fw_endpoint = yaml.safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
+            if fw_endpoint:
+                fw_version = releases.parse_fw_version(fw_endpoint)
+                logging.debug("FW version for %s on release %s: %s\nEndpoint: %s" % (fw_signature, suite, fw_version, fw_endpoint))
+                return fw_version, fw_endpoint
+    else:
+        return None, None
+
+
+def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
+    downloaded_fw = None
+    _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
+
+    if released_fw_endpoint:
+        downloaded_fw = fw_downloader.download_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+    else:
+        logging.warning('Device "%s" is not supported in %s (as %s)' % (fw_signature, str(release_info.get('RELEASE_NAME')), str(release_info.get('SUITE'))))
+        if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway (may cause unstable behaviour; proceed at your own risk)?')):
+            downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
+    return downloaded_fw
 
 
 def get_correct_modbus_connection(slaveid, port):
@@ -92,10 +148,11 @@ def get_devices_on_driver(driver_config_fname):
 
 
 def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0, custom_bl_speed=None):
-    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
-    fw_version = 'latest'
-    downloaded_fw = downloader.download(fw_signature, fw_version)
-    if downloaded_fw is None:
+    """
+    A device supposed to be in "dead" state => fw_signature, slaveid, port have passed instead of modbus_connection
+    """
+    downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
+    if not downloaded_fw:
         raise RuntimeError('FW file was not downloaded!')
     flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout, custom_bl_speed=custom_bl_speed)
 
@@ -120,30 +177,52 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
     mode_name = 'firmware' if mode == 'fw' else 'bootloader'
 
+    downloaded_fw = None
+
     """
     Flashing specified fw version (without any update-checking), if branch is unstable
     """
     if branch_name:
-        logging.warn("Flashing unstable %s from branch \"%s\" is requested!" % (
-            mode_name,
-            branch_name)
-        )
-        try:
-            _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
-            return
-        except RuntimeError as e:
-            die(e)
+
+        if specified_fw_version == 'release':  # default fw_version now is 'release'; will flash latest, if branch has specified
+            specified_fw_version = 'latest'
+
+        if ask_user('Flashing device: "%s" branch: "%s" version: "%s" is requested.\nStability cannot be guaranteed! Flash at your own risk?' % (
+            fw_signature,
+            branch_name,
+            specified_fw_version)
+        ):
+            downloaded_fw = downloader.download(fw_signature, specified_fw_version)
+            try:
+                _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
+                return
+            except RuntimeError as e:
+                die(e)
+
+        else:
+            die()  # Flashing has rejected
+
     else:
         branch_name = 'stable'
 
     """
-    Retrieving, which <latest> version actually is
+    Retrieving, which passed version actually is
     """
+    if specified_fw_version == 'release':  # triggered updating from releases
+        downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO, ask_for_latest=False)
+        if not downloaded_fw:
+            die()  # TODO: check, is fw present in latest release
+        specified_fw_version, _ = get_released_fw(fw_signature, RELEASE_INFO)  # to compare versions in update-check;  could be None, if no releases
+        specified_fw_version = specified_fw_version or downloader.get_latest_version_number(fw_signature)
+
     if specified_fw_version == 'latest':
         logging.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
-        specified_fw_version = downloader.get_latest_version_number(fw_signature)
-        if specified_fw_version is None:  # No latest.txt file
-            die('Could not retrieve latest %s version in branch: %s' % (mode_name, branch_name))
+        specified_fw_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
+
+    if specified_fw_version is None:
+        die('Could not retrieve %s for %s in branch: %s' % (mode_name, fw_signature, branch_name))
+
+    downloaded_fw = downloaded_fw or downloader.download(fw_signature, specified_fw_version)
 
     """
     Reflashing with update-checking
@@ -153,19 +232,19 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     try:
         if passed_fw_version == device_fw_version:
             if force:
-                _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+                _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
                 logging.info('Successfully reflashed %s (%s)' % (mode_name, device_fw_version))
             else:
-                logging.warning('%s is already the newest version (%s), will not update. Use -f to force.' % (mode_name.capitalize(), device_fw_version,))
+                logging.warning('%s is already the newest version (%s), will not update. Use -f to force.' % (mode_name.capitalize(), device_fw_version))
             return
         elif passed_fw_version < device_fw_version:
             logging.warning('%s will be downgraded! Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
-            _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
             logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
             return
         elif passed_fw_version > device_fw_version:
             logging.info('%s will be upgraded. Will flash (%s) over (%s).' % (mode_name.capitalize(), str(passed_fw_version), device_fw_version))
-            _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings)
+            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
             logging.info('Successfully flashed %s (%s) over (%s)' % (mode_name, passed_fw_version, device_fw_version))
             return
         else:
@@ -174,18 +253,19 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         die(e)
 
 
-def _do_flash(downloader, modbus_connection, mode, fw_signature, specified_fw_version, erase_settings):
-    logging.debug('Flashing approved for %s : %d' % (modbus_connection.port, modbus_connection.slaveid))
-    fw_file = downloader.download(fw_signature, specified_fw_version)
-    if fw_file is None:
+def _do_flash(modbus_connection, fw_fpath, mode, erase_settings):
+    fw_signature = modbus_connection.get_fw_signature()
+    logging.debug('Flashing approved for "%s" (%s : %d)' % (fw_signature, modbus_connection.port, modbus_connection.slaveid))
+    if fw_fpath is None:
         raise RuntimeError("%s file was not downloaded!" % mode)
     modbus_connection.reboot_to_bootloader()
-    flash_in_bootloader(fw_file, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+    flash_in_bootloader(fw_fpath, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+
     if mode == 'bootloader':
-        logging.info("Bootloader was successfully flashed. Will flash the latest stable firmware.")
-        downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
+        logging.info('Bootloader was successfully flashed. Will flash released firmware for "%s"' % fw_signature)
+        downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
         if downloaded_fw is None:
-            raise RuntimeError("fw file was not downloaded!")
+            raise RuntimeError('Fw file was not downloaded!\nTry to launch with "recover" mode')
         flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
@@ -250,7 +330,7 @@ def probe_all_devices(driver_config_fname):
     return alive, in_bootloader, disconnected, too_old_to_update
 
 
-def _update_all(force):
+def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
     alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
     ok_records = []
     update_was_skipped = [] # Device_info dicts
@@ -260,12 +340,16 @@ def _update_all(force):
         slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
         modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
         fw_signature = modbus_connection.get_fw_signature()
-        _latest_remote_version = downloader.get_latest_version_number(fw_signature)
+        _latest_remote_version, _ = get_released_fw(fw_signature, RELEASE_INFO)  # auto-updating only from releases
         if _latest_remote_version is None:
+            logging.info("Update skipped: %s (not supported in %s %s)" % (str(device_info), RELEASE_INFO['SUITE'], RELEASE_INFO['RELEASE_NAME']))  # TODO: check, is device supported in latest release or not
             update_was_skipped.append(device_info)
             continue
+        elif _latest_remote_version == 'latest':  # Could be written in release
+            _latest_remote_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
         latest_remote_version = LooseVersion(_latest_remote_version)
         local_device_version = modbus_connection.get_fw_version()
+
         if latest_remote_version == local_device_version:
             if force:
                 logging.info("%s %s (has already latest fw)" % (user_log.colorize('Force update:', 'YELLOW'), str(device_info)))
@@ -278,16 +362,22 @@ def _update_all(force):
             logging.info("%s %s (from %s to %s)" % (user_log.colorize('Update available:', 'GREEN'), str(device_info), local_device_version, str(latest_remote_version)))
             device_info._set_asdict({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version), 'fw_signature' : fw_signature})
             to_update.append(device_info)
+        elif allow_downgrade:
+            logging.info("%s %s (from %s to %s)" % (user_log.colorize('Downgrade:', 'YELLOW'), str(device_info), local_device_version, str(latest_remote_version)))
+            device_info._set_asdict({'mb_client' : modbus_connection, 'latest_remote_fw' : str(latest_remote_version), 'fw_signature' : fw_signature})
+            to_update.append(device_info)
         else:
-            logging.error("Remote fw version (%s) is less than local on %s (%s)" % (str(latest_remote_version), str(device_info), local_device_version))
+            logging.error('Remote fw version (%s) is less than local on %s (%s)\nStability cannot be guaranteed! Try to launch with "--allow-downgrade" arg' % (str(latest_remote_version), str(device_info), local_device_version))
             update_was_skipped.append(device_info)
 
     if to_update:  # Devices, were alive and supported fw_updates
         for device_info in to_update:
             name, slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('name', 'slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
             logging.info('Flashing firmware to %s' % str(device_info))
+            _, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
+            downloaded_file = fw_downloader.download_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
             try:
-                _do_flash(downloader, mb_client, 'fw', fw_signature, latest_remote_fw, False)
+                _do_flash(mb_client, downloaded_file, 'fw', False)
             except subprocess.CalledProcessError as e:
                 logging.exception(e)
                 in_bootloader.append(device_info)
@@ -300,8 +390,8 @@ def _update_all(force):
             else:
                 ok_records.append(device_info)
 
-    if update_was_skipped:
-        logging.warning('The following devices have already the most recent firmware.\nRun "wb-mcu-fw-updater update-all -f" to force update:\n\t%s' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
+    if update_was_skipped:  # TODO: maybe split by reasons?
+        logging.warning('The following devices were not updated:\n\t%s\nYou may try to:\n\trun with "-f" arg to force reflash devices\n\trun with "--allow-downgrade" arg to flash devices to released FWs\n\tswitch to newer release to get support of new devices' % '\n\t'.join([str(device_info) for device_info in update_was_skipped]))
 
     if dummy_records:
         logging.warning('No answer from the following devices:\n\t%s\nDevices are possibly disconnected.' % '\n\t'.join([str(device_info) for device_info in dummy_records]))
@@ -340,7 +430,6 @@ def _recover_all():
     recover_was_skipped = []
     to_recover = []
     ok_records = []
-    downloader = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='')
     for device_info in in_bootloader:
         slaveid, port, name = device_info.get_multiple_props('slaveid', 'port', 'name')
         fw_signature = _restore_fw_signature(slaveid, port)
