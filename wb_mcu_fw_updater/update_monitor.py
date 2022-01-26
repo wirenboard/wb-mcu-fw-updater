@@ -203,7 +203,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             die()  # Flashing has rejected
 
     else:
-        branch_name = 'stable'
+        branch_name = CONFIG['DEFAULT_SOURCE']
 
     """
     Retrieving, which passed version actually is

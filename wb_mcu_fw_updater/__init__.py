@@ -26,7 +26,7 @@ CONFIG = {
     'FW_SAVING_DIR' : '/var/lib/wb-mcu-fw-updater/',
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',
-    'DEFAULT_SOURCE' : 'stable',
+    'DEFAULT_SOURCE' : 'main',
     'USERLOG_MESSAGE_FMT' : '%(asctime)s %(message)s',
     'SYSLOG_MESSAGE_FMT' : 'wb-mcu-fw-updater:%(module)s.%(funcName)s[%(process)s]: %(message)s',
     'LOG_DATETIME_FMT' : '%Y-%m-%d|%H:%M:%S',
