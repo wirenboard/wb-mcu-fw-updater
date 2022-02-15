@@ -186,7 +186,7 @@ def parse_args():
         die('No action has chosen!')
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # tmp pr
     args = parse_args()
 
     user_log.setup_syslog_logger()
