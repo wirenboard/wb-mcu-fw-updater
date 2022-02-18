@@ -2,7 +2,7 @@
 A command-line tool, updating WirenBoard modbus devices to latest firmwares. Versions 1.x.x flashes devices via wb-mcu-fw-flasher binary.
 
 ### Python packages inside:
-* wb_mcu_fw_updater - downloading firmwares from remote server; flashing firmwares via wb-mcu-fw-flasher binary; handling generic update logic.
+* wb-mcu_fw_updater - downloading firmwares from remote server; flashing firmwares via wb-mcu-fw-flasher binary; handling generic update logic.
 * wb_modbus - safe & configurable wrappers around minimalmodbus; common (for Wiren Board devices) modbus bindings.
 
 ## Debian packages:
