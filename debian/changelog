@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.1.2) stable; urgency=medium
+
+  * bumped version in tmp pr
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 25 Feb 2022 03:30:12 +0300
+
 wb-mcu-fw-updater (1.1.1) stable; urgency=medium
 
   * changed default stable-fw source: from "stable" to "main"
