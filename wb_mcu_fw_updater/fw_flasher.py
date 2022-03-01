@@ -6,7 +6,6 @@ import sys
 import subprocess
 import logging
 from tqdm import tqdm
-from distutils.spawn import find_executable
 from wb_modbus import minimalmodbus, bindings
 from . import die, CONFIG, PYTHON2
 
