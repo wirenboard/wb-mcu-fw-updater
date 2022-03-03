@@ -468,6 +468,16 @@ def _recover_all():
     ))
 
 
+def _print_all():
+    alive, in_bootloader, dummy_records, too_old_devices = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+    for device_info in alive:
+        slaveid, port, name, uart_settings = device_info.get_multiple_props('slaveid', 'port', 'name', 'uart_settings')
+        modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, *uart_settings)
+        fw_signature = modbus_connection.get_fw_signature()
+        local_device_version = modbus_connection.get_fw_version()
+        logging.info("Device %s fw %s" % (str(device_info), local_device_version))
+
+
 def _send_signal_to_driver(signal):
     """
     Use pausing/resuming of process, found by name (instead of killing/starting)
