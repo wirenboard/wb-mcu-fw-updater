@@ -167,6 +167,31 @@ def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, resp
     flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout, custom_bl_speed)
 
 
+def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_only=False):
+    """
+    Performing operations in bootloader (device is already into):
+        flashing .wbfw
+        erasing all settings or uart-only (with additional confirmation)
+    TODO: replace flash_in_bootloader func
+    """
+    def _ensure(message_str):
+        if ask_user(message_str):
+            return True
+        else:
+            die("Reset of Device's settings was requested, but rejected after")
+
+    default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
+
+    flasher = fw_flasher.ModbusInBlFlasher(slaveid, port)
+
+    if (erase_uart_only and _ensure(default_msg)):
+        flasher.reset_uart()
+    if (erase_all_settings and _ensure(default_msg + " (it will erase ALL device's settings)")):
+        flasher.reset_eeprom()
+
+    flasher.flash_in_bl(fw_fpath)
+
+
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
     """
     Checking for update, if branch is stable;
