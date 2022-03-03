@@ -5,8 +5,10 @@ import argparse
 import logging
 import atexit
 from subprocess import CalledProcessError
-from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, CONFIG
+from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, fw_flasher, CONFIG
 from wb_modbus.bindings import WBModbusDeviceBase
+from wb_modbus.minimalmodbus import ModbusException
+from wb_modbus import parse_uart_settings_str
 
 
 def update_fw(args):
@@ -106,6 +108,37 @@ def recover_all(args):
     update_monitor._recover_all()
 
 
+def flash_fw_file(args):
+    """
+    Directly flashing a fw-file (passed as arg) (args are almost compatible to wb-mcu-fw-flasher)
+    """
+    def _print_device():
+        return "%s %d %s" % (args.port, args.slaveid, str(args.uart_params))
+
+    if args.jump_in_bl:
+        _device = WBModbusDeviceBase(args.slaveid, args.port, *args.uart_params)
+        try:
+            _device.reboot_to_bootloader()
+        except ModbusException as e:
+            die("No connection to alive (?) device (%s)" % _print_device())
+
+    try:
+        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.erase_all, args.erase_uart)
+    except fw_flasher.NotInBootloaderError as e:
+        die("Seems, device (%s) is not in bootloader now!\nTry again with '-j' arg" % _print_device())
+    except fw_flasher.FlashingError as e:
+        logging.error("Unsuccessful flashing!\n\tDevice: %s\n\tFW: %s" % (_print_device(), args.fname))
+        die(e)
+
+
+def parse_uart_params_arg(uart_params_str):
+    try:
+        return parse_uart_settings_str(uart_params_str)
+    except Exception as e:
+        logging.error(e)
+        die()
+
+
 def parse_args():
     main_parser = argparse.ArgumentParser(prog='wb-mcu-fw-updater', formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                           description='Wiren Board modbus devices firmware/bootloader update tool.', add_help=True)
@@ -176,6 +209,24 @@ def parse_args():
     recover_all_parser = subparsers.add_parser(
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.set_defaults(func=recover_all)
+
+    direct_flash_parser = subparsers.add_parser(
+        'flash-file', help="Directly flash firmware file")
+    direct_flash_parser.add_argument(
+        "port", type=str, metavar='<port>', help='Serial port, device connected to.')
+    direct_flash_parser.add_argument(
+        '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device.')
+    direct_flash_parser.add_argument(
+        '--uart-params', type=parse_uart_params_arg, dest='uart_params', metavar='<uart_params_str>', default='9600N2', help='uart settings (Default: %(default)s)')
+    direct_flash_parser.add_argument(
+        '-j', action='store_true', dest='jump_in_bl', default=False, help='Jump to bootloader? (use on alive devices; default: %(default)s)')
+    direct_flash_parser.add_argument(
+        '-u', '--erase-uart', action='store_true', dest='erase_uart', default=False, help="Erase device's uart settings? (Default: %(default)s)")
+    direct_flash_parser.add_argument(
+        '-e', '--erase-all', action='store_true', dest='erase_all', default=False, help="Erase ALL device's uart settings? (Default: %(default)s)")
+    direct_flash_parser.add_argument(
+        '-f', type=str, dest='fname', metavar='<firmware_file>', required=True, help='File to flash.')
+    direct_flash_parser.set_defaults(func=flash_fw_file)
 
     args = main_parser.parse_args()
     if 'func' in vars(args):

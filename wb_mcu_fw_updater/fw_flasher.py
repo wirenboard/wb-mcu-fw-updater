@@ -7,7 +7,7 @@ import subprocess
 import logging
 import progressbar
 from distutils.spawn import find_executable
-from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
+from wb_modbus import minimalmodbus, bindings
 from . import die, CONFIG, PYTHON2
 
 
@@ -42,8 +42,8 @@ class ModbusInBlFlasher(object):
 
     _SERIAL_TIMEOUT = 2.0
 
-    def __init__(self, addr, port, uart_params_str='9600N2'):
-        self.instrument = bindings.WBModbusDeviceBase(addr, port, *parse_uart_settings_str(uart_params_str))
+    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2):
+        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits)
         self.instrument.device.serial.timeout = self._SERIAL_TIMEOUT
 
     def _read_to_u16s(self, fw_fpath):
