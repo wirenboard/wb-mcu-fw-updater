@@ -7,7 +7,7 @@ from binascii import unhexlify
 from copy import deepcopy
 from itertools import product
 from functools import wraps
-from . import minimalmodbus, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER
+from . import minimalmodbus, instruments, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER
 
 
 class TooOldDeviceError(minimalmodbus.ModbusException):
@@ -73,7 +73,7 @@ class MinimalModbusAPIWrapper(object):
     Allows changing serial connection settings on-the-fly;
     Redirects minimalmodbus's debug messages to logging.
     """
-    def __init__(self, addr, port, baudrate, parity, stopbits, instrument=minimalmodbus.Instrument):
+    def __init__(self, addr, port, baudrate, parity, stopbits, instrument=instruments.PyserialBackendInstrument):
         minimalmodbus._print_out = _debug_info
         self.device = instrument(port, addr, debug=DEBUG, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL)
         self.slaveid = addr
@@ -469,7 +469,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     SERIAL_TIMEOUT = 0.1
 
-    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, instrument=minimalmodbus.Instrument):
+    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, instrument=instruments.PyserialBackendInstrument):
         super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument)
         self.device.serial.timeout = self.SERIAL_TIMEOUT
         self.instrument = instrument
