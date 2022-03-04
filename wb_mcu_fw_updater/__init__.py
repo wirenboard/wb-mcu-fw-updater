@@ -22,7 +22,6 @@ CONFIG = {
     'MODBUS_DEBUG' : True,
     'SERIAL_DRIVER_PROCESS_NAME' : 'wb-mqtt-serial',
     'SERIAL_DRIVER_CONFIG_FNAME' : '/etc/wb-mqtt-serial.conf',
-    'FLASHER_EXEC_NAME' : 'wb-mcu-fw-flasher',
     'FW_SAVING_DIR' : '/var/lib/wb-mcu-fw-updater/',
     'FW_EXTENSION' : '.wbfw',
     'LATEST_FW_VERSION_FILE' : 'latest.txt',

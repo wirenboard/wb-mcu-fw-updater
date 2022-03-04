@@ -147,24 +147,14 @@ def get_devices_on_driver(driver_config_fname):
         die('No devices has found in %s' % driver_config_fname)
 
 
-def recover_device_iteration(fw_signature, slaveid, port, response_timeout=2.0, custom_bl_speed=None):
+def recover_device_iteration(fw_signature, slaveid, port):
     """
     A device supposed to be in "dead" state => fw_signature, slaveid, port have passed instead of modbus_connection
     """
     downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
     if not downloaded_fw:
         raise RuntimeError('FW file was not downloaded!')
-    flash_in_bootloader(downloaded_fw, slaveid, port, erase_settings=False, response_timeout=response_timeout, custom_bl_speed=custom_bl_speed)
-
-
-def flash_in_bootloader(downloaded_fw_fpath, slaveid, port, erase_settings, response_timeout=2.0, custom_bl_speed=None):
-    if erase_settings:
-        if ask_user('All settings will be reset to defaults (1, 9600-8-N-2). Are you sure?'):
-            pass
-        else:
-            die('Reset of settings was rejected')
-    flasher = fw_flasher.WBFWFlasher(port)
-    flasher.flash(slaveid, downloaded_fw_fpath, erase_settings, response_timeout, custom_bl_speed)
+    direct_flash(downloaded_fw, slaveid, port)
 
 
 def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_only=False):
@@ -172,7 +162,6 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
     Performing operations in bootloader (device is already into):
         flashing .wbfw
         erasing all settings or uart-only (with additional confirmation)
-    TODO: replace flash_in_bootloader func
     """
     def _ensure(message_str):
         if ask_user(message_str):
@@ -284,14 +273,14 @@ def _do_flash(modbus_connection, fw_fpath, mode, erase_settings):
     if fw_fpath is None:
         raise RuntimeError("%s file was not downloaded!" % mode)
     modbus_connection.reboot_to_bootloader()
-    flash_in_bootloader(fw_fpath, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+    direct_flash(fw_fpath, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
     if mode == 'bootloader':
         logging.info('Bootloader was successfully flashed. Will flash released firmware for "%s"' % fw_signature)
         downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
         if downloaded_fw is None:
             raise RuntimeError('Fw file was not downloaded!\nTry to launch with "recover" mode')
-        flash_in_bootloader(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+        direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
 
 
 class DeviceInfo(object):
@@ -472,7 +461,7 @@ def _recover_all():
             fw_signature, slaveid, port = device_info.get_multiple_props('fw_signature', 'slaveid', 'port')
             try:
                 recover_device_iteration(fw_signature, slaveid, port)
-            except (subprocess.CalledProcessError, RuntimeError) as e:
+            except (fw_flasher.FlashingError, RuntimeError) as e:
                 logging.exception(e)
                 recover_was_skipped.append(device_info)
             else:

@@ -9,12 +9,12 @@ X-Python-Version: >= 2.7
 
 Package: python-wb-mcu-fw-updater
 Architecture: all
-Depends: ${python:Depends}, ${misc:Depends}, python-serial, python-yaml, python-progressbar, wb-mcu-fw-flasher (>= 1.0.7)
+Depends: ${python:Depends}, ${misc:Depends}, python-serial, python-yaml, python-progressbar
 Description: Wiren Board modbus devices firmware update and modbus bindings python libraries (python 2)
 
 Package: python3-wb-mcu-fw-updater
 Architecture: all
-Depends: python3, ${misc:Depends}, python3-serial, python3-yaml, python3-progressbar, wb-mcu-fw-flasher (>= 1.0.7)
+Depends: python3, ${misc:Depends}, python3-serial, python3-yaml, python3-progressbar
 Description: Wiren Board modbus devices firmware update and modbus bindings python libraries (python 3)
 
 Package: wb-mcu-fw-updater

@@ -78,7 +78,7 @@ class ModbusInBlFlasher(object):
         except Exception as e:
             raise FlashingError(e)
 
-    def _send_data(self, regs_row, fname=''):
+    def _send_data(self, regs_row):
         """
         Writing DATA block as u16 regs (split into fixed length chunks)
         """
@@ -86,7 +86,7 @@ class ModbusInBlFlasher(object):
         chunks = [regs_row[i:i+chunk_size] for i in range(0, len(regs_row), chunk_size)]
 
         progress_bar = progressbar.ProgressBar(
-            widgets=[progressbar.Percentage(), progressbar.Bar(left=" %s[" % fname, right="] "), progressbar.SimpleProgress()],
+            widgets=[progressbar.Percentage(), progressbar.Bar(left=" [", right="] "), progressbar.SimpleProgress()],
             term_width=79
         )
 
@@ -119,80 +119,6 @@ class ModbusInBlFlasher(object):
         fw_as_regs = self._read_to_u16s(fw_fpath)
         info_block, data_block = fw_as_regs[:self.INFO_BLOCK_LENGTH], fw_as_regs[self.INFO_BLOCK_LENGTH:]
 
+        logging.info("Flashing %s" % fw_fpath)
         self._send_info(info_block)
-        self._send_data(data_block, fname=fw_fpath)
-
-
-class WBFWFlasher(object):
-    """
-    A python-wrapper around wb-mcu-fw-flasher binary (writes *.wbfw files over serial port).
-    Device is assumed to be in bootloader mode already!
-    """
-
-    def __init__(self, port):
-        exec_path = find_executable(CONFIG['FLASHER_EXEC_NAME'])
-        if exec_path:
-            self.known_cmd_args = [exec_path, '-d', port]
-        else:
-            die('Executable %s not found!' % CONFIG['FLASHER_EXEC_NAME'])
-        if PYTHON2:
-            self.out_buffer = sys.stdout
-        else:
-            self.out_buffer = sys.stdout.buffer
-
-
-    def flash(self, slaveid, fpath, restore_defaults=False, response_timeout=2.0, custom_bl_speed=None):
-        """Flashing .wbfw file via constructing and calling wb-mcu-fw-flasher command.
-
-        :param slaveid: slave addr of device
-        :type slaveid: int
-        :param fpath: .wbfw file
-        :type fpath: str
-        :param restore_defaults: will all settings be erased during flashing or not, defaults to False
-        :type restore_defaults: bool, optional
-        """
-        if 0 <= slaveid <= 247:
-            pass
-        else:
-            die('Slaveid %d is not allowed!' % slaveid)
-        if not os.path.exists(fpath):
-            die('FW file %s not found!' % fpath)
-        cmd_args = self.known_cmd_args[::]
-        cmd_args.extend(['-a', str(slaveid), '-f', fpath, '-t', str(response_timeout)])
-        if custom_bl_speed:
-            cmd_args.extend(['-B', str(custom_bl_speed)])
-        if restore_defaults:
-            cmd_args.append('-e')
-        logging.debug('Will run: %s' % str(cmd_args))
-        proc = subprocess.Popen(args=cmd_args, stdout=subprocess.PIPE, bufsize=0)
-        self._show_clean_output(proc)
-        proc.stdout.close()
-        retcode = proc.wait()
-        if retcode:
-            raise subprocess.CalledProcessError(retcode, cmd_args)
-
-    def _show_clean_output(self, proc):
-        """
-        wb-mcu-fw-flasher produces a lot of annoying output.
-        Catching proc's stdout and printing only "Sending data block <block> of <max_blocks>..." str.
-
-        Py2/3 compatible by writing bytes to stdout buffer.
-        """
-        onebyte = lambda: proc.stdout.read(1)
-        b_output = bytearray()
-        for char in iter(onebyte, b''):
-            b = ord(char)
-            if b == ord('\n'):
-                b_output = bytearray()
-            if b == ord('\r'):
-                b_output.insert(0, b)
-                self.out_buffer.write(b_output)
-                self.out_buffer.flush()
-                b_output = bytearray()
-            else:
-                b_output.append(b)
-        else:
-            b_output = bytearray()
-            b_output.append(ord('\n'))
-            self.out_buffer.write(b_output)
-            self.out_buffer.flush()
+        self._send_data(data_block)
