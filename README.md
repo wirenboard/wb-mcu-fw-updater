@@ -1,8 +1,8 @@
 # wb-mcu-fw-updater
-A command-line tool, updating WirenBoard modbus devices to latest firmwares. Versions 1.x.x flashes devices via wb-mcu-fw-flasher binary.
+A command-line tool, updating WirenBoard modbus devices to latest firmwares. Versions 1.1.x flashes devices via wb-mcu-fw-flasher binary; versions 1.2+ migrated to all-python flashing
 
 ### Python packages inside:
-* wb_mcu_fw_updater - downloading firmwares from remote server; flashing firmwares via wb-mcu-fw-flasher binary; handling generic update logic.
+* wb_mcu_fw_updater - downloading firmwares from remote server; flashing firmwares; handling generic update logic.
 * wb_modbus - safe & configurable wrappers around minimalmodbus; common (for Wiren Board devices) modbus bindings.
 
 ## Debian packages:
@@ -11,7 +11,6 @@ A command-line tool, updating WirenBoard modbus devices to latest firmwares. Ver
 * wb-mcu-fw-updater - python3-library-dependent binary
 
 ## External dependencies:
-* wb-mcu-fw-flasher
 * for python2-package: python-serial
 * for python3-package: python3-serial
 
@@ -31,6 +30,6 @@ A command-line tool, updating WirenBoard modbus devices to latest firmwares. Ver
 
     #### From deb package:
 
-    `apt install ./<path to wb-mcu-fw-flasher python3-lib .deb>`
+    `apt install ./<path to python3-lib .deb>`
 
     `apt install ./<path to wb-mcu-fw-updater .deb>`
