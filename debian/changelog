@@ -1,9 +1,10 @@
 wb-mcu-fw-updater (1.2.0) stable; urgency=medium
 
-  * removed dependency from wb-mcu-fw-flasher
+  * removed dependency on wb-mcu-fw-flasher
   * added "flash-file" entrypoint
+  * added "noise-cancelling" param to fw flashing
 
- -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 04 Mar 2022 03:31:45 +0300
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 9 Mar 2022 19:32:43 +0300
 
 wb-mcu-fw-updater (1.1.1) stable; urgency=medium
 
