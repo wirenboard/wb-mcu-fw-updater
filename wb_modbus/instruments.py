@@ -7,7 +7,20 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
     """
     Building a request; parsing a response via minimalmodbus's internal tools;
     Communicating with device via pyserial
+
+    _communicate is vanilla-minimalmodbus, except all FOREGOING_NOISE_CANCELLING cases
     """
+
+    FOREGOING_NOISE_CANCELLING = False  # Some early WB7s have hardware bug, causing additional zero byte on RX after write to port
+
+    def _get_possible_correct_response_beginnings(self, rtu_request):
+        """
+        We assume, that correct-response-beginning is [slaveid][fcode] or [slaveid][errcode]
+        """
+        slaveid, fcode = rtu_request[0], rtu_request[1]
+        err_fcode = ord(fcode) | (1 << minimalmodbus._BITNUMBER_FUNCTIONCODE_ERRORINDICATION)  # error code is fcode with msb bit set
+        err_fcode = minimalmodbus._num_to_onebyte_string(err_fcode)
+        return [slaveid + fcode, slaveid + err_fcode]
 
     def _communicate(self, request, number_of_bytes_to_read):
         """ minimalmodbus's original docstring:
@@ -59,6 +72,9 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         """
         minimalmodbus._check_string(request, minlength=1, description="request")
         minimalmodbus._check_int(number_of_bytes_to_read)
+
+        if self.FOREGOING_NOISE_CANCELLING:
+            possible_response_beginnings = self._get_possible_correct_response_beginnings(request)
 
         self._print_debug(
             "Will write to instrument (expecting {} bytes back): {!r} ({})".format(
@@ -143,6 +159,11 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
 
         # Read response
         answer = self.serial.read(number_of_bytes_to_read)
+        if self.FOREGOING_NOISE_CANCELLING:
+            time.sleep(minimum_silent_period)
+            while self.serial.inWaiting():
+                answer += self.serial.read(1)
+                time.sleep(minimum_silent_period)
         minimalmodbus._latest_read_times[self.serial.port] = minimalmodbus._now()
 
         if self.close_port_after_each_call:
@@ -152,6 +173,14 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         if sys.version_info[0] > 2:
             # Convert types to make it Python3 compatible
             answer = str(answer, encoding="latin1")
+
+        if self.FOREGOING_NOISE_CANCELLING:
+            for bs in possible_response_beginnings:
+                noise, sep, ret = answer.partition(bs)
+                if ret:  # There is something after possible response beginning
+                    self._print_debug("Foregoing noise cancelling:\n\tPlain response: {}\n\tNoise: {}; Answer: {}".format(*map(lambda x: minimalmodbus._hexlify(x), (answer, noise, sep + ret))))
+                    answer = sep + ret
+                    break
 
         if self.debug:
             template = (

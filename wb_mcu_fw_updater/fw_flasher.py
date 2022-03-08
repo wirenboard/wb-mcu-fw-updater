@@ -8,6 +8,7 @@ import logging
 import progressbar
 from distutils.spawn import find_executable
 from wb_modbus import minimalmodbus, bindings
+from wb_modbus.instruments import PyserialBackendInstrument
 from . import die, CONFIG, PYTHON2
 
 
@@ -22,6 +23,14 @@ class NotInBootloaderError(FlashingError):
 
 class BootloaderCmdError(FlashingError):
     pass
+
+
+class NoiseCancellingInstrument(PyserialBackendInstrument):
+    """
+    Some early WB7s have hardware bug, causing accidential bytes on master's RX just after writing to port.
+    The most impact is caused on in-bootloader communications.
+    """
+    FOREGOING_NOISE_CANCELLING = True
 
 
 class ModbusInBlFlasher(object):
@@ -43,7 +52,7 @@ class ModbusInBlFlasher(object):
     _SERIAL_TIMEOUT = 2.0
 
     def __init__(self, addr, port, bd=9600, parity='N', stopbits=2):
-        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits)
+        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=NoiseCancellingInstrument)
         self.instrument.device.serial.timeout = self._SERIAL_TIMEOUT
 
     def _read_to_u16s(self, fw_fpath):
