@@ -1,5 +1,5 @@
 # wb-mcu-fw-updater
-A command-line tool, updating WirenBoard modbus devices to latest firmwares. Versions 1.1.x flashes devices via wb-mcu-fw-flasher binary; versions 1.2+ migrated to all-python flashing
+A command-line tool, updating WirenBoard modbus devices to latest firmwares. Versions 1.1.x flash devices via wb-mcu-fw-flasher binary; versions 1.2+ use own implementation of fw-update protocol.
 
 ### Python packages inside:
 * wb_mcu_fw_updater - downloading firmwares from remote server; flashing firmwares; handling generic update logic.
