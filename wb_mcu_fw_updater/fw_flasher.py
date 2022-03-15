@@ -5,7 +5,7 @@ import os
 import sys
 import subprocess
 import logging
-import progressbar
+from tqdm import tqdm
 from distutils.spawn import find_executable
 from wb_modbus import minimalmodbus, bindings
 from wb_modbus.instruments import PyserialBackendInstrument
@@ -49,11 +49,9 @@ class ModbusInBlFlasher(object):
     UART_SETTINGS_RESET_REG = 1000  # in-bl only
     EEPROM_ERASE_REG = 1001  # in-bl only
 
-    _SERIAL_TIMEOUT = 2.0
-
-    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2):
+    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=2.0):
         self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=NoiseCancellingInstrument)
-        self.instrument.device.serial.timeout = self._SERIAL_TIMEOUT
+        self.instrument.device.serial.timeout = serial_timeout
 
     def _read_to_u16s(self, fw_fpath):
         """
@@ -94,12 +92,7 @@ class ModbusInBlFlasher(object):
         chunk_size = self.DATA_BLOCK_LENGTH  # bootloader accepts only fixed-length chunks
         chunks = [regs_row[i:i+chunk_size] for i in range(0, len(regs_row), chunk_size)]
 
-        progress_bar = progressbar.ProgressBar(
-            widgets=[progressbar.Percentage(), progressbar.Bar(left=" [", right="] "), progressbar.SimpleProgress()],
-            term_width=79
-        )
-
-        for chunk in progress_bar(chunks):
+        for chunk in tqdm(chunks, ascii=True, dynamic_ncols=True, bar_format="{l_bar}{bar}|{n}/{total}"):
             try:
                 self.instrument.write_u16_regs(self.DATA_BLOCK_START, chunk)  # retries wb_modbus.ALLOWED_UNSUCCESSFULL_TRIES times
             except minimalmodbus.ModbusException as e:

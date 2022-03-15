@@ -112,28 +112,27 @@ def flash_fw_file(args):
     """
     Directly flashing a fw-file (passed as arg) (args are almost compatible to wb-mcu-fw-flasher)
     """
-    def _print_device():
-        return "%s %d %s" % (args.port, args.slaveid, str(args.uart_params))
+    device_str = "%s %d %s" % (args.port, args.slaveid, str(args.conn_settings))
 
     if args.jump_in_bl:
-        _device = WBModbusDeviceBase(args.slaveid, args.port, *args.uart_params)
+        _device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings)
         try:
             _device.reboot_to_bootloader()
         except ModbusException as e:
-            die("Device (%s) could not reboot to bootloader. Check connection params" % _print_device())
+            die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
 
     try:
         update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.erase_all, args.erase_uart)
     except fw_flasher.NotInBootloaderError as e:
-        die("Seems, device (%s) is not in bootloader now!\nTry again with '-j' arg" % _print_device())
+        die("Seems, device (%s) is not in bootloader now!\nTry again with '-j' arg" % device_str)
     except fw_flasher.FlashingError as e:
-        logging.error("Unsuccessful flashing!\n\tDevice: %s\n\tFW: %s" % (_print_device(), args.fname))
+        logging.error("Unsuccessful flashing!\n\tDevice: %s\n\tFW: %s" % (device_str, args.fname))
         die(e)
 
 
-def parse_uart_params_arg(uart_params_str):
+def parse_conn_settings_arg(conn_settings_str):
     try:
-        return parse_uart_settings_str(uart_params_str)
+        return parse_uart_settings_str(conn_settings_str)
     except Exception as e:
         logging.error(e)
         die()
@@ -209,14 +208,17 @@ def parse_args():
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.set_defaults(func=recover_all)
 
+    """
+    Flash a FW file to single device.
+    """
     direct_flash_parser = subparsers.add_parser(
         'flash-file', help="Directly flash firmware file")
     direct_flash_parser.add_argument(
-        "port", type=str, metavar='<port>', help='Serial port, device connected to.')
+        "port", type=str, metavar='<serial_port>')
     direct_flash_parser.add_argument(
-        '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device.')
+        '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device')
     direct_flash_parser.add_argument(
-        '--uart-params', type=parse_uart_params_arg, dest='uart_params', metavar='<uart_params_str>', default='9600N2', help='uart settings (Default: %(default)s)')
+        '--conn-settings', type=parse_conn_settings_arg, dest='conn_settings', metavar='<connection_settings_str>', default='9600N2', help="Connection settings to communicate with alive device (Default: %(default)s)")
     direct_flash_parser.add_argument(
         '-j', action='store_true', dest='jump_in_bl', default=False, help='Jump to bootloader? (use on alive devices; default: %(default)s)')
     direct_flash_parser.add_argument(
@@ -224,7 +226,7 @@ def parse_args():
     direct_flash_parser.add_argument(
         '-e', '--erase-all', action='store_true', dest='erase_all', default=False, help="Erase ALL device's uart settings? (Default: %(default)s)")
     direct_flash_parser.add_argument(
-        '-f', type=str, dest='fname', metavar='<firmware_file>', required=True, help='File to flash.')
+        '-f', type=str, dest='fname', metavar='<firmware_file>', required=True, help='File to flash')
     direct_flash_parser.set_defaults(func=flash_fw_file)
 
     args = main_parser.parse_args()
