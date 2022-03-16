@@ -73,9 +73,9 @@ class MinimalModbusAPIWrapper(object):
     Allows changing serial connection settings on-the-fly;
     Redirects minimalmodbus's debug messages to logging.
     """
-    def __init__(self, addr, port, baudrate, parity, stopbits, instrument=instruments.PyserialBackendInstrument):
+    def __init__(self, addr, port, baudrate, parity, stopbits, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
         minimalmodbus._print_out = _debug_info
-        self.device = instrument(port, addr, debug=DEBUG, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL)
+        self.device = instrument(port, addr, debug=DEBUG, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL, foregoing_noise_cancelling=foregoing_noise_cancelling)
         self.slaveid = addr
         self.port = port
         self.set_port_settings(baudrate, parity, stopbits)
@@ -469,8 +469,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     SERIAL_TIMEOUT = 0.1
 
-    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, instrument=instruments.PyserialBackendInstrument):
-        super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument)
+    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
+        super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument, foregoing_noise_cancelling=foregoing_noise_cancelling)
         self.device.serial.timeout = self.SERIAL_TIMEOUT
         self.instrument = instrument
 

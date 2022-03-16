@@ -8,10 +8,12 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
     Building a request; parsing a response via minimalmodbus's internal tools;
     Communicating with device via pyserial
 
-    _communicate is vanilla-minimalmodbus, except all FOREGOING_NOISE_CANCELLING cases
+    _communicate is vanilla-minimalmodbus, except all foregoing_noise_cancelling cases
     """
 
-    FOREGOING_NOISE_CANCELLING = False  # Some early WB7s have hardware bug, causing additional zero byte on RX after write to port
+    def __init__(self, *args, **kwargs):
+        self.foregoing_noise_cancelling = kwargs.pop('foregoing_noise_cancelling', False)  # Some early WB7s have hardware bug, causing additional zero byte on RX after write to port
+        super(PyserialBackendInstrument, self).__init__(*args, **kwargs)
 
     def _get_possible_correct_response_beginnings(self, rtu_request):
         """
@@ -73,7 +75,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         minimalmodbus._check_string(request, minlength=1, description="request")
         minimalmodbus._check_int(number_of_bytes_to_read)
 
-        if self.FOREGOING_NOISE_CANCELLING:
+        if self.foregoing_noise_cancelling:
             possible_response_beginnings = self._get_possible_correct_response_beginnings(request)
 
         self._print_debug(
@@ -159,7 +161,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
 
         # Read response
         answer = self.serial.read(number_of_bytes_to_read)
-        if self.FOREGOING_NOISE_CANCELLING:
+        if self.foregoing_noise_cancelling:
             time.sleep(minimum_silent_period)
             while self.serial.inWaiting():
                 answer += self.serial.read(1)
@@ -174,7 +176,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
             # Convert types to make it Python3 compatible
             answer = str(answer, encoding="latin1")
 
-        if self.FOREGOING_NOISE_CANCELLING:
+        if self.foregoing_noise_cancelling:
             for bs in possible_response_beginnings:
                 noise, sep, ret = answer.partition(bs)
                 if ret:  # There is something after possible response beginning

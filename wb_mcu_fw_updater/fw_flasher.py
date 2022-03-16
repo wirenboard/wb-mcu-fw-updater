@@ -8,7 +8,6 @@ import logging
 from tqdm import tqdm
 from distutils.spawn import find_executable
 from wb_modbus import minimalmodbus, bindings
-from wb_modbus.instruments import PyserialBackendInstrument
 from . import die, CONFIG, PYTHON2
 
 
@@ -23,14 +22,6 @@ class NotInBootloaderError(FlashingError):
 
 class BootloaderCmdError(FlashingError):
     pass
-
-
-class NoiseCancellingInstrument(PyserialBackendInstrument):
-    """
-    Some early WB7s have hardware bug, causing accidential bytes on master's RX just after writing to port.
-    The most impact is caused on in-bootloader communications.
-    """
-    FOREGOING_NOISE_CANCELLING = True
 
 
 class ModbusInBlFlasher(object):
@@ -50,7 +41,7 @@ class ModbusInBlFlasher(object):
     EEPROM_ERASE_REG = 1001  # in-bl only
 
     def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=2.0):
-        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=NoiseCancellingInstrument)
+        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, foregoing_noise_cancelling=True)
         self.instrument.device.serial.timeout = serial_timeout
 
     def _read_to_u16s(self, fw_fpath):
