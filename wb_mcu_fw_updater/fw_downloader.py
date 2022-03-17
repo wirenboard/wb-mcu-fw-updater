@@ -15,7 +15,7 @@ else:
     from urllib.error import HTTPError, URLError
 
 
-def get_request(url_path):
+def get_request(url_path, tries=3):  # TODO: to config?
     """
     Sending GET request to url; returning responce's content.
 
@@ -24,34 +24,71 @@ def get_request(url_path):
     :return: responce's content
     :rtype: bytestring
     """
-    logging.debug('Looking to: %s' % url_path)
+    logging.debug('GET: %s' % url_path)
+    for _ in range(tries):
+        try:
+            return url_handler.urlopen(url_path)
+        except (URLError, HTTPError) as e:
+            continue
+    else:
+        logging.error(url_path)
+        raise
+
+
+"""
+Ensuring, User has Internet connection
+executes at first import
+"""
+try:
+    get_request(CONFIG['ROOT_URL'])
+except (URLError, HTTPError) as e:
+    die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
+
+
+class WBRemoteStorageError(Exception):
+    pass
+
+class RemoteFileReadingError(WBRemoteStorageError):
+    pass
+
+class RemoteFileDownloadingError(WBRemoteStorageError):
+    pass
+
+
+def read_remote_file(url_path, coding='utf-8'):
     try:
-        responce = url_handler.urlopen(url_path)
-        return responce
-    except (URLError, HTTPError) as e:
-        logging.exception(url_path)
-        return None
+        ret = get_request(url_path)
+        return str(ret.read().decode(coding)).strip()
+    except Exception as e:
+        raise RemoteFileReadingError(e)
 
 
-def get_string(url_path, coding='utf-8'):
-    ret = get_request(url_path)
-    return str(ret.read().decode(coding)).strip() if ret else None
-
-
-def get_release_versions(remote_fname=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
-    return get_string(remote_fname)
+def get_remote_releases_info(remote_fname=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
+    return read_remote_file(remote_fname)
 
 
 def get_fw_signatures_list():
-    ret = get_string(urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
+    ret = read_remote_file(urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
     return ret.split('\n') if ret else None
 
 
-def download_file(url_path, saving_dir=None, fname=None):
-    ret = get_request(url_path)
-    content = ret.read()
+def download_remote_file(url_path, saving_dir=None, fname=None):
+    """
+    Downloading a file from direct url
+    """
+    try:
+        ret = get_request(url_path)
+        content = ret.read()
+    except Exception as e:
+        raise RemoteFileDownloadingError(e)
 
     saving_dir = saving_dir or CONFIG['FW_SAVING_DIR']
+    try:
+        os.makedirs(saving_dir)  # py2 has not exist_ok param
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise RemoteFileDownloadingError(e)
+
     if not fname:
         logging.debug("Trying to get fname from content-disposition")
         default_fname = ret.info().get('Content-Disposition')
@@ -59,14 +96,16 @@ def download_file(url_path, saving_dir=None, fname=None):
         logging.debug("Got fname from content-disposition: %s" % str(fname))
     if fname:
         file_path = os.path.join(saving_dir, fname)
-        logging.debug("Downloading to %s" % file_path)
+        logging.debug("%s => %s" % (url_path, file_path))
     else:
-        logging.error("Fname to save fw was not specified")
-        return None
+        raise RemoteFileDownloadingError("Could not construct fpath, where to save fw. Fname should be specified!")
 
-    with open(file_path, 'wb+') as fh:
-        fh.write(content)
-        return file_path
+    try:
+        with open(file_path, 'wb+') as fh:
+            fh.write(content)
+            return file_path
+    except Exception as e:
+        raise RemoteFileDownloadingError(e)
 
 
 class RemoteFileWatcher(object):
@@ -85,11 +124,6 @@ class RemoteFileWatcher(object):
         :type branch_name: str, optional
         """
         self.mode = mode
-        try:
-            url_handler.urlopen(CONFIG['ROOT_URL']) # Checking, user has internet connection
-        except (URLError, HTTPError) as e:
-            logging.error('Check internet connection')
-            die(e)
         self.parent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
         self.fw_source = CONFIG['DEFAULT_SOURCE']
         self.branch_name = branch_name
@@ -117,9 +151,9 @@ class RemoteFileWatcher(object):
         :rtype: str
         """
         url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
-        return get_string(url_path)
+        return read_remote_file(url_path)
 
-    def download(self, name, version='latest', fpath=None):
+    def download(self, name, version='latest'):
         """
         Downloading a firmware/bootloader file with specified version to specified fname.
 
@@ -127,27 +161,21 @@ class RemoteFileWatcher(object):
         :type name: str
         :param version: specified fw/bootloader version, defaults to 'latest'
         :type version: str, optional
-        :param fname: custom path, file will be saved, defaults to None
-        :type fname: str, optional
         :return: path of saved file
         :rtype: str (if succeed) or None (if not)
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
         url_path = urljoin(self._construct_urlpath(name), fw_ver)
+        file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
 
-        if not fpath:
-            file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
-            try:
-                os.makedirs(file_saving_dir)  # py2 has not exist_ok param
-            except OSError as e:
-                if e.errno != errno.EEXIST:
-                    raise
         try:
-            return download_file(url_path, file_saving_dir)
+            return download_remote_file(url_path, file_saving_dir)
         except Exception as e:
-            logging.error('Could not download: signature %s, version %s, branch %s' % (
+            logging.error('Could not download:\n\tURL: %s (%s %s %s)\n\tSave to: %s' % (
+                url_path,
                 name,
                 version,
-                self.branch_name
+                self.branch_name,
+                file_saving_dir
             ))
             raise
