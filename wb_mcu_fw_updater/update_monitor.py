@@ -76,7 +76,7 @@ def get_released_fw(fw_signature, release_info):
     for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
         suite = release_info['SUITE']
         logging.debug("Looking to %s (suite: %s)" % (url, str(suite)))
-        contents = fw_downloader.get_release_versions(url)
+        contents = fw_downloader.get_remote_releases_info(url)
         if contents:
             fw_endpoint = yaml.safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
             if fw_endpoint:
@@ -92,7 +92,7 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
     _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
 
     if released_fw_endpoint:
-        downloaded_fw = fw_downloader.download_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+        downloaded_fw = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
     else:
         logging.warning('Device "%s" is not supported in %s (as %s)' % (fw_signature, str(release_info.get('RELEASE_NAME')), str(release_info.get('SUITE'))))
         if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway (may cause unstable behaviour; proceed at your own risk)?')):
@@ -389,7 +389,7 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
             name, slaveid, port, mb_client, latest_remote_fw, fw_signature = device_info.get_multiple_props('name', 'slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature')
             logging.info('Flashing firmware to %s' % str(device_info))
             _, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
-            downloaded_file = fw_downloader.download_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+            downloaded_file = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
             try:
                 _do_flash(mb_client, downloaded_file, 'fw', False)
             except subprocess.CalledProcessError as e:
