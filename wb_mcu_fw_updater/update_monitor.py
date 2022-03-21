@@ -36,6 +36,13 @@ TooOldDeviceError = bindings.TooOldDeviceError
 RELEASE_INFO = None
 
 
+class UpdateDeviceError(Exception):
+    pass
+
+class NoReleasedFwError(UpdateDeviceError):
+    pass
+
+
 def ask_user(message):
     """
     Asking user before potentionally dangerous action.
@@ -73,30 +80,34 @@ def get_released_fw(fw_signature, release_info):
         fw_signature
         release suite
     """
+    suite = release_info['SUITE']
     for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
-        suite = release_info['SUITE']
         logging.debug("Looking to %s (suite: %s)" % (url, str(suite)))
-        contents = fw_downloader.get_remote_releases_info(url)
-        if contents:
+        try:
+            contents = fw_downloader.get_remote_releases_info(url)
             fw_endpoint = yaml.safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
             if fw_endpoint:
-                fw_version = releases.parse_fw_version(fw_endpoint)
+                fw_version = releases.parse_fw_version(fw_endpoint)  # TODO: raise error
                 logging.debug("FW version for %s on release %s: %s\nEndpoint: %s" % (fw_signature, suite, fw_version, fw_endpoint))
                 return fw_version, fw_endpoint
+        except fw_downloader.RemoteFileReadingError as e:
+            logging.warning("No released fw for %s in %s" % (fw_signature, url))
+            continue
     else:
-        return None, None
+        raise NoReleasedFwError("Released FW not found for %s\nRelease info:\n%s" % (fw_signature, str(release_info)))
 
 
 def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
-    downloaded_fw = None
-    _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
-
-    if released_fw_endpoint:
-        downloaded_fw = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
-    else:
+    try:
+        _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
+    except NoReleasedFwError as e:
         logging.warning('Device "%s" is not supported in %s (as %s)' % (fw_signature, str(release_info.get('RELEASE_NAME')), str(release_info.get('SUITE'))))
         if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway (may cause unstable behaviour; proceed at your own risk)?')):
             downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
+        else:
+            raise e
+    else:
+        downloaded_fw = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
     return downloaded_fw
 
 
@@ -152,8 +163,6 @@ def recover_device_iteration(fw_signature, slaveid, port):
     A device supposed to be in "dead" state => fw_signature, slaveid, port have passed instead of modbus_connection
     """
     downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
-    if not downloaded_fw:
-        raise RuntimeError('FW file was not downloaded!')
     direct_flash(downloaded_fw, slaveid, port)
 
 
@@ -461,7 +470,7 @@ def _recover_all():
             fw_signature, slaveid, port = device_info.get_multiple_props('fw_signature', 'slaveid', 'port')
             try:
                 recover_device_iteration(fw_signature, slaveid, port)
-            except (fw_flasher.FlashingError, RuntimeError) as e:
+            except (fw_flasher.FlashingError, fw_downloader) as e:
                 logging.exception(e)
                 recover_was_skipped.append(device_info)
             else:
