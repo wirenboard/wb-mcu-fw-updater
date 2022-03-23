@@ -43,6 +43,37 @@ class NoReleasedFwError(UpdateDeviceError):
     pass
 
 
+class WBVersion(LooseVersion):
+    """
+    x.y.z-rc1 should be < than x.y.z (instead of standart LooseVersion's behaviour)
+    """
+    def _cmp (self, other):
+        if isinstance(other, str):
+            other = WBVersion(other)
+        elif not isinstance(other, WBVersion):
+            return NotImplemented
+
+        _self, _other = self.version[::], other.version[::]
+
+        if _self == _other:
+            return 0
+
+        """
+        chars are compared by their ords
+        => equalizing length of two parsed versions by appending chars with large ord (mind py2/3!)
+        """
+        diff = len(_self) - len(_other)
+        if diff >= 0:
+            _other += [chr(255)] * diff
+        else:
+            _self += [chr(255)] * -diff
+
+        if _self < _other:
+            return -1
+        if _self > _other:
+            return 1
+
+
 def ask_user(message):
     """
     Asking user before potentionally dangerous action.
@@ -191,7 +222,7 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
 
 
 def is_reflash_necessary(actual_version, provided_version, force_reflash=False, allow_downgrade=False):
-    actual_version, provided_version = LooseVersion(actual_version), LooseVersion(provided_version)  # TODO: *-rc < *!!
+    actual_version, provided_version = WBVersion(actual_version), WBVersion(provided_version)
 
     if actual_version == provided_version:
         if force:
@@ -270,10 +301,9 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     Reflashing with update-checking
     """
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
-    passed_fw_version = LooseVersion(specified_fw_version)
 
     # TODO: print device
-    if is_reflash_necessary(actual_version=device_fw_version, provided_version=passed_fw_version, force_reflash=force, allow_downgrade=True):
+    if is_reflash_necessary(actual_version=device_fw_version, provided_version=specified_fw_version, force_reflash=force, allow_downgrade=True):
         try:
             _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
         except (fw_downloader.WBRemoteStorageError, NoReleasedFwError) as e:
@@ -366,16 +396,15 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
         fw_signature = modbus_connection.get_fw_signature()
         device_info._set_asdict({'mb_client' : modbus_connection, 'fw_signature' : fw_signature})  # TODO: fill mb_connection at probing stage
         try:
-            _latest_remote_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)  # auto-updating only from releases
+            latest_remote_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)  # auto-updating only from releases
         except NoReleasedFwError as e:
             logging.error(e)
             not_released.append(device_info)
             continue
-        if _latest_remote_version == 'latest':  # Could be written in release
-            _latest_remote_version = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
-        latest_remote_version = LooseVersion(_latest_remote_version)
+        if latest_remote_version == 'latest':  # Could be written in release
+            latest_remote_version = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
         local_device_version = modbus_connection.get_fw_version()
-        device_info._set_asdict({'latest_remote_fw' : str(latest_remote_version), 'released_fw_endpoint' : released_fw_endpoint})
+        device_info._set_asdict({'latest_remote_fw' : latest_remote_version, 'released_fw_endpoint' : released_fw_endpoint})
 
         if is_reflash_necessary(actual_version=local_device_version, provided_version=latest_remote_version, force_reflash=force, allow_downgrade=allow_downgrade):
             to_update.append(device_info)
