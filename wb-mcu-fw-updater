@@ -68,9 +68,10 @@ def recover_fw(args):
         if not device.is_in_bootloader():
             die("Device (%s : %d) is not in bootloader mode!\nCheck device's connection or slaveid/port" % (args.port, args.slaveid))
 
-    fw_signatures_list = fw_downloader.get_fw_signatures_list()
-    if fw_signatures_list is None:
-        die('Unable to get allowed fw_signatures')
+    try:
+        fw_signatures_list = fw_downloader.get_fw_signatures_list()
+    except fw_downloader.RemoteFileReadingError as e:
+        die(e)
 
     if args.known_signature in fw_signatures_list:  # fw_signature was specified manually
         if not _flash_in_bl(args.known_signature, args.slaveid, args.port):
@@ -160,7 +161,7 @@ def parse_args():
     update_fw_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                   help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_fw_parser.add_argument(
-        '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device.')
+        '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, choices=range(1, 247), help='Slave address of the device.')
     update_fw_parser.add_argument(
         "port", type=str, metavar='<port>', help='Serial port, device connected to.')
     update_fw_parser.set_defaults(func=update_fw)
@@ -173,7 +174,7 @@ def parse_args():
     update_bootloader_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                           help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     update_bootloader_parser.add_argument(
-        '-a', '--slaveid', type=int, metavar='<slaveid>', dest='slaveid', required=True, help='Slave address of the device.')
+        '-a', '--slaveid', type=int, metavar='<slaveid>', dest='slaveid', required=True, choices=range(1, 247), help='Slave address of the device.')
     update_bootloader_parser.add_argument(
         "port", type=str, metavar='<port>', help='Serial port, device connected to.')
     update_bootloader_parser.set_defaults(func=update_bootloader)
