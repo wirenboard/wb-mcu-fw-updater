@@ -1,5 +1,10 @@
-from collections import OrderedDict
+import logging
 import re
+from collections import OrderedDict
+
+
+logging.getLogger().addHandler(logging.NullHandler())
+logging.getLogger().setLevel(logging.NOTSET)
 
 
 #TODO: fill from config

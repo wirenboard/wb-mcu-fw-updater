@@ -13,6 +13,7 @@ else:
     PYTHON2 = False
 
 
+logging.getLogger().addHandler(logging.NullHandler())
 logging.getLogger().setLevel(logging.NOTSET)
 
 
@@ -48,11 +49,10 @@ def die(err=None, exitcode=1):
 
     Use in except block of expected exceptions!
     """
-    logger = logging.getLogger()
     if isinstance(err, Exception):
-        logger.exception(err)
+        logging.exception(err)
     elif isinstance(err, str):
-        logger.error(err)
+        logging.error(err)
     sys.exit(exitcode)
 
 
@@ -63,7 +63,7 @@ def logging_excepthook(exc_type, exc_value, exc_traceback):
     if exc_type == KeyboardInterrupt:
         pass
     else:
-        logging.getLogger().critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
+        logging.critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
     die()
 
 
