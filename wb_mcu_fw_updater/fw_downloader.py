@@ -15,6 +15,16 @@ else:
     from urllib.error import HTTPError, URLError
 
 
+class WBRemoteStorageError(Exception):
+    pass
+
+class RemoteFileReadingError(WBRemoteStorageError):
+    pass
+
+class RemoteFileDownloadingError(WBRemoteStorageError):
+    pass
+
+
 def get_request(url_path, tries=3):  # TODO: to config?
     """
     Sending GET request to url; returning responce's content.
@@ -31,8 +41,7 @@ def get_request(url_path, tries=3):  # TODO: to config?
         except (URLError, HTTPError) as e:
             continue
     else:
-        logging.error(url_path)
-        raise
+        raise WBRemoteStorageError(url_path)
 
 
 """
@@ -41,18 +50,8 @@ executes at first import
 """
 try:
     get_request(CONFIG['ROOT_URL'])
-except (URLError, HTTPError) as e:
+except WBRemoteStorageError as e:
     die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
-
-
-class WBRemoteStorageError(Exception):
-    pass
-
-class RemoteFileReadingError(WBRemoteStorageError):
-    pass
-
-class RemoteFileDownloadingError(WBRemoteStorageError):
-    pass
 
 
 def read_remote_file(url_path, coding='utf-8'):
