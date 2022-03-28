@@ -35,7 +35,8 @@ def update_bootloader(args):
     Updating device's bootloader.
     Only latest version from stable branch is available.
     """
-    update_monitor.ask_user("Updating bootloader is a dangerous operation.  Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?")
+    if not update_monitor.ask_user("Updating bootloader is a dangerous operation.  Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?"):
+        die("Updating bootloader was requested, but rejected after.")
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)

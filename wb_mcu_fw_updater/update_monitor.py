@@ -151,10 +151,7 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):
         searching device's uart settings (if not passed);
         checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
     """
-    try:
-        modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
-    except ValueError as e:  # Incorrect slaveid
-        raise ForeignDeviceError(e)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
 
     if known_uart_params_str:
         modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
@@ -171,15 +168,17 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):
         fw_sig = modbus_connection.get_fw_signature()
     except TooOldDeviceError as e:
         fw_sig = ''
+    except ValueError as e:  # minimalmodbus's slaveid check performs at _exec_command stage
+        raise ForeignDeviceError(e)
 
     try:  # WB devices assume to have all these regs
-        logging.debug("%s %d:\n\t%s %d %s %s" %
+        logging.debug("%s %d:\n\t%s %d %s %s" % (
             port, slaveid,
             modbus_connection.get_device_signature(),
             modbus_connection.get_serial_number(),
             fw_sig,
             modbus_connection.get_fw_version()
-            )
+            ))
     except minimalmodbus.ModbusException as e:
         raise ForeignDeviceError("Possibly, device (%s %d) is not a WB-one!" % (port, slaveid))
 
@@ -236,7 +235,7 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
         if ask_user(message_str):
             return True
         else:
-            die("Reset of Device's settings was requested, but rejected after")
+            die("Reset of Device's settings was requested, but rejected after.\nDevice is in bootloder now; wait 120s, untill it starts.")
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
@@ -254,7 +253,7 @@ def is_reflash_necessary(actual_version, provided_version, force_reflash=False, 
     actual_version, provided_version = WBVersion(actual_version), WBVersion(provided_version)
 
     if actual_version == provided_version:
-        if force:
+        if force_reflash:
             logging.info("%s %s -> %s" % (user_log.colorize('Force update:', 'YELLOW'), actual_version, provided_version))
             return True
         else:
@@ -331,7 +330,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     """
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
 
-    logging.info("%s (%s %d)" % modbus_connection.port, fw_signature, modbus_connection.slaveid)
+    logging.info("%s (%s %d)" % (modbus_connection.port, fw_signature, modbus_connection.slaveid))
     if is_reflash_necessary(actual_version=device_fw_version, provided_version=specified_fw_version, force_reflash=force, allow_downgrade=True):
         try:
             _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
