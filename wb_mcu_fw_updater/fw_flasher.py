@@ -3,11 +3,10 @@
 
 import os
 import sys
-import subprocess
+import six
 import logging
 from tqdm import tqdm
 from wb_modbus import minimalmodbus, bindings
-from . import die, CONFIG, PYTHON2
 
 
 class FlashingError(Exception):
@@ -53,12 +52,11 @@ class ModbusInBlFlasher(object):
 
         with open(fw_fpath, 'rb') as fp:
             raw_bytes = fp.read()
-            if not PYTHON2:
-                raw_bytes = str(raw_bytes, encoding='latin1')
+            bytestr = str(six.text_type(raw_bytes, encoding='latin1'))
             try:
-                return minimalmodbus._bytestring_to_valuelist(raw_bytes, int(bs / 2))  # u16
+                return minimalmodbus._bytestring_to_valuelist(bytestr, int(bs / 2))  # u16
             except Exception as e:
-                raise IncorrectFwError(e)
+                six.raise_from(IncorrectFwError, e)
 
     def _send_info(self, regs_row):
         """
@@ -71,9 +69,9 @@ class ModbusInBlFlasher(object):
         try:
             self.instrument.write_u16_regs(self.INFO_BLOCK_START, regs_row)
         except minimalmodbus.IllegalRequestError as e:
-            raise NotInBootloaderError(e)
+            six.raise_from(NotInBootloaderError, e)
         except Exception as e:
-            raise FlashingError(e)
+            six.raise_from(FlashingError, e)
 
     def _send_data(self, regs_row):
         """
@@ -86,15 +84,15 @@ class ModbusInBlFlasher(object):
             try:
                 self.instrument.write_u16_regs(self.DATA_BLOCK_START, chunk)  # retries wb_modbus.ALLOWED_UNSUCCESSFULL_TRIES times
             except minimalmodbus.ModbusException as e:
-                raise FlashingError(e)
+                six.raise_from(FlashingError, e)
 
     def _perform_bootloader_cmd(self, reg):
         try:
             self.instrument.write_u16(reg, 1)
         except minimalmodbus.IllegalRequestError as e:
-            raise NotInBootloaderError(e)
+            six.raise_from(NotInBootloaderError, e)
         except minimalmodbus.ModbusException as e:
-            raise BootloaderCmdError(e)
+            six.raise_from(BootloaderCmdError, e)
 
     def reset_uart(self):
         logging.debug("Resetting uart params")

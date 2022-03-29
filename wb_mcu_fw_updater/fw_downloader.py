@@ -3,16 +3,11 @@
 
 import logging
 import os
+import sys
 import errno
-from posixpath import join as urljoin  # py2/3 compatibility
-from . import PYTHON2, CONFIG, die
-
-if PYTHON2:
-    import urllib2 as url_handler
-    from urllib2 import HTTPError, URLError
-else:
-    import urllib.request as url_handler
-    from urllib.error import HTTPError, URLError
+import six
+from six.moves import urllib
+from . import CONFIG
 
 
 class WBRemoteStorageError(Exception):
@@ -37,21 +32,22 @@ def get_request(url_path, tries=3):  # TODO: to config?
     logging.debug('GET: %s' % url_path)
     for _ in range(tries):
         try:
-            return url_handler.urlopen(url_path)
-        except (URLError, HTTPError) as e:
+            return urllib.request.urlopen(url_path)
+        except (urllib.error.URLError, urllib.error.HTTPError) as e:
             continue
     else:
         raise WBRemoteStorageError(url_path)
 
 
-"""
-Ensuring, User has Internet connection
-executes at first import
-"""
-try:
-    get_request(CONFIG['ROOT_URL'])
-except WBRemoteStorageError as e:
-    die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
+# TODO: move to launcher (only for specific modes)
+# """
+# Ensuring, User has Internet connection
+# executes at first import
+# """
+# try:
+#     get_request(CONFIG['ROOT_URL'])
+# except WBRemoteStorageError as e:
+#     die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
 
 
 def read_remote_file(url_path, coding='utf-8'):
@@ -59,15 +55,15 @@ def read_remote_file(url_path, coding='utf-8'):
         ret = get_request(url_path)
         return str(ret.read().decode(coding)).strip()
     except Exception as e:
-        raise RemoteFileReadingError(e)
+        six.raise_from(RemoteFileReadingError, e)
 
 
-def get_remote_releases_info(remote_fname=urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
+def get_remote_releases_info(remote_fname=urllib.parse.urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
     return read_remote_file(remote_fname)
 
 
 def get_fw_signatures_list():
-    ret = read_remote_file(urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
+    ret = read_remote_file(urllib.parse.urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
     return ret.split('\n') if ret else None
 
 
@@ -79,14 +75,14 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
         ret = get_request(url_path)
         content = ret.read()
     except Exception as e:
-        raise RemoteFileDownloadingError(e)
+        six.raise_from(RemoteFileDownloadingError, e)
 
     saving_dir = saving_dir or CONFIG['FW_SAVING_DIR']
     try:
         os.makedirs(saving_dir)  # py2 has not exist_ok param
     except OSError as e:
         if e.errno != errno.EEXIST:
-            raise RemoteFileDownloadingError(e)
+            six.reraise(*sys.exc_info())
 
     if not fname:
         logging.debug("Trying to get fname from content-disposition")
@@ -104,7 +100,7 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
             fh.write(content)
             return file_path
     except Exception as e:
-        raise RemoteFileDownloadingError(e)
+        six.raise_from(RemoteFileDownloadingError, e)
 
 
 class RemoteFileWatcher(object):
@@ -123,22 +119,11 @@ class RemoteFileWatcher(object):
         :type branch_name: str, optional
         """
         self.mode = mode
-        self.parent_url_path = urljoin(CONFIG['ROOT_URL'], mode, sort_by)
-        self.fw_source = CONFIG['DEFAULT_SOURCE']
-        self.branch_name = branch_name
-        if branch_name:
-            self.fw_source = urljoin('unstable', branch_name)
+        fw_source = "unstable/%s" % branch_name if branch_name else CONFIG['DEFAULT_SOURCE']
+        self.parent_url_path = self._join(self.mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
-    def _construct_urlpath(self, name):
-        """
-        Appending url from parts (parent url, significant part, stable or feature branch), excepting filename.
-
-        :param name: a significant part of url. Could be a project_name or device_signature
-        :type name: str
-        :return: constructed url without filename
-        :rtype: str
-        """
-        return urljoin(self.parent_url_path, name, self.fw_source)
+    def _join(self, *args):
+        return "/".join(map(str, args))
 
     def get_latest_version_number(self, name):
         """
@@ -149,7 +134,8 @@ class RemoteFileWatcher(object):
         :return: content of text file, where latest fw version number is stored
         :rtype: str
         """
-        url_path = urljoin(self._construct_urlpath(name), CONFIG['LATEST_FW_VERSION_FILE'])
+        remote_path = self._join(self.parent_url_path % name, CONFIG['LATEST_FW_VERSION_FILE'])
+        url_path = urllib.parse.urljoin(CONFIG['ROOT_URL'], remote_path)
         return read_remote_file(url_path)
 
     def download(self, name, version='latest'):
@@ -164,17 +150,14 @@ class RemoteFileWatcher(object):
         :rtype: str (if succeed) or None (if not)
         """
         fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
-        url_path = urljoin(self._construct_urlpath(name), fw_ver)
+        remote_path = self._join(self.parent_url_path % name, fw_ver)
+        url_path = urllib.parse.urljoin(CONFIG['ROOT_URL'], remote_path)
         file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
 
         try:
             return download_remote_file(url_path, file_saving_dir)
         except Exception as e:
-            logging.error('Could not download:\n\tURL: %s (%s %s %s)\n\tSave to: %s' % (
-                url_path,
-                name,
-                version,
-                self.branch_name,
-                file_saving_dir
-            ))
-            raise
+            logging.error("Could not download: %s" % url_path)
+            logging.error("Remote path: %s" % remote_path)
+            logging.error("Save to: %s" % file_saving_dir)
+            six.reraise(*sys.exc_info())
