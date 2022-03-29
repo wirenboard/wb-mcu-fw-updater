@@ -7,12 +7,6 @@ import logging.handlers
 from ast import literal_eval
 
 
-if sys.version_info[0] < 3:
-    PYTHON2 = True
-else:
-    PYTHON2 = False
-
-
 logging.getLogger().addHandler(logging.NullHandler())
 logging.getLogger().setLevel(logging.NOTSET)
 

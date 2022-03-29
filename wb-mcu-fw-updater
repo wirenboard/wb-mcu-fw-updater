@@ -22,7 +22,7 @@ def update_fw(args):
         logging.info('%s' % user_log.colorize('Done', 'GREEN'))
     except update_monitor.TooOldDeviceError as e:
         die(e)
-    except update_monitor.ModbusError as e:
+    except ModbusException as e:
         logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
     except CalledProcessError as e:
@@ -43,7 +43,7 @@ def update_bootloader(args):
         logging.info('%s' % user_log.colorize('Done', 'GREEN'))
     except update_monitor.TooOldDeviceError as e:
         die(e)
-    except update_monitor.ModbusError as e:
+    except ModbusException as e:
         logging.error("Check device's connection, slaveid and serial port settings!")
         die(e)
     except CalledProcessError as e:

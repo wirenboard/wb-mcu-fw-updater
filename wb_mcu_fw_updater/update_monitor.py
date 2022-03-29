@@ -4,12 +4,12 @@
 import logging
 import termios
 import json
+import sys
 import yaml
 import subprocess
-from pprint import pformat
+import six
 from distutils.version import LooseVersion
-from posixpath import join as urljoin  # py2/3 compatibility
-from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, PYTHON2, CONFIG
+from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, CONFIG
 
 import wb_modbus  # Setting up module's params
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
@@ -17,20 +17,7 @@ wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
 
 from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
 
-
-if PYTHON2:
-    input_func = raw_input
-    JSONDecodeError = ValueError  # py2 raises ValueError instead of JSONDecodeError
-else:
-    from json.decoder import JSONDecodeError
-    input_func = input
-
-
 db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
-
-
-ModbusError = minimalmodbus.ModbusException
-TooOldDeviceError = bindings.TooOldDeviceError
 
 
 RELEASE_INFO = None
@@ -87,7 +74,7 @@ def ask_user(message):
     :rtype: bool
     """
     message_str = '\n*** %s [Y/N] *** ' % (message)
-    ret = input_func(user_log.colorize(message_str, 'YELLOW'))
+    ret = six.moves.input(user_log.colorize(message_str, 'YELLOW'))
     return ret.upper().startswith('Y')
 
 
@@ -102,7 +89,7 @@ def fill_release_info():  # TODO: make a class, storing a release-info context
         RELEASE_INFO = releases.parse_releases(releases_fname)
     except Exception as e:
         logging.error("Critical error in %s file!\nContact the support!" % releases_fname)
-        raise
+        six.reraise(*sys.exc_info())
 
 
 def get_released_fw(fw_signature, release_info):
@@ -139,9 +126,9 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
         if (ask_for_latest) and (ask_user('Perform downloading from latest master anyway (may cause unstable behaviour; proceed at your own risk)?')):
             downloaded_fw = fw_downloader.RemoteFileWatcher('fw', branch_name='').download(fw_signature, 'latest')
         else:
-            raise e
+            six.reraise(*sys.exc_info())
     else:
-        downloaded_fw = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+        downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
     return downloaded_fw
 
 
@@ -166,10 +153,10 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):
 
     try:  # Will raise NoResponseError, if disconnected
         fw_sig = modbus_connection.get_fw_signature()
-    except TooOldDeviceError as e:
+    except bindings.TooOldDeviceError as e:
         fw_sig = ''
     except ValueError as e:  # minimalmodbus's slaveid check performs at _exec_command stage
-        raise ForeignDeviceError(e)
+        six.raise_from(ForeignDeviceError, e)
 
     try:  # WB devices assume to have all these regs
         logging.debug("%s %d:\n\t%s %d %s %s" % (
@@ -195,7 +182,7 @@ def get_devices_on_driver(driver_config_fname):
     found_devices = {}
     try:
         config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
-    except (IOError, JSONDecodeError) as e:  # file not found or is incorrect
+    except (IOError, ValueError) as e:  # file not found or is incorrect
         die(e)
     for port in config_dict['ports']:
         if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
@@ -315,7 +302,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     if specified_fw_version == 'release':  # triggered updating from releases
         try:
             specified_fw_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
-            downloaded_fw = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+            downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
         except (fw_downloader.WBRemoteStorageError, NoReleasedFwError) as e:
             die(e)  # TODO: check, if present in latest release
 
@@ -412,7 +399,7 @@ def probe_all_devices(driver_config_fname):
             try:
                 db.save(modbus_connection.slaveid, modbus_connection.port, modbus_connection.get_fw_signature()) # old devices haven't fw_signatures
                 alive.append(device_info)
-            except TooOldDeviceError:
+            except bindings.TooOldDeviceError:
                 logging.error('%s (slaveid: %d; port: %s) is too old and does not support firmware updates!' % (device_name, device_slaveid, port))
                 too_old_to_update.append(device_info)
 
@@ -449,13 +436,13 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
     for device_info in to_update: # Devices, were alive and supported fw_updates
         name, slaveid, port, mb_client, latest_remote_fw, fw_signature, released_fw_endpoint = device_info.get_multiple_props('name', 'slaveid', 'port', 'mb_client', 'latest_remote_fw', 'fw_signature', 'released_fw_endpoint')
         logging.info('Flashing firmware to %s' % str(device_info))
-        downloaded_file = fw_downloader.download_remote_file(urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+        downloaded_file = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
         try:
             _do_flash(mb_client, downloaded_file, 'fw', False)
         except fw_flasher.FlashingError as e:
             logging.exception(e)
             in_bootloader.append(device_info)
-        except ModbusError as e:  # Device was connected at the probing time, but is disconnected now
+        except minimalmodbus.ModbusException as e:  # Device was connected at the probing time, but is disconnected now
             logging.exception(e)
             dummy_records.append(device_info)
         else:
@@ -492,7 +479,7 @@ def _restore_fw_signature(slaveid, port):
     try:
         logging.debug("Will ask a bootloader for fw_signature")
         fw_signature = bindings.WBModbusDeviceBase(slaveid, port).get_fw_signature()  # latest bootloaders could answer a fw_signature
-    except ModbusError as e:
+    except minimalmodbus.ModbusException as e:
         logging.debug("Will try to restore fw_signature from db by slaveid: %d and port %s" % (slaveid, port))
         fw_signature = db.get_fw_signature(slaveid, port)
     logging.debug("FW signature for %d : %s is %s" % (slaveid, port, str(fw_signature)))
