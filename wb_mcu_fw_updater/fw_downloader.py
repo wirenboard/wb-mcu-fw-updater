@@ -39,17 +39,6 @@ def get_request(url_path, tries=3):  # TODO: to config?
         raise WBRemoteStorageError(url_path)
 
 
-# TODO: move to launcher (only for specific modes)
-# """
-# Ensuring, User has Internet connection
-# executes at first import
-# """
-# try:
-#     get_request(CONFIG['ROOT_URL'])
-# except WBRemoteStorageError as e:
-#     die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
-
-
 def read_remote_file(url_path, coding='utf-8'):
     try:
         ret = get_request(url_path)
