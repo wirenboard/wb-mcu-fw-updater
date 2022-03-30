@@ -8,7 +8,7 @@ import sys
 import yaml
 import subprocess
 import six
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from distutils.version import LooseVersion
 from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, CONFIG
 
@@ -110,8 +110,8 @@ def get_released_fw(fw_signature, release_info):
             fw_endpoint = yaml.safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
             if fw_endpoint:
                 fw_version = releases.parse_fw_version(fw_endpoint)  # TODO: raise error
-                logging.debug("FW version for %s on release %s: %s\nEndpoint: %s" % (fw_signature, suite, fw_version, fw_endpoint))
-                return fw_version, fw_endpoint
+                logging.debug("FW version for %s on release %s: %s (endpoint: %s)" % (fw_signature, suite, fw_version, fw_endpoint))
+                return str(fw_version), str(fw_endpoint)
         except fw_downloader.RemoteFileReadingError as e:
             logging.warning("No released fw for %s in %s" % (fw_signature, url))
             continue
@@ -152,7 +152,8 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):
         logging.info('Has found serial port settings: %s' % str(uart_settings_dict))
         modbus_connection._set_port_settings_raw(uart_settings_dict)
 
-    try:  # Will raise NoResponseError, if disconnected
+    try:
+        sn = modbus_connection.get_serial_number()  # Will raise NoResponseError, if disconnected
         fw_sig = modbus_connection.get_fw_signature()
     except bindings.TooOldDeviceError as e:
         fw_sig = ''
@@ -160,13 +161,14 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):
         six.raise_from(ForeignDeviceError, e)
 
     try:  # WB devices assume to have all these regs
-        logging.debug("%s %d:\n\t%s %d %s %s" % (
-            port, slaveid,
+        logging.debug("%s %d:" % (port, slaveid))
+        logging.debug("\t%s %d %s %s %d" % (
             modbus_connection.get_device_signature(),
-            modbus_connection.get_serial_number(),
+            sn,
             fw_sig,
-            modbus_connection.get_fw_version()
-            ))
+            modbus_connection.get_fw_version(),
+            modbus_connection.get_uptime()
+        ))
     except minimalmodbus.ModbusException as e:
         raise ForeignDeviceError("Possibly, device (%s %d) is not a WB-one!" % (port, slaveid))
 
@@ -345,13 +347,6 @@ class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
         return "%s (%d, %s)" % (self.name, self.modbus_connection.slaveid, self.modbus_connection.port)
 
 
-ProbingResult = namedtuple("ProbingResult", "alive, in_bootloader, disconnected, too_old_to_update, foreign")
-ProbingResult.__new__.__defaults__ = ([],) * len(ProbingResult._fields)
-
-CmdStatus = namedtuple("CmdStatus", "ok, to_perform, skipped, no_fw_release")
-CmdStatus.__new__.__defaults__ = ([],) * len(CmdStatus._fields)
-
-
 def probe_all_devices(driver_config_fname):  # TODO: to separate module
     """
     Acquiring states of all devies, added to config.
@@ -362,7 +357,8 @@ def probe_all_devices(driver_config_fname):  # TODO: to separate module
         too_old_to_update - old wb devices, haven't bootloader
         foreign_devices - non-wb devices, defined in config
     """
-    result = ProbingResult()
+    result = defaultdict(list)
+
     logging.info('Will probe all devices defined in %s' % driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
         uart_params = ''.join(map(str, port_params['uart_params']))  # 9600N2
@@ -373,83 +369,92 @@ def probe_all_devices(driver_config_fname):  # TODO: to separate module
             try:
                 device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, uart_params))
             except ForeignDeviceError as e:
-                result.foreign.append(device_info)
+                result['foreign'].append(device_info)
                 continue
             except minimalmodbus.NoResponseError as e:
                 bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port)
                 if bootloader_connection.is_in_bootloader():
-                    result.in_bootloader.append(DeviceInfo(name=device_name, modbus_connection=bootloader_connection))
+                    result['in_bootloader'].append(DeviceInfo(name=device_name, modbus_connection=bootloader_connection))
                 else:
-                    result.disconnected.append(device_info)
+                    result['disconnected'].append(device_info)
                 continue
 
             try:
                 mb_connection = device_info.modbus_connection
                 db.save(mb_connection.slaveid, mb_connection.port, mb_connection.get_fw_signature()) # old devices haven't fw_signatures
-                result.alive.append(device_info)
+                result['alive'].append(device_info)
             except bindings.TooOldDeviceError:
                 logging.error('%s is too old and does not support firmware updates!' % str(device_info))
-                result.too_old_to_update.append(device_info)
+                result['too_old_to_update'].append(device_info)
 
     return result
 
 
 def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
     probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
-    cmd_status = CmdStatus()
+    cmd_status = defaultdict(list)
 
-    for device_info in probing_result.alive:
+    for device_info in probing_result['alive']:
         fw_signature = device_info.modbus_connection.get_fw_signature()
         try:
             latest_remote_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)  # auto-updating only from releases
         except NoReleasedFwError as e:
             logging.error(e)
-            cmd_status.no_fw_release.append(device_info)
+            cmd_status['no_fw_release'].append(device_info)
             continue
         if latest_remote_version == 'latest':  # Could be written in release
             latest_remote_version = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
         local_device_version = device_info.modbus_connection.get_fw_version()
 
         if is_reflash_necessary(actual_version=local_device_version, provided_version=latest_remote_version, force_reflash=force, allow_downgrade=allow_downgrade):
-            cmd_status.to_perform.append([device_info, released_fw_endpoint])
+            cmd_status['to_perform'].append([device_info, released_fw_endpoint])
         else:
-            cmd_status.skipped.append(device_info)
+            cmd_status['skipped'].append(device_info)
 
-    for device_info, released_fw_endpoint in cmd_status.to_perform: # Devices, were alive and supported fw_updates
+    for device_info, released_fw_endpoint in cmd_status['to_perform']: # Devices, were alive and supported fw_updates
         logging.info('Flashing firmware to %s' % str(device_info))
         downloaded_file = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
         try:
             _do_flash(device_info.modbus_connection, downloaded_file, 'fw', False)
         except fw_flasher.FlashingError as e:
             logging.exception(e)
-            probing_result.in_bootloader.append(device_info)
+            probing_result['in_bootloader'].append(device_info)
         except minimalmodbus.ModbusException as e:  # Device was connected at the probing time, but is disconnected now
             logging.exception(e)
-            probing_result.disconnected.append(device_info)
+            probing_result['disconnected'].append(device_info)
         else:
-            ok_records.append(device_info)
+            cmd_status['ok'].append(device_info)
 
-    if cmd_status.skipped:  # TODO: maybe split by reasons?
-        logging.warning('The following devices were not updated:\n\t%s\nYou may try to:\n\trun with "-f" arg to force reflash devices\n\trun with "--allow-downgrade" arg to flash devices to released FWs' % '\n\t'.join([str(device_info) for device_info in cmd_status.skipped]))
+    if cmd_status['skipped']:  # TODO: maybe split by reasons?
+        logging.warning("Not updated:")
+        logging.warning("\t%s" % "; ".join([str(device_info) for device_info in cmd_status['skipped']]))
+        logging.warning('You may try to run with "-f" or "--allow-downgrade" arg')
 
-    if cmd_status.no_fw_release:
-        logging.warning('The following devices are not supported in current release %s:\n\t%s\nYou may try to switch to newer release.' % (str(RELEASE_INFO), '\n\t'.join([str(device_info) for device_info in cmd_status.no_fw_release])))
+    if cmd_status['no_fw_release']:
+        logging.warning("Not supported in current (%s) release:" % str(RELEASE_INFO))
+        logging.warning("\t%s" % "; ".join([str(device_info) for device_info in cmd_status['no_fw_release']]))
+        logging.warning("You may try to switch to newer release")
 
-    if probing_result.disconnected:
-        logging.warning('No answer from the following devices:\n\t%s\nDevices are possibly disconnected.' % '\n\t'.join([str(device_info) for device_info in probing_result.disconnected]))
+    if probing_result['disconnected']:
+        logging.warning("No answer from:")
+        logging.warning("\t%s" % "; ".join([str(device_info) for device_info in probing_result['disconnected']]))
+        logging.warning("Devices are possibly disconnected")
 
-    if probing_result.in_bootloader:
-        logging.error('The following devices are in bootloader mode.\nTry "wb-mcu-fw-updater recover-all":\n\t%s' % '\n\t'.join([str(device_info) for device_info in probing_result.in_bootloader]))
+    if probing_result['in_bootloader']:
+        logging.error("Now in bootloader:")
+        logging.error("\t%s" % "; ".join([str(device_info) for device_info in probing_result['in_bootloader']]))
+        logging.error('Try wb-mcu-fw-updater recover-all')
 
-    if probing_result.too_old_to_update:
-        logging.error("Devices, which are too old for firmware updates:\n\t%s" % '\n\t'.join([str(device_info) for device_info in probing_result.too_old_to_update]))
+    if probing_result['too_old_to_update']:
+        logging.error("Too old for any updates:")
+        logging.error("\t%s" % "; ".join([str(device_info) for device_info in probing_result['too_old_to_update']]))
 
     logging.info("%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s too old for any updates." % (
-        user_log.colorize(str(len(cmd_status.ok)), 'GREEN' if cmd_status.ok else 'RED'),
-        user_log.colorize(str(len(cmd_status.skipped)), 'YELLOW' if cmd_status.skipped else 'GREEN'),
-        user_log.colorize(str(len(probing_result.in_bootloader)), 'RED' if probing_result.in_bootloader else 'GREEN'),
-        user_log.colorize(str(len(probing_result.disconnected)), 'RED' if probing_result.disconnected else 'GREEN'),
-        user_log.colorize(str(len(probing_result.too_old_to_update)), 'RED' if probing_result.too_old_to_update else 'GREEN')
+        user_log.colorize(str(len(cmd_status['ok'])), 'GREEN' if cmd_status['ok'] else 'RED'),
+        user_log.colorize(str(len(cmd_status['skipped'])), 'YELLOW' if cmd_status['skipped'] else 'GREEN'),
+        user_log.colorize(str(len(probing_result['in_bootloader'])), 'RED' if probing_result['in_bootloader'] else 'GREEN'),
+        user_log.colorize(str(len(probing_result['disconnected'])), 'RED' if probing_result['disconnected'] else 'GREEN'),
+        user_log.colorize(str(len(probing_result['too_old_to_update'])), 'RED' if probing_result['too_old_to_update'] else 'GREEN')
     ))
 
 
@@ -469,40 +474,43 @@ def _restore_fw_signature(slaveid, port):
 
 def _recover_all():
     probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
-    cmd_status = CmdStatus()
+    cmd_status = defaultdict(list)
 
-    for device_info in probing_result.in_bootloader:
+    for device_info in probing_result['in_bootloader']:
         fw_signature = _restore_fw_signature(device_info.modbus_connection.slaveid, device_info.modbus_connection.port)
         if fw_signature is None:
             logging.info('%s %s' % (user_log.colorize('Unknown fw_signature:', 'RED'), str(device_info)))
-            cmd_status.skipped.append(device_info)
+            cmd_status['skipped'].append(device_info)
         else:
             logging.info('%s %s' % (user_log.colorize('Known fw_signature:', 'GREEN'), str(device_info)))
-            cmd_status.to_perform.append([device_info, fw_signature])
+            cmd_status['to_perform'].append([device_info, fw_signature])
 
-    if cmd_status.to_perform:
+    if cmd_status['to_perform']:
         logging.info('Flashing the most recent stable firmware:')
-        for device_info, fw_signature in cmd_status.to_perform:
+        for device_info, fw_signature in cmd_status['to_perform']:
             try:
                 recover_device_iteration(fw_signature, device_info.modbus_connection.slaveid, device_info.modbus_connection.port)
             except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
                 logging.exception(e)
-                cmd_status.skipped.append(device_info)
+                cmd_status['skipped'].append(device_info)
             else:
-                cmd_status.ok.append(device_info)
+                cmd_status['ok'].append(device_info)
         logging.info('Done')
 
-    if probing_result.disconnected:
-        logging.debug('No answer from the following devices:\n\t%s' % '\n\t'.join([str(device_info) for device_info in probing_result.disconnected]))
+    if probing_result['disconnected']:
+        logging.debug("No answer:")
+        logging.debug("\t%s" % "; ".join([str(device_info) for device_info in probing_result['disconnected']]))
 
-    if cmd_status.skipped:
-        logging.error('Could not recover:\n\t%s\nTry again or launch single recover with --fw-sig <fw_signature> key for each device!' % '\n\t'.join([str(device_info) for device_info in cmd_status.skipped]))
+    if cmd_status['skipped']:
+        logging.error("Not recovered:")
+        logging.error("\t%s" % "; ".join([str(device_info) for device_info in cmd_status['skipped']]))
+        logging.error("Try again or launch single recover with --fw-sig <fw_signature> key for each device!")
 
     logging.info("%s recovered, %s was already working, %s not recovered and %s not answered to recover cmd." % (
-        user_log.colorize(str(len(ok_records)), 'GREEN' if (ok_records or (not to_recover and not recover_was_skipped)) else 'RED'),
-        user_log.colorize(str(len(probing_result.alive)), 'GREEN') if probing_result.alive else '0',
-        user_log.colorize(str(len(recover_was_skipped)), 'RED' if recover_was_skipped else 'GREEN'),
-        user_log.colorize(str(len(probing_result.disconnected)), 'RED' if probing_result.disconnected else 'GREEN')
+        user_log.colorize(str(len(cmd_status['ok'])), 'GREEN' if (cmd_status['ok'] or (not cmd_status['to_perform'] and not cmd_status['skipped'])) else 'RED'),
+        user_log.colorize(str(len(probing_result['alive'])), 'GREEN') if probing_result['alive'] else '0',
+        user_log.colorize(str(len(cmd_status['skipped'])), 'RED' if cmd_status['skipped'] else 'GREEN'),
+        user_log.colorize(str(len(probing_result['disconnected'])), 'RED' if probing_result['disconnected'] else 'GREEN')
     ))
 
 
