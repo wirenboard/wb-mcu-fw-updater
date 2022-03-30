@@ -46,7 +46,7 @@ def update_bootloader(args):
     """
     check_internet_connection()
 
-    if not update_monitor.ask_user("Updating bootloader is a dangerous operation.  Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?"):
+    if not update_monitor.ask_user("Updating bootloader is a dangerous operation. Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?"):
         die("Updating bootloader was requested, but rejected after.")
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
@@ -143,7 +143,8 @@ def flash_fw_file(args):
     except fw_flasher.NotInBootloaderError as e:
         die("Seems, device (%s) is not in bootloader now!\nTry again with '-j' arg" % device_str)
     except fw_flasher.FlashingError as e:
-        logging.error("Unsuccessful flashing!\n\tDevice: %s\n\tFW: %s" % (device_str, args.fname))
+        logging.error("Unsuccessful flashing!")
+        logging.error("\tDevice: %s\tFW: %s" % (device_str, args.fname))
         die(e)
 
 

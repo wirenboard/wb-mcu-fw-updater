@@ -89,7 +89,7 @@ def fill_release_info():  # TODO: make a class, storing a release-info context
     try:
         RELEASE_INFO = releases.parse_releases(releases_fname)
     except Exception as e:
-        logging.error("Critical error in %s file!\nContact the support!" % releases_fname)
+        logging.error("Critical error in %s file! Contact the support!" % releases_fname)
         six.reraise(*sys.exc_info())
 
 
@@ -133,7 +133,7 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
     return downloaded_fw
 
 
-def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):
+def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):  # TODO: to device_prober module?
     """
     Alive device only:
         searching device's uart settings (if not passed);

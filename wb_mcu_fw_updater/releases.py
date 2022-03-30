@@ -23,7 +23,8 @@ def parse_releases(fname=CONFIG['RELEASES_FNAME']):  # TODO: look at wb-update-m
     logging.debug("Reading %s for releases info" % fname)
     with open(fname) as fp:
         ret.update({k.strip(): v.strip() for k, v in (l.split('=', 1) for l in fp)})
-        logging.debug("Got releases info:\n%s" % str(ret))
+        logging.debug("Got releases info:")
+        logging.debug("\t%s" % str(ret))
         return ret
 
 
