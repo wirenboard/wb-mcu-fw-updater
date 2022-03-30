@@ -11,11 +11,20 @@ from wb_modbus.minimalmodbus import ModbusException
 from wb_modbus import parse_uart_settings_str
 
 
+def check_internet_connection():
+    try:
+        fw_downloader.get_request(CONFIG['ROOT_URL'])
+    except fw_downloader.WBRemoteStorageError as e:
+        die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
+
+
 def update_fw(args):
     """
     Updating device's firmware.
     Could install specified fw_version from specified branch.
     """
+    check_internet_connection()
+
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
@@ -35,6 +44,8 @@ def update_bootloader(args):
     Updating device's bootloader.
     Only latest version from stable branch is available.
     """
+    check_internet_connection()
+
     if not update_monitor.ask_user("Updating bootloader is a dangerous operation.  Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?"):
         die("Updating bootloader was requested, but rejected after.")
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
@@ -55,6 +66,8 @@ def recover_fw(args):
     """
     Recovering the device, stuck in the bootloader
     """
+    check_internet_connection()
+
     def _flash_in_bl(fw_sig, slaveid, port):
         try:
             update_monitor.recover_device_iteration(fw_sig, slaveid, port)
@@ -100,6 +113,7 @@ def update_all(args):
     """
     Updating firmwares for all devices, specified in wb-mqtt-serial's config.
     """
+    check_internet_connection()
     update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade)
 
 
@@ -107,6 +121,7 @@ def recover_all(args):
     """
     Trying to recover all devices, specified in wb-mqtt-serial's config.
     """
+    check_internet_connection()
     update_monitor._recover_all()
 
 
