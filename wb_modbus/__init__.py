@@ -3,8 +3,9 @@ import re
 from collections import OrderedDict
 
 
-logging.getLogger().addHandler(logging.NullHandler())
-logging.getLogger().setLevel(logging.NOTSET)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.NullHandler())
 
 
 #TODO: fill from config
