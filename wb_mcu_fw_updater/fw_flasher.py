@@ -7,6 +7,7 @@ import six
 import logging
 from tqdm import tqdm
 from wb_modbus import minimalmodbus, bindings
+from . import logger
 
 
 class FlashingError(Exception):
@@ -95,11 +96,11 @@ class ModbusInBlFlasher(object):
             six.raise_from(BootloaderCmdError, e)
 
     def reset_uart(self):
-        logging.debug("Resetting uart params")
+        logger.debug("Resetting uart params")
         self._perform_bootloader_cmd(self.UART_SETTINGS_RESET_REG)
 
     def reset_eeprom(self):
-        logging.debug("Resetting all device's settings")
+        logger.debug("Resetting all device's settings")
         self._perform_bootloader_cmd(self.EEPROM_ERASE_REG)
 
     def flash_in_bl(self, fw_fpath):
@@ -109,6 +110,6 @@ class ModbusInBlFlasher(object):
         fw_as_regs = self._read_to_u16s(fw_fpath)
         info_block, data_block = fw_as_regs[:self.INFO_BLOCK_LENGTH], fw_as_regs[self.INFO_BLOCK_LENGTH:]
 
-        logging.info("Flashing %s" % fw_fpath)
+        logger.info("Flashing %s" % fw_fpath)
         self._send_info(info_block)
         self._send_data(data_block)

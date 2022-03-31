@@ -5,7 +5,7 @@ import argparse
 import logging
 import atexit
 from subprocess import CalledProcessError
-from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, fw_flasher, CONFIG
+from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, fw_flasher, CONFIG, logger
 from wb_modbus.bindings import WBModbusDeviceBase
 from wb_modbus.minimalmodbus import ModbusException
 from wb_modbus import parse_uart_settings_str
@@ -28,14 +28,14 @@ def update_fw(args):
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
-        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+        logger.info('%s' % user_log.colorize('Done', 'GREEN'))
     except update_monitor.TooOldDeviceError as e:
         die(e)
     except ModbusException as e:
-        logging.error("Check device's connection, slaveid and serial port settings!")
+        logger.error("Check device's connection, slaveid and serial port settings!")
         die(e)
     except CalledProcessError as e:
-        logging.error("Flashing has failed!")
+        logger.error("Flashing has failed!")
         die(e)
 
 
@@ -51,14 +51,14 @@ def update_bootloader(args):
     modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
     try:
         update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
-        logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+        logger.info('%s' % user_log.colorize('Done', 'GREEN'))
     except update_monitor.TooOldDeviceError as e:
         die(e)
     except ModbusException as e:
-        logging.error("Check device's connection, slaveid and serial port settings!")
+        logger.error("Check device's connection, slaveid and serial port settings!")
         die(e)
     except CalledProcessError as e:
-        logging.error("Flashing has failed!")
+        logger.error("Flashing has failed!")
         die(e)
 
 
@@ -71,10 +71,10 @@ def recover_fw(args):
     def _flash_in_bl(fw_sig, slaveid, port):
         try:
             update_monitor.recover_device_iteration(fw_sig, slaveid, port)
-            logging.info('%s' % user_log.colorize('Done', 'GREEN'))
+            logger.info('%s' % user_log.colorize('Done', 'GREEN'))
             return True
         except (fw_flasher.FlashingError, RuntimeError) as e:
-            logging.exception(e)
+            logger.exception(e)
             return False
 
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
@@ -100,7 +100,7 @@ def recover_fw(args):
         # No fw_signature has provided
         elif update_monitor.ask_user('Try all possible signatures (%s) on port %s and slaveid %d?' % (', '.join(fw_signatures_list), args.port, args.slaveid)):
             for fw_sig in fw_signatures_list:  # No fw_signatures in db or stored one was unsuccessful
-                logging.info('Trying %s:' % fw_sig)
+                logger.info('Trying %s:' % fw_sig)
                 if _flash_in_bl(fw_sig, args.slaveid, args.port):
                     return
         die('Recovering the device (%d : %s) was not successful' % (args.slaveid, args.port))
@@ -143,8 +143,8 @@ def flash_fw_file(args):
     except fw_flasher.NotInBootloaderError as e:
         die("Seems, device (%s) is not in bootloader now!\nTry again with '-j' arg" % device_str)
     except fw_flasher.FlashingError as e:
-        logging.error("Unsuccessful flashing!")
-        logging.error("\tDevice: %s\tFW: %s" % (device_str, args.fname))
+        logger.error("Unsuccessful flashing!")
+        logger.error("\tDevice: %s\tFW: %s" % (device_str, args.fname))
         die(e)
 
 
@@ -152,7 +152,7 @@ def parse_conn_settings_arg(conn_settings_str):
     try:
         return parse_uart_settings_str(conn_settings_str)
     except Exception as e:
-        logging.error(e)
+        logger.error(e)
         die()
 
 
@@ -259,8 +259,10 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    user_log.setup_syslog_logger()
-    user_log.setup_user_logger((args.user_loglevel or CONFIG['USER_LOGLEVEL']))
+    user_log.setup_syslog_logger("wb_mcu_fw_updater")
+    user_loglevel = args.user_loglevel or CONFIG['USER_LOGLEVEL']
+    user_log.setup_user_logger("wb_mcu_fw_updater", user_loglevel)
+    user_log.setup_user_logger("wb_modbus", user_loglevel)
 
     update_monitor.pause_driver()
     atexit.register(update_monitor.resume_driver)

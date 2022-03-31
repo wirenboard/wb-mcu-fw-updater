@@ -7,8 +7,9 @@ import logging.handlers
 from ast import literal_eval
 
 
-logging.getLogger().addHandler(logging.NullHandler())
-logging.getLogger().setLevel(logging.NOTSET)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.NullHandler())
 
 
 CONFIG = {
@@ -44,9 +45,9 @@ def die(err=None, exitcode=1):
     Use in except block of expected exceptions!
     """
     if isinstance(err, Exception):
-        logging.exception(err)
+        logger.exception(err)
     elif isinstance(err, str):
-        logging.error(err)
+        logger.error(err)
     sys.exit(exitcode)
 
 
@@ -57,7 +58,7 @@ def logging_excepthook(exc_type, exc_value, exc_traceback):
     if exc_type == KeyboardInterrupt:
         pass
     else:
-        logging.critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
+        logger.critical('Unhandled exception!', exc_info=(exc_type, exc_value, exc_traceback))
     die()
 
 
@@ -71,7 +72,7 @@ def update_config(config_fname):
     try:
         conffile = open(config_fname)
     except IOError:
-        logging.warning('No user config file has found! Will use built-in default')
+        logger.warning('No user config file has found! Will use built-in default')
         return
     try:
         config_dict = literal_eval(conffile.read())

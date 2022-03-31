@@ -79,7 +79,7 @@ class ColoredFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def setup_user_logger(least_visible_level):
+def setup_user_logger(name, least_visible_level):
     """
     User_logger handles programm's output, shown to user by terminal.
     Log records from error and higher are redirecting to stderr.
@@ -97,21 +97,21 @@ def setup_user_logger(least_visible_level):
     stdout_handler.setLevel(least_visible_level)
     stdout_handler.setFormatter(user_formatter)
     stdout_handler.addFilter(StdoutFilter(hide_traceback))
-    logging.getLogger().addHandler(stdout_handler)
+    logging.getLogger(name).addHandler(stdout_handler)
 
     stderr_handler = logging.StreamHandler(stream=sys.stderr)
     stderr_handler.setLevel(least_visible_level)
     stderr_handler.setFormatter(user_formatter)
     stderr_handler.addFilter(StderrFilter(hide_traceback))
-    logging.getLogger().addHandler(stderr_handler)
+    logging.getLogger(name).addHandler(stderr_handler)
 
     unhandled_exception_handler = logging.StreamHandler(stream=sys.stderr)
     unhandled_exception_handler.setLevel(logging.CRITICAL)
     unhandled_exception_handler.setFormatter(user_formatter)
-    logging.getLogger().handlers.insert(0, unhandled_exception_handler)
+    logging.getLogger(name).handlers.insert(0, unhandled_exception_handler)
 
 
-def setup_syslog_logger():
+def setup_syslog_logger(name):
     """
     Writing logging messages to syslog socket.
     Default syslog socket is platform-dependent and could be absent in some development environments.
@@ -121,4 +121,4 @@ def setup_syslog_logger():
         syslog_handler = logging.handlers.SysLogHandler(address=_default_syslog_sock, facility='user')
         syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
         syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
-        logging.getLogger().handlers.insert(0, syslog_handler)  # Each message should be formatted by syslog's handler at first
+        logging.getLogger(name).handlers.insert(0, syslog_handler)  # Each message should be formatted by syslog's handler at first

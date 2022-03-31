@@ -1,10 +1,7 @@
 import json
 import os
 import logging
-from . import CONFIG
-
-
-logger = logging.getLogger()
+from . import CONFIG, logger
 
 
 class FixedLengthList(list):
