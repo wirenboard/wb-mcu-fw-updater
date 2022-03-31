@@ -7,7 +7,7 @@ from binascii import unhexlify
 from copy import deepcopy
 from itertools import product
 from functools import wraps
-from . import minimalmodbus, instruments, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER
+from . import minimalmodbus, instruments, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER, logger
 
 
 class TooOldDeviceError(minimalmodbus.ModbusException):
@@ -50,16 +50,16 @@ def _debug_info(message):
     :type message: str
     """
     minimalmodbus._check_string(message, description="string to print")
-    logging.debug(message)
+    logger.debug(message)
 
 
 def close_all_modbus_ports():
     for serial_instance in minimalmodbus._serialports.values():
         if serial_instance.is_open:
-            logging.debug('Closing serial instance: %s' % str(serial_instance))
+            logger.debug('Closing serial instance: %s' % str(serial_instance))
             serial_instance.close()
         else:
-            logging.debug('Serial instance %s has already closed' % serial_instance)
+            logger.debug('Serial instance %s has already closed' % serial_instance)
 
 
 def _validate_param(param, sequence):
@@ -90,7 +90,7 @@ class MinimalModbusAPIWrapper(object):
         self.settings = settings_dict
         self.device.serial.apply_settings(self.settings)
         if not self.device.serial.is_open:
-            logging.debug("Opening and closing port %s to write settings" % self.port)
+            logger.debug("Opening and closing port %s to write settings" % self.port)
             self.device.serial.open()
             self.device.serial.close()
 
@@ -416,7 +416,7 @@ class MinimalModbusAPIWrapper(object):
         try:
             return str(unhexlify(ret).decode('utf-8')).strip()
         except UnicodeDecodeError as e:
-            logging.exception(e)
+            logger.exception(e)
             return None
 
 
@@ -436,7 +436,7 @@ def auto_find_uart_settings(method_to_decorate):
                 return method_to_decorate(self, *args, **kwargs)
             except IOError:
                 self.set_port_settings(*settings)
-                logging.debug('Trying serial port settings: %s' % str(settings))
+                logger.debug('Trying serial port settings: %s' % str(settings))
         else:
             raise RuntimeError('All serial port settings were not successful! Check device slaveid/power!')
     return wrapper
@@ -494,7 +494,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                 self._set_port_settings_raw(initial_uart_settings)
                 return actual_uart_settings
             except IOError:
-                logging.debug('Trying serial port settings: %s' % str(settings))
+                logger.debug('Trying serial port settings: %s' % str(settings))
                 self.set_port_settings(*settings)
                 continue
         else:
@@ -509,7 +509,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         device_signature = str(self.get_device_signature())
         if WBMAP_MARKER.match(device_signature):
-            logging.debug('Will calculate SN as WB-MAP*')
+            logger.debug('Will calculate SN as WB-MAP*')
             return self._get_serial_number_map()
         else:
             return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
@@ -689,7 +689,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         initial_port_settings = deepcopy(self.settings)
         bootloader_uart_params = [baudrate, 'N', 2]
-        logging.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
+        logger.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
         self.set_port_settings(*bootloader_uart_params)
         self.device.serial.timeout = 0.5
         try:
@@ -699,7 +699,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.ModbusException:
             return False
         finally:
-            logging.debug('Setting params to port %s back' % self.port)
+            logger.debug('Setting params to port %s back' % self.port)
             self._set_port_settings_raw(initial_port_settings)
             self.device.serial.timeout = self.SERIAL_TIMEOUT
 

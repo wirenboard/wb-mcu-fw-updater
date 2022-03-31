@@ -7,7 +7,7 @@ import sys
 import errno
 import six
 from six.moves import urllib
-from . import CONFIG
+from . import CONFIG, logger
 
 
 class WBRemoteStorageError(Exception):
@@ -29,7 +29,7 @@ def get_request(url_path, tries=3):  # TODO: to config?
     :return: responce's content
     :rtype: bytestring
     """
-    logging.debug('GET: %s' % url_path)
+    logger.debug('GET: %s' % url_path)
     for _ in range(tries):
         try:
             return urllib.request.urlopen(url_path)
@@ -74,13 +74,13 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
             six.reraise(*sys.exc_info())
 
     if not fname:
-        logging.debug("Trying to get fname from content-disposition")
+        logger.debug("Trying to get fname from content-disposition")
         default_fname = ret.info().get('Content-Disposition')
         fname = default_fname.split('filename=')[1].strip('"\'') if default_fname else None
-        logging.debug("Got fname from content-disposition: %s" % str(fname))
+        logger.debug("Got fname from content-disposition: %s" % str(fname))
     if fname:
         file_path = os.path.join(saving_dir, fname)
-        logging.debug("%s => %s" % (url_path, file_path))
+        logger.debug("%s => %s" % (url_path, file_path))
     else:
         raise RemoteFileDownloadingError("Could not construct fpath, where to save fw. Fname should be specified!")
 
@@ -146,7 +146,7 @@ class RemoteFileWatcher(object):
         try:
             return download_remote_file(url_path, file_saving_dir)
         except Exception as e:
-            logging.error("Could not download: %s" % url_path)
-            logging.error("Remote path: %s" % remote_path)
-            logging.error("Save to: %s" % file_saving_dir)
+            logger.error("Could not download: %s" % url_path)
+            logger.error("Remote path: %s" % remote_path)
+            logger.error("Save to: %s" % file_saving_dir)
             six.reraise(*sys.exc_info())
