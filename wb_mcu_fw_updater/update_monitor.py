@@ -8,8 +8,8 @@ import sys
 import yaml
 import subprocess
 import six
+import semantic_version
 from collections import namedtuple, defaultdict
-from distutils.version import LooseVersion
 from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die, CONFIG
 
 import wb_modbus  # Setting up module's params
@@ -34,38 +34,7 @@ class ForeignDeviceError(UpdateDeviceError):
     pass
 
 
-class WBVersion(LooseVersion):
-    """
-    x.y.z-rc1 should be < than x.y.z (instead of standart LooseVersion's behaviour)
-    """
-    def _cmp (self, other):
-        if isinstance(other, str):
-            other = WBVersion(other)
-        elif not isinstance(other, WBVersion):
-            return NotImplemented
-
-        _self, _other = self.version[::], other.version[::]
-
-        if _self == _other:
-            return 0
-
-        """
-        chars are compared by their ords
-        => equalizing length of two parsed versions by appending chars with large ord (mind py2/3!)
-        """
-        diff = len(_self) - len(_other)
-        if diff >= 0:
-            _other += [chr(255)] * diff
-        else:
-            _self += [chr(255)] * -diff
-
-        if _self < _other:
-            return -1
-        if _self > _other:
-            return 1
-
-
-def ask_user(message):
+def ask_user(message):  # TODO: non-blocking with timer?
     """
     Asking user before potentionally dangerous action.
 
@@ -240,25 +209,30 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
 
 
 def is_reflash_necessary(actual_version, provided_version, force_reflash=False, allow_downgrade=False):
-    actual_version, provided_version = WBVersion(actual_version), WBVersion(provided_version)
+    actual_version, provided_version = semantic_version.Version(actual_version), semantic_version.Version(provided_version)
+    _do_flash = False
 
     if actual_version == provided_version:
         if force_reflash:
             logging.info("%s %s -> %s" % (user_log.colorize('Force update:', 'YELLOW'), actual_version, provided_version))
-            return True
+            _do_flash = True
         else:
             logging.info("Update skipped: %s -> %s" % (actual_version, provided_version))
-            return False
-
-    if provided_version > actual_version:
+            _do_flash = False
+    elif provided_version > actual_version:
         logging.info("%s %s -> %s" % (user_log.colorize('Update:', 'GREEN'), actual_version, provided_version))
-        return True
+        _do_flash = True
     elif allow_downgrade:
         logging.info("%s %s -> %s" % (user_log.colorize('Downgrade:', 'YELLOW'), actual_version, provided_version))
-        return True
+        _do_flash = True
     else:
         logging.info("%s %s -> %s" % (user_log.colorize('Downgrade not allowed:', 'RED'), actual_version, provided_version))  # TODO: launch with --allow-downgrade arg?
-        return False
+        _do_flash = False
+
+    if _do_flash and (actual_version.major != provided_version.major):
+        return ask_user("Major version has changed (v%s -> v%s); backward compatibility will be broken. Are you sure?")
+    else:
+        return _do_flash
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
