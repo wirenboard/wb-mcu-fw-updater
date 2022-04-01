@@ -4,9 +4,8 @@
 import argparse
 import logging
 import atexit
-from subprocess import CalledProcessError
 from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, fw_flasher, CONFIG, logger
-from wb_modbus.bindings import WBModbusDeviceBase
+from wb_modbus.bindings import WBModbusDeviceBase, TooOldDeviceError
 from wb_modbus.minimalmodbus import ModbusException
 from wb_modbus import parse_uart_settings_str
 
@@ -18,25 +17,35 @@ def check_internet_connection():
         die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
 
 
+def _update_alive_device(slaveid, port, mode, branch, version, force, erase_settings):
+    check_internet_connection()
+
+    try:
+        modbus_connection = update_monitor.get_correct_modbus_connection(slaveid, port)
+    except ModbusException as e:
+        logger.error("Check device's connection, slaveid and serial port settings!")
+        die(e)
+
+    try:
+        update_monitor.flash_alive_device(modbus_connection, mode, branch, version, force, erase_settings)
+        logger.info('%s' % user_log.colorize('Done', 'GREEN'))
+    except (
+        TooOldDeviceError,
+        ModbusException,
+        update_monitor.UpdateDeviceError,
+        update_monitor.NoReleasedFwError,
+        fw_downloader.WBRemoteStorageError,
+        fw_flasher.FlashingError ) as e:
+        logger.error("Flashing %s to (%d %s) has failed!" % (mode, slaveid, port))
+        die(e)
+
+
 def update_fw(args):
     """
     Updating device's firmware.
     Could install specified fw_version from specified branch.
     """
-    check_internet_connection()
-
-    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
-    try:
-        update_monitor.flash_alive_device(modbus_connection, 'fw', args.branch_name, args.specified_version, args.force, args.erase_settings)
-        logger.info('%s' % user_log.colorize('Done', 'GREEN'))
-    except update_monitor.TooOldDeviceError as e:
-        die(e)
-    except ModbusException as e:
-        logger.error("Check device's connection, slaveid and serial port settings!")
-        die(e)
-    except CalledProcessError as e:
-        logger.error("Flashing has failed!")
-        die(e)
+    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', branch=args.branch_name, version=args.specified_version, force=args.force, erase_settings=args.erase_settings)
 
 
 def update_bootloader(args):
@@ -44,22 +53,7 @@ def update_bootloader(args):
     Updating device's bootloader.
     Only latest version from stable branch is available.
     """
-    check_internet_connection()
-
-    if not update_monitor.ask_user("Updating bootloader is a dangerous operation. Some device settings will be erased.\nIt may brick the device and void the warranty! Are you sure?"):
-        die("Updating bootloader was requested, but rejected after.")
-    modbus_connection = update_monitor.get_correct_modbus_connection(args.slaveid, args.port)
-    try:
-        update_monitor.flash_alive_device(modbus_connection, 'bootloader', '', 'latest', args.force, erase_settings=False)
-        logger.info('%s' % user_log.colorize('Done', 'GREEN'))
-    except update_monitor.TooOldDeviceError as e:
-        die(e)
-    except ModbusException as e:
-        logger.error("Check device's connection, slaveid and serial port settings!")
-        die(e)
-    except CalledProcessError as e:
-        logger.error("Flashing has failed!")
-        die(e)
+    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', branch='', version='latest', force=args.force, erase_settings=False)
 
 
 def recover_fw(args):
@@ -114,7 +108,10 @@ def update_all(args):
     Updating firmwares for all devices, specified in wb-mqtt-serial's config.
     """
     check_internet_connection()
-    update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade)
+    try:
+        update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade)
+    except (ValueError, IOError) as e:  # smth wrong with config
+        die(e)
 
 
 def recover_all(args):
@@ -122,7 +119,10 @@ def recover_all(args):
     Trying to recover all devices, specified in wb-mqtt-serial's config.
     """
     check_internet_connection()
-    update_monitor._recover_all()
+    try:
+        update_monitor._recover_all()
+    except(ValueError, IOError) as e:  # smth wrong with config
+        die(e)
 
 
 def flash_fw_file(args):
