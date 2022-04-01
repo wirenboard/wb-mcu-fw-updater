@@ -152,10 +152,8 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     :rtype: dict
     """
     found_devices = {}
-    try:
-        config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
-    except (IOError, ValueError) as e:  # file not found or is incorrect
-        die(e)
+    config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
+
     for port in config_dict['ports']:
         if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
             port_name = port['path']
@@ -170,10 +168,10 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
                 devices_on_port.add((device_name, int(slaveid)))
             if devices_on_port:
                 found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port}})
-    if found_devices:
-        return found_devices
-    else:
-        die('No devices has found in %s' % driver_config_fname)
+
+    if not found_devices:
+        logging.error("No devices has found in %s" % driver_config_fname)
+    return found_devices
 
 
 def recover_device_iteration(fw_signature, slaveid, port):
@@ -194,7 +192,7 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
         if ask_user(message_str):
             return True
         else:
-            die("Reset of Device's settings was requested, but rejected after.\nDevice is in bootloder now; wait 120s, untill it starts.")
+            raise UpdateDeviceError("Reset of Device's settings was requested, but rejected after.\nDevice is in bootloder now; wait 120s, untill it starts.")
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
@@ -260,15 +258,12 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             branch_name,
             specified_fw_version)
         ):
-            try:
-                downloaded_fw = downloader.download(fw_signature, specified_fw_version)
-                _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
-                return
-            except (fw_downloader.WBRemoteStorageError, fw_flasher.FlashingError) as e:
-                die(e)
+            downloaded_fw = downloader.download(fw_signature, specified_fw_version)
+            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
+            return
 
         else:
-            die("Flashing has rejected")
+            raise UpdateDeviceError("Flashing %s has rejected" % fw_signature)
 
     else:
         branch_name = CONFIG['DEFAULT_SOURCE']
@@ -277,11 +272,8 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     Retrieving, which passed version actually is
     """
     if specified_fw_version == 'release':  # triggered updating from releases
-        try:
-            specified_fw_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
-            downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
-        except (fw_downloader.WBRemoteStorageError, NoReleasedFwError) as e:
-            die(e)  # TODO: check, if present in latest release
+        specified_fw_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
+        downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
 
     if specified_fw_version == 'latest':
         logger.debug('Retrieving latest %s version number for %s' % (mode_name, fw_signature))
@@ -296,10 +288,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
 
     logger.info("%s (%s %d)" % (modbus_connection.port, fw_signature, modbus_connection.slaveid))
     if is_reflash_necessary(actual_version=device_fw_version, provided_version=specified_fw_version, force_reflash=force, allow_downgrade=True):
-        try:
-            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
-        except (fw_downloader.WBRemoteStorageError, NoReleasedFwError) as e:
-            die(e)
+        _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
 
 
 def _do_flash(modbus_connection, fw_fpath, mode, erase_settings):
@@ -514,17 +503,11 @@ def get_port_settings(port_fname):
     python-serial does not remember initial port settings (bd, parity, etc...)
     => restoring it manually after all operations to let wb-mqtt-serial work again
     """
-    try:
-        with open(port_fname) as port:
-            fd = port.fileno()
-            return termios.tcgetattr(fd)
-    except Exception as e:
-        die(e)
+    with open(port_fname) as port:
+        fd = port.fileno()
+        return termios.tcgetattr(fd)
 
 
 def set_port_settings(port_fname, termios_settings):
-    try:
-        with open(port_fname) as port:
-            termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)
-    except Exception as e:
-        die(e)
+    with open(port_fname) as port:
+        termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)
