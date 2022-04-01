@@ -1,6 +1,5 @@
 import json
 import os
-import logging
 from . import CONFIG, logger
 
 
@@ -31,7 +30,6 @@ class FixedLengthList(list):
     def insert(self, index, element):
         super(FixedLengthList, self).insert(index, element)
         self._keep_length()
-        pass
 
 
 class JsonDB(object):
@@ -48,18 +46,18 @@ class JsonDB(object):
 
     def load(self, db_fname):
         if os.path.exists(db_fname):
-            logger.debug('Loading db from file: %s' % db_fname)
+            logger.debug('Loading db from file: %s', db_fname)
             self.container = FixedLengthList(json.load(open(db_fname, 'r')))
         else:
-            logger.debug('File %s not found! Initiallizing empty db' % db_fname)
+            logger.debug('File %s not found! Initiallizing empty db', db_fname)
             self.container = FixedLengthList()
 
     def dump(self):
         try:
             json.dump(self.container, open(self.db_fname, "w+"))
-            logger.debug("Has saved db to %s" % self.db_fname)
+            logger.debug("Has saved db to %s", self.db_fname)
         except PermissionError as e:
-            logger.error("Haven't rights to write %s! Try with sudo" % (self.db_fname), exc_info=True)
+            logger.error("Haven't rights to write %s! Try with sudo", self.db_fname, exc_info=True)
 
     def _find(self, slaveid, port, sequence):
         for index, device in enumerate(sequence):
@@ -72,7 +70,7 @@ class JsonDB(object):
         existing_device_index = self._find(slaveid, port, sequence=self.container)
         if existing_device_index is not None:  # Could be zero
             removed_device = self.container.pop(existing_device_index)
-            logger.debug('Removing device: %s' % str(removed_device))
+            logger.debug('Removing device: %s', str(removed_device))
         device = {
             self._SLAVEID : slaveid,
             self._PORT : port,

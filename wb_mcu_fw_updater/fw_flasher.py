@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import six
-import logging
 from tqdm import tqdm
 from wb_modbus import minimalmodbus, bindings
 from . import logger
@@ -110,6 +108,6 @@ class ModbusInBlFlasher(object):
         fw_as_regs = self._read_to_u16s(fw_fpath)
         info_block, data_block = fw_as_regs[:self.INFO_BLOCK_LENGTH], fw_as_regs[self.INFO_BLOCK_LENGTH:]
 
-        logger.info("Flashing %s" % fw_fpath)
+        logger.info("Flashing %s", fw_fpath)
         self._send_info(info_block)
         self._send_data(data_block)
