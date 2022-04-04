@@ -207,25 +207,25 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
     flasher.flash_in_bl(fw_fpath)
 
 
-def is_reflash_necessary(actual_version, provided_version, force_reflash=False, allow_downgrade=False):
+def is_reflash_necessary(actual_version, provided_version, force_reflash=False, allow_downgrade=False, debug_info=''):
     actual_version, provided_version = semantic_version.Version(actual_version), semantic_version.Version(provided_version)
     _do_flash = False
 
     if actual_version == provided_version:
         if force_reflash:
-            logger.info("%s %s -> %s", user_log.colorize('Force update:', 'YELLOW'), actual_version, provided_version)
+            logger.info("%s %s -> %s %s", user_log.colorize('Force update:', 'YELLOW'), actual_version, provided_version, debug_info)
             _do_flash = True
         else:
-            logger.info("Update skipped: %s -> %s", actual_version, provided_version)
+            logger.info("Update skipped: %s -> %s %s", actual_version, provided_version, debug_info)
             _do_flash = False
     elif provided_version > actual_version:
-        logger.info("%s %s -> %s", user_log.colorize('Update:', 'GREEN'), actual_version, provided_version)
+        logger.info("%s %s -> %s %s", user_log.colorize('Update:', 'GREEN'), actual_version, provided_version, debug_info)
         _do_flash = True
     elif allow_downgrade:
-        logger.info("%s %s -> %s", user_log.colorize('Downgrade:', 'YELLOW'), actual_version, provided_version)
+        logger.info("%s %s -> %s %s", user_log.colorize('Downgrade:', 'YELLOW'), actual_version, provided_version, debug_info)
         _do_flash = True
     else:
-        logger.info("%s %s -> %s", user_log.colorize('Downgrade not allowed:', 'RED'), actual_version, provided_version)  # TODO: launch with --allow-downgrade arg?
+        logger.info("%s %s -> %s %s", user_log.colorize('Downgrade not allowed:', 'RED'), actual_version, provided_version, debug_info)  # TODO: launch with --allow-downgrade arg?
         _do_flash = False
 
     if _do_flash and (actual_version.major != provided_version.major):
@@ -288,7 +288,13 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
 
     logger.info("%s (%s %d)", modbus_connection.port, fw_signature, modbus_connection.slaveid)
-    if is_reflash_necessary(actual_version=device_fw_version, provided_version=specified_fw_version, force_reflash=force, allow_downgrade=True):
+    if is_reflash_necessary(
+        actual_version=device_fw_version,
+        provided_version=specified_fw_version,
+        force_reflash=force,
+        allow_downgrade=True,
+        debug_info='(%s %d %s)' % (fw_signature, modbus_connection.slaveid, modbus_connection.port)
+        ):
         _do_flash(modbus_connection, downloaded_fw, mode, erase_settings)
 
 
@@ -370,7 +376,13 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
             latest_remote_version = fw_downloader.RemoteFileWatcher(mode='fw', branch_name='').get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
         local_device_version = device_info.modbus_connection.get_fw_version()
 
-        if is_reflash_necessary(actual_version=local_device_version, provided_version=latest_remote_version, force_reflash=force, allow_downgrade=allow_downgrade):
+        if is_reflash_necessary(
+            actual_version=local_device_version,
+            provided_version=latest_remote_version,
+            force_reflash=force,
+            allow_downgrade=allow_downgrade,
+            debug_info="(%s)" % str(device_info)
+            ):
             cmd_status['to_perform'].append([device_info, released_fw_endpoint])
         else:
             cmd_status['skipped'].append(device_info)
