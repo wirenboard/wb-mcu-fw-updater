@@ -8,6 +8,7 @@ import yaml
 import subprocess
 import six
 import semantic_version
+from io import open
 from collections import namedtuple, defaultdict
 from . import fw_flasher, fw_downloader, user_log, jsondb, releases, CONFIG, logger
 
@@ -151,6 +152,7 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     :rtype: dict
     """
     found_devices = {}
+
     config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
 
     for port in config_dict['ports']:

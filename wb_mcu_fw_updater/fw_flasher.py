@@ -45,13 +45,18 @@ class ModbusInBlFlasher(object):
         """
         converting fw file contents to a row of u16 modbus regs
         """
+        coding = 'latin1'
+
         bs = int(os.path.getsize(fw_fpath))
         if bs % 2:
             raise IncorrectFwError("Fw file should be even-bytes long!\nGot %s (%db)" % (fw_fpath, bs))
 
         with open(fw_fpath, 'rb') as fp:
             raw_bytes = fp.read()
-            bytestr = str(six.text_type(raw_bytes, encoding='latin1'))
+            if six.PY2:
+                bytestr = raw_bytes.decode(coding).encode(coding)
+            else:
+                bytestr = str(raw_bytes, encoding=coding)
             try:
                 return minimalmodbus._bytestring_to_valuelist(bytestr, int(bs / 2))  # u16
             except Exception as e:
