@@ -66,7 +66,7 @@ def recover_fw(args):
             update_monitor.recover_device_iteration(fw_sig, slaveid, port)
             logger.info('%s', user_log.colorize('Done', 'GREEN'))
             return True
-        except (fw_flasher.FlashingError, RuntimeError) as e:
+        except fw_flasher.FlashingError as e:
             logger.exception(e)
             return False
 
@@ -109,7 +109,7 @@ def update_all(args):
     check_internet_connection()
     try:
         update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade)
-    except (ValueError, IOError) as e:  # smth wrong with config
+    except update_monitor.ConfigParsingError as e:
         die(e)
 
 
@@ -120,7 +120,7 @@ def recover_all(args):
     check_internet_connection()
     try:
         update_monitor._recover_all()
-    except(ValueError, IOError) as e:  # smth wrong with config
+    except update_monitor.ConfigParsingError as e:
         die(e)
 
 

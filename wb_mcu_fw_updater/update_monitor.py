@@ -33,6 +33,12 @@ class NoReleasedFwError(UpdateDeviceError):
 class ForeignDeviceError(UpdateDeviceError):
     pass
 
+class UserCancelledError(UpdateDeviceError):
+    pass
+
+class ConfigParsingError(Exception):
+    pass
+
 
 def ask_user(message):  # TODO: non-blocking with timer?
     """
@@ -78,10 +84,10 @@ def get_released_fw(fw_signature, release_info):
             contents = fw_downloader.get_remote_releases_info(url)
             fw_endpoint = yaml.safe_load(contents).get('releases', {}).get(fw_signature, {}).get(suite)
             if fw_endpoint:
-                fw_version = releases.parse_fw_version(fw_endpoint)  # TODO: raise error
+                fw_version = releases.parse_fw_version(fw_endpoint)
                 logger.debug("FW version for %s on release %s: %s (endpoint: %s)", fw_signature, suite, fw_version, fw_endpoint)
                 return str(fw_version), str(fw_endpoint)
-        except fw_downloader.RemoteFileReadingError as e:
+        except (fw_downloader.RemoteFileReadingError, releases.VersionParsingError) as e:
             logger.warning("No released fw for %s in %s", fw_signature, url)
             continue
     else:
@@ -116,8 +122,8 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):  #
         logger.info("Will find serial port settings for (%s : %d)...", port, slaveid)
         try:
             uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-        except RuntimeError as e:
-            raise minimalmodbus.NoResponseError(e)  # TODO: subclass the error?
+        except bindings.UARTSettingsNotFoundError as e:
+            six.raise_from(minimalmodbus.NoResponseError, e)
         logger.info('Has found serial port settings: %s', str(uart_settings_dict))
         modbus_connection._set_port_settings_raw(uart_settings_dict)
 
@@ -153,7 +159,11 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     """
     found_devices = {}
 
-    config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
+    try:
+        config_dict = json.load(open(driver_config_fname, 'r', encoding='utf-8'))
+    except (ValueError, IOError) as e:
+        logger.exception("Error in %s", driver_config_fname)
+        six.raise_from(ConfigParsingError, e)
 
     for port in config_dict['ports']:
         if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
@@ -193,7 +203,7 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
         if ask_user(message_str):
             return True
         else:
-            raise UpdateDeviceError("Reset of Device's settings was requested, but rejected after.\nDevice is in bootloder now; wait 120s, untill it starts.")
+            raise UserCancelledError("Reset of Device's settings was requested, but rejected after. Device is in bootloder now; wait 120s, untill it starts.")
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
@@ -225,7 +235,8 @@ def is_reflash_necessary(actual_version, provided_version, force_reflash=False, 
         logger.info("%s %s -> %s %s", user_log.colorize('Downgrade:', 'YELLOW'), actual_version, provided_version, debug_info)
         _do_flash = True
     else:
-        logger.info("%s %s -> %s %s", user_log.colorize('Downgrade not allowed:', 'RED'), actual_version, provided_version, debug_info)  # TODO: launch with --allow-downgrade arg?
+        logger.info("%s %s -> %s %s", user_log.colorize('Downgrade not allowed:', 'RED'), actual_version, provided_version, debug_info)
+        logger.info("You can launch with '--allow-downgrade arg'")
         _do_flash = False
 
     if _do_flash and (actual_version.major != provided_version.major):
@@ -254,7 +265,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         if specified_fw_version == 'release':  # default fw_version now is 'release'; will flash latest, if branch has specified
             specified_fw_version = 'latest'
 
-        if ask_user('Flashing device: "%s" branch: "%s" version: "%s" is requested.\nStability cannot be guaranteed! Flash at your own risk?' % (
+        if ask_user('Flashing device: "%s" branch: "%s" version: "%s" is requested (stability cannot be guaranteed). Flash at your own risk?' % (
             fw_signature,
             branch_name,
             specified_fw_version)
@@ -264,7 +275,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             return
 
         else:
-            raise UpdateDeviceError("Flashing %s has rejected" % fw_signature)
+            raise UserCancelledError("Flashing %s has rejected" % fw_signature)
 
     else:
         branch_name = CONFIG['DEFAULT_SOURCE']
