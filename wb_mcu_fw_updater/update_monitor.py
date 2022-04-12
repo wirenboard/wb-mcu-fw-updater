@@ -286,12 +286,14 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     if specified_fw_version == 'release':  # triggered updating from releases
         specified_fw_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
         downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
+    else:
+        logger.debug("%s version has specified manually: %s", mode_name, specified_fw_version)
 
     if specified_fw_version == 'latest':
         logger.debug('Retrieving latest %s version number for %s', mode_name, fw_signature)
         specified_fw_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
 
-    downloaded_fw = downloaded_fw or downloader.download(fw_signature, specified_fw_version)  # if fw_version specified manually
+    downloaded_fw = downloaded_fw or downloader.download(fw_signature, specified_fw_version)
 
     """
     Reflashing with update-checking
