@@ -15,6 +15,9 @@ class TooOldDeviceError(minimalmodbus.ModbusException):
     Some Wiren Board devices do not support in-filed firmware upudate, because they haven't bootloader.
     """
 
+class UARTSettingsNotFoundError(Exception):
+    pass
+
 
 def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
     """
@@ -413,11 +416,7 @@ class MinimalModbusAPIWrapper(object):
         ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
         for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
             ret = ret.replace(placeholder, '')  # 'A1B2C3' bytes-only string
-        try:
-            return str(unhexlify(ret).decode('utf-8')).strip()
-        except UnicodeDecodeError as e:
-            logger.exception(e)
-            return None
+        return str(unhexlify(ret).decode('utf-8')).strip()
 
 
 def auto_find_uart_settings(method_to_decorate):
@@ -438,7 +437,7 @@ def auto_find_uart_settings(method_to_decorate):
                 self.set_port_settings(*settings)
                 logger.debug('Trying serial port settings: %s' % str(settings))
         else:
-            raise RuntimeError('All serial port settings were not successful! Check device slaveid/power!')
+            raise UARTSettingsNotFoundError('All serial port settings were not successful! Check device slaveid/power!')
     return wrapper
 
 
@@ -480,7 +479,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
         :param probe_method_callable: a minimalmodbus's Instrument instance
         :type probe_method_callable: func
-        :raises RuntimeError: all allowed uart settings were not successful
+        :raises UARTSettingsNotFoundError: all allowed uart settings were not successful
         :return: actual uart settings of connected device
         :rtype: dict
         """
@@ -498,7 +497,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                 self.set_port_settings(*settings)
                 continue
         else:
-            raise RuntimeError('All serial port settings were not successful! Check device slaveid/power!')
+            raise UARTSettingsNotFoundError('All serial port settings were not successful! Check device slaveid/power!')
 
     def get_serial_number(self):
         """

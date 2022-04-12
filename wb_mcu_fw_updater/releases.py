@@ -7,6 +7,10 @@ from posixpath import join as urljoin  # py2/3 compatibility
 from . import CONFIG, logger
 
 
+class VersionParsingError(Exception):
+    pass
+
+
 def parse_releases(fname=CONFIG['RELEASES_FNAME']):  # TODO: look at wb-update-manager package
     """
     WirenBoard controllers have releases info, stored in file <CONFIG['RELEASES_FNAME']>
@@ -50,5 +54,4 @@ def parse_fw_version(endpoint_url):
     if mat:
         return mat.group(1)
     else:
-        logger.warning("Could not parse fw version from %s by regexp %s", endpoint_url, re_str)
-        return None
+        raise VersionParsingError("Could not parse fw version from %s by regexp %s" % (endpoint_url, re_str))
