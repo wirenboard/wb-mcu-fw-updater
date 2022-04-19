@@ -7,6 +7,7 @@ import sys
 import yaml
 import subprocess
 import six
+import logging
 import semantic_version
 from io import open
 from collections import namedtuple, defaultdict
@@ -87,9 +88,10 @@ def get_released_fw(fw_signature, release_info):
                 fw_version = releases.parse_fw_version(fw_endpoint)
                 logger.debug("FW version for %s on release %s: %s (endpoint: %s)", fw_signature, suite, fw_version, fw_endpoint)
                 return str(fw_version), str(fw_endpoint)
-        except (fw_downloader.RemoteFileReadingError, releases.VersionParsingError) as e:
+        except fw_downloader.RemoteFileReadingError as e:
             logger.warning("No released fw for %s in %s", fw_signature, url)
-            continue
+        except releases.VersionParsingError as e:
+            logger.exception(e)
     else:
         raise NoReleasedFwError("Released FW not found for %s\nRelease info:\n%s" % (fw_signature, str(release_info)))
 
@@ -330,7 +332,7 @@ class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
         return "%s (%d, %s)" % (self.name, self.modbus_connection.slaveid, self.modbus_connection.port)
 
 
-def probe_all_devices(driver_config_fname):  # TODO: to separate module
+def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (to get rid of passing lists)
     """
     Acquiring states of all devies, added to config.
     States could be:
@@ -371,6 +373,12 @@ def probe_all_devices(driver_config_fname):  # TODO: to separate module
                 result['too_old_to_update'].append(device_info)
 
     return result
+
+
+def print_status(loglevel, status='', devices_list=[], additional_info=''):
+    logger.log(loglevel, status)
+    logger.log(loglevel, "\t%s", "; ".join([str(device_info) for device_info in devices_list]))
+    logger.log(loglevel, additional_info)
 
 
 def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
@@ -415,28 +423,23 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
             cmd_status['ok'].append(device_info)
 
     if cmd_status['skipped']:  # TODO: maybe split by reasons?
-        logger.warning("Not updated:")
-        logger.warning("\t%s", "; ".join([str(device_info) for device_info in cmd_status['skipped']]))
-        logger.warning('You may try to run with "-f" or "--allow-downgrade" arg')
+        print_status(logging.WARNING, status="Not updated:", devices_list=cmd_status['skipped'],
+            additional_info='You may try to run with "-f" or "--allow-downgrade" arg')
 
     if cmd_status['no_fw_release']:
-        logger.warning("Not supported in current (%s) release:", str(RELEASE_INFO))
-        logger.warning("\t%s", "; ".join([str(device_info) for device_info in cmd_status['no_fw_release']]))
-        logger.warning("You may try to switch to newer release")
+        print_status(logging.WARNING, status="Not supported in current (%s) release:" % str(RELEASE_INFO),
+            devices_list=cmd_status['no_fw_release'], additional_info="You may try to switch to newer release")
 
     if probing_result['disconnected']:
-        logger.warning("No answer from:")
-        logger.warning("\t%s", "; ".join([str(device_info) for device_info in probing_result['disconnected']]))
-        logger.warning("Devices are possibly disconnected")
+        print_status(logging.WARNING, status="No answer from:", devices_list=probing_result['disconnected'],
+            additional_info="Devices are possibly disconnected")
 
     if probing_result['in_bootloader']:
-        logger.error("Now in bootloader:")
-        logger.error("\t%s", "; ".join([str(device_info) for device_info in probing_result['in_bootloader']]))
-        logger.error('Try wb-mcu-fw-updater recover-all')
+        print_status(logging.ERROR, status="Now in bootloader:", devices_list=probing_result['in_bootloader'],
+            additional_info='Try wb-mcu-fw-updater recover-all')
 
     if probing_result['too_old_to_update']:
-        logger.error("Too old for any updates:")
-        logger.error("\t%s", "; ".join([str(device_info) for device_info in probing_result['too_old_to_update']]))
+        print_status(logging.ERROR, status="Too old for any updates:", devices_list=probing_result['too_old_to_update'])
 
     logger.info("%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s too old for any updates.",
         user_log.colorize(str(len(cmd_status['ok'])), 'GREEN' if cmd_status['ok'] else 'RED'),
@@ -487,13 +490,11 @@ def _recover_all():
         logger.info('Done')
 
     if probing_result['disconnected']:
-        logger.debug("No answer:")
-        logger.debug("\t%s", "; ".join([str(device_info) for device_info in probing_result['disconnected']]))
+        print_status(logging.DEBUG, status="No answer:", devices_list=probing_result['disconnected'])
 
     if cmd_status['skipped']:
-        logger.error("Not recovered:")
-        logger.error("\t%s", "; ".join([str(device_info) for device_info in cmd_status['skipped']]))
-        logger.error("Try again or launch single recover with --fw-sig <fw_signature> key for each device!")
+        print_status(logging.ERROR, status="Not recovered:", devices_list=cmd_status['skipped'],
+            additional_info="Try again or launch single recover with --fw-sig <fw_signature> key for each device!")
 
     logger.info("%s recovered, %s was already working, %s not recovered and %s not answered to recover cmd.",
         user_log.colorize(str(len(cmd_status['ok'])), 'GREEN' if (cmd_status['ok'] or (not cmd_status['to_perform'] and not cmd_status['skipped'])) else 'RED'),
