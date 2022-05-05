@@ -1,5 +1,6 @@
 import sys
 import time
+import termios
 from . import minimalmodbus
 
 
@@ -27,8 +28,18 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
     def _write_to_bus(self, request):  # pulled out minimalmodbus write func
         self.serial.write(request)
 
-    def _read_from_bus(self, number_of_bytes_to_read):  # pulled out minimalmodbus read func
-        return self.serial.read(number_of_bytes_to_read)
+    def _read_from_bus(self, number_of_bytes_to_read, minimum_silent_period):
+        """
+        If there is foregoing noise, number_of_bytes_to_read = noise_bytes + part_of_response
+        => reading remained part_of_response per-byte
+        """
+        answer = self.serial.read(number_of_bytes_to_read)
+        if self.foregoing_noise_cancelling:
+            time.sleep(minimum_silent_period)
+            while self.serial.inWaiting():
+                answer += self.serial.read(1)
+                time.sleep(minimum_silent_period)
+        return answer
 
     def _communicate(self, request, number_of_bytes_to_read):
         """ minimalmodbus's original docstring:
@@ -166,12 +177,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
                 raise minimalmodbus.LocalEchoError(text)
 
         # Read response
-        answer = self._read_from_bus(number_of_bytes_to_read)
-        if self.foregoing_noise_cancelling:
-            time.sleep(minimum_silent_period)
-            while self.serial.inWaiting():
-                answer += self.serial.read(1)
-                time.sleep(minimum_silent_period)
+        answer = self._read_from_bus(number_of_bytes_to_read, minimum_silent_period)
         minimalmodbus._latest_read_times[self.serial.port] = minimalmodbus._now()
 
         if self.close_port_after_each_call:
@@ -209,3 +215,33 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
             raise minimalmodbus.NoResponseError("No communication with the instrument (no answer)")
 
         return answer
+
+
+class StopbitsTolerantInstrument(PyserialBackendInstrument):
+    """
+    Receiving with 1 stopbit no matter, what uart settings are.
+    Setting stopbits to 1 between sending request and receiving response.
+    """
+
+    def _set_stopbits_onthefly(self, stopbits):
+        self.serial._stopbits = stopbits
+        self.serial._reconfigure_port()
+
+    def _write_to_bus(self, request):
+        """
+        Setting stopbits-to-receive just after all data-to-send goes out from output buffer
+        """
+        self._initial_stopbits = self.serial._stopbits
+        super(StopbitsTolerantInstrument, self)._write_to_bus(request)
+        while self.serial.out_waiting > 0:
+            time.sleep(0.1)
+        termios.tcdrain(self.serial.fd)  # ensuring, all buffered data has transmitted
+        self._set_stopbits_onthefly(stopbits=1)
+
+    def _read_from_bus(self, number_of_bytes_to_read, minimum_silent_period):
+        """
+        Initial stopbits (to-write) are setting just after data has received
+        """
+        ret = super(StopbitsTolerantInstrument, self)._read_from_bus(number_of_bytes_to_read, minimum_silent_period)
+        self._set_stopbits_onthefly(self._initial_stopbits)
+        return ret

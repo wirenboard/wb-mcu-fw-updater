@@ -5,6 +5,7 @@ import os
 import six
 from tqdm import tqdm
 from wb_modbus import minimalmodbus, bindings
+from wb_modbus.instruments import StopbitsTolerantInstrument
 from . import logger
 
 
@@ -37,8 +38,8 @@ class ModbusInBlFlasher(object):
     UART_SETTINGS_RESET_REG = 1000  # in-bl only
     EEPROM_ERASE_REG = 1001  # in-bl only
 
-    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=2.0):
-        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, foregoing_noise_cancelling=True)
+    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=5.0):
+        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=StopbitsTolerantInstrument, foregoing_noise_cancelling=True)
         self.instrument.device.serial.timeout = serial_timeout
 
     def _read_to_u16s(self, fw_fpath):
