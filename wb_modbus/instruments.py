@@ -24,6 +24,12 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         err_fcode = minimalmodbus._num_to_onebyte_string(err_fcode)
         return [slaveid + fcode, slaveid + err_fcode]
 
+    def _write_to_bus(self, request):  # pulled out minimalmodbus write func
+        self.serial.write(request)
+
+    def _read_from_bus(self, number_of_bytes_to_read):  # pulled out minimalmodbus read func
+        return self.serial.read(number_of_bytes_to_read)
+
     def _communicate(self, request, number_of_bytes_to_read):
         """ minimalmodbus's original docstring:
 
@@ -134,7 +140,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
 
         # Write request
         latest_write_time = minimalmodbus._now()
-        self.serial.write(request)
+        self._write_to_bus(request)
 
         # Read and discard local echo
         if self.handle_local_echo:
@@ -160,7 +166,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
                 raise minimalmodbus.LocalEchoError(text)
 
         # Read response
-        answer = self.serial.read(number_of_bytes_to_read)
+        answer = self._read_from_bus(number_of_bytes_to_read)
         if self.foregoing_noise_cancelling:
             time.sleep(minimum_silent_period)
             while self.serial.inWaiting():
