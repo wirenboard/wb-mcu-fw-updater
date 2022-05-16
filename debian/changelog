@@ -1,6 +1,10 @@
 wb-mcu-fw-updater (1.3.1) stable; urgency=medium
 
   * added stopbits-tolerant instrument (only in bootloader now)
+  * added -T / --serial-timeout arg to some modes:
+    * update-fw/update-bl: all communications (except in-bootloader flashing)
+    * recover: only for asking fw_signature
+    * flash-file: only for jumping to bootloader
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 5 May 2022 20:28:37 +0300
 

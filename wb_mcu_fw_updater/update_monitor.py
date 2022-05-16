@@ -110,13 +110,13 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
     return downloaded_fw
 
 
-def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):  # TODO: to device_prober module?
+def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None, serial_timeout=0.2):  # TODO: to device_prober module?
     """
     Alive device only:
         searching device's uart settings (if not passed);
         checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
     """
-    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, serial_timeout=serial_timeout)
 
     if known_uart_params_str:
         modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
@@ -450,13 +450,13 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
     )
 
 
-def _restore_fw_signature(slaveid, port):
+def _restore_fw_signature(slaveid, port, serial_timeout=0.5):
     """
     Getting fw_signature of devices in bootloader
     """
     try:
         logger.debug("Will ask a bootloader for fw_signature")
-        fw_signature = bindings.WBModbusDeviceBase(slaveid, port, instrument=wb_modbus.instruments.StopbitsTolerantInstrument).get_fw_signature()  # latest bootloaders could answer a fw_signature
+        fw_signature = bindings.WBModbusDeviceBase(slaveid, port, instrument=wb_modbus.instruments.StopbitsTolerantInstrument, serial_timeout=serial_timeout).get_fw_signature()  # latest bootloaders could answer a fw_signature
     except minimalmodbus.ModbusException as e:
         logger.debug("Will try to restore fw_signature from db by slaveid: %d and port %s", slaveid, port)
         fw_signature = db.get_fw_signature(slaveid, port)
