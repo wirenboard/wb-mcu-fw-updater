@@ -6,6 +6,7 @@ import atexit
 from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, fw_flasher, CONFIG, logger
 from wb_modbus.bindings import WBModbusDeviceBase, TooOldDeviceError
 from wb_modbus.minimalmodbus import ModbusException
+from wb_modbus.instruments import StopbitsTolerantInstrument
 from wb_modbus import parse_uart_settings_str
 
 
@@ -64,7 +65,7 @@ def recover_fw(args):
     device_str = "%d %s" % (args.slaveid, args.port)
 
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
-        device = WBModbusDeviceBase(args.slaveid, args.port)
+        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=StopbitsTolerantInstrument)
         if not device.is_in_bootloader():
             die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
 

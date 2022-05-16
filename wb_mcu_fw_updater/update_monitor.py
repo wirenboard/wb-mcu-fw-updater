@@ -456,7 +456,7 @@ def _restore_fw_signature(slaveid, port):
     """
     try:
         logger.debug("Will ask a bootloader for fw_signature")
-        fw_signature = bindings.WBModbusDeviceBase(slaveid, port).get_fw_signature()  # latest bootloaders could answer a fw_signature
+        fw_signature = bindings.WBModbusDeviceBase(slaveid, port, instrument=wb_modbus.instruments.StopbitsTolerantInstrument).get_fw_signature()  # latest bootloaders could answer a fw_signature
     except minimalmodbus.ModbusException as e:
         logger.debug("Will try to restore fw_signature from db by slaveid: %d and port %s", slaveid, port)
         fw_signature = db.get_fw_signature(slaveid, port)
