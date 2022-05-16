@@ -40,7 +40,7 @@ class ModbusInBlFlasher(object):
 
     def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=5.0):
         self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=StopbitsTolerantInstrument, foregoing_noise_cancelling=True)
-        self.instrument.device.serial.timeout = serial_timeout
+        self.instrument._set_serial_timeout(serial_timeout)
 
     def _read_to_u16s(self, fw_fpath):
         """
