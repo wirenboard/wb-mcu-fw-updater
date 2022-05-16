@@ -472,8 +472,9 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.instrument = instrument
 
     def _set_serial_timeout(self, serial_timeout):
+        self.serial_timeout = serial_timeout
         self.device.serial.timeout = serial_timeout
-        logger.debug("%s serial_timeout -> %.2f", self.port, serial_timeout)
+        logger.debug("%s serial_timeout -> %.2f", self.port, self.serial_timeout)
 
     def find_uart_settings(self, probe_method_callable, *args, **kwargs):
         """

@@ -187,15 +187,15 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     return found_devices
 
 
-def recover_device_iteration(fw_signature, slaveid, port):
+def recover_device_iteration(fw_signature, slaveid, port, in_bl_serial_timeout):
     """
     A device supposed to be in "dead" state => fw_signature, slaveid, port have passed instead of modbus_connection
     """
     downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
-    direct_flash(downloaded_fw, slaveid, port)
+    direct_flash(downloaded_fw, slaveid, port, serial_timeout=in_bl_serial_timeout)
 
 
-def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_only=False):
+def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_only=False, serial_timeout=1.0):
     """
     Performing operations in bootloader (device is already into):
         flashing .wbfw
@@ -209,7 +209,7 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
-    flasher = fw_flasher.ModbusInBlFlasher(slaveid, port)
+    flasher = fw_flasher.ModbusInBlFlasher(slaveid, port, serial_timeout=serial_timeout)
 
     if (erase_uart_only and _ensure(default_msg)):
         flasher.reset_uart()
@@ -317,12 +317,12 @@ def _do_flash(modbus_connection, fw_fpath, mode, erase_settings):
     fw_signature = modbus_connection.get_fw_signature()
     logger.debug('Flashing approved for "%s" (%s : %d)', fw_signature, modbus_connection.port, modbus_connection.slaveid)
     modbus_connection.reboot_to_bootloader()
-    direct_flash(fw_fpath, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+    direct_flash(fw_fpath, modbus_connection.slaveid, modbus_connection.port, erase_settings, serial_timeout=modbus_connection.serial_timeout)
 
     if mode == 'bootloader':
         logger.info('Bootloader was successfully flashed. Will flash released firmware for "%s"', fw_signature)
         downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
-        direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+        direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings, serial_timeout=modbus_connection.serial_timeout)
 
 
 class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
@@ -481,7 +481,7 @@ def _recover_all():
         logger.info('Flashing the most recent stable firmware:')
         for device_info, fw_signature in cmd_status['to_perform']:
             try:
-                recover_device_iteration(fw_signature, device_info.modbus_connection.slaveid, device_info.modbus_connection.port)
+                recover_device_iteration(fw_signature, device_info.modbus_connection.slaveid, device_info.modbus_connection.port, in_bl_serial_timeout=device_info.modbus_connection.serial_timeout)
             except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
                 logger.exception(e)
                 cmd_status['skipped'].append(device_info)
