@@ -171,16 +171,18 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
         if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
             port_name = port['path']
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
+            port_serial_timeout = int(port.get('response_timeout_ms', 0)) * 1E-3
             devices_on_port = set()
             for serial_device in port['devices']:
                 device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
+                device_serial_timeout = int(serial_device.get('response_timeout_ms', 0)) * 1E-3
                 if device_name.startswith('WBIO-'):
                     logger.debug("Has found WBIO device: %s", device_name)
                     device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
-                devices_on_port.add((device_name, int(slaveid)))
+                devices_on_port.add((device_name, int(slaveid), device_serial_timeout))
             if devices_on_port:
-                found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port}})
+                found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port, 'serial_timeout' : port_serial_timeout}})
 
     if not found_devices:
         logger.error("No devices has found in %s", driver_config_fname)
@@ -342,22 +344,26 @@ def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (t
         too_old_to_update - old wb devices, haven't bootloader
         foreign_devices - non-wb devices, defined in config
     """
+    _minimal_serial_timeout = 0.2
+
     result = defaultdict(list)
 
     logger.info('Will probe all devices defined in %s', driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
         uart_params = ''.join(map(str, port_params['uart_params']))  # 9600N2
+        port_serial_timeout = port_params['serial_timeout']
         devices_on_port = port_params['devices']
-        for device_name, device_slaveid in devices_on_port:
-            logger.debug('Probing device %s (port: %s, slaveid: %d, uart_params: %s)...', device_name, port, device_slaveid, uart_params)
-            device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params)))
+        for device_name, device_slaveid, device_serial_timeout in devices_on_port:
+            _actual_serial_timeout = max(_minimal_serial_timeout, port_serial_timeout, device_serial_timeout)
+            logger.debug('Probing %s (port: %s, slaveid: %d, uart_params: %s, serial_timeout: %.2f)...', device_name, port, device_slaveid, uart_params, _actual_serial_timeout)
+            device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params), serial_timeout=_actual_serial_timeout))
             try:
-                device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, uart_params))
+                device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, uart_params, serial_timeout=_actual_serial_timeout))
             except ForeignDeviceError as e:
                 result['foreign'].append(device_info)
                 continue
             except minimalmodbus.NoResponseError as e:
-                bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port)
+                bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port, serial_timeout=_actual_serial_timeout)
                 if bootloader_connection.is_in_bootloader():
                     result['in_bootloader'].append(DeviceInfo(name=device_name, modbus_connection=bootloader_connection))
                 else:
