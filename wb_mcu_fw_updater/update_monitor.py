@@ -334,7 +334,7 @@ class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
         return "%s (%d, %s)" % (self.name, self.modbus_connection.slaveid, self.modbus_connection.port)
 
 
-def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (to get rid of passing lists)
+def probe_all_devices(driver_config_fname, minimal_serial_timeout):  # TODO: rework entire data model (to get rid of passing lists)
     """
     Acquiring states of all devies, added to config.
     States could be:
@@ -344,8 +344,6 @@ def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (t
         too_old_to_update - old wb devices, haven't bootloader
         foreign_devices - non-wb devices, defined in config
     """
-    _minimal_serial_timeout = 0.2
-
     result = defaultdict(list)
 
     logger.info('Will probe all devices defined in %s', driver_config_fname)
@@ -354,7 +352,7 @@ def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (t
         port_serial_timeout = port_params['serial_timeout']
         devices_on_port = port_params['devices']
         for device_name, device_slaveid, device_serial_timeout in devices_on_port:
-            _actual_serial_timeout = max(_minimal_serial_timeout, port_serial_timeout, device_serial_timeout)
+            _actual_serial_timeout = max(minimal_serial_timeout, port_serial_timeout, device_serial_timeout)
             logger.debug('Probing %s (port: %s, slaveid: %d, uart_params: %s, serial_timeout: %.2f)...', device_name, port, device_slaveid, uart_params, _actual_serial_timeout)
             device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params), serial_timeout=_actual_serial_timeout))
             try:
@@ -387,8 +385,8 @@ def print_status(loglevel, status='', devices_list=[], additional_info=''):
     logger.log(loglevel, additional_info)
 
 
-def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
-    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+def _update_all(force, allow_downgrade=False, minimal_serial_timeout=0.2):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
+    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], minimal_serial_timeout)
     cmd_status = defaultdict(list)
 
     for device_info in probing_result['alive']:
@@ -470,8 +468,8 @@ def _restore_fw_signature(slaveid, port, serial_timeout=0.5):
     return fw_signature
 
 
-def _recover_all():
-    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+def _recover_all(minimal_serial_timeout=0.2):
+    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], minimal_serial_timeout)
     cmd_status = defaultdict(list)
 
     for device_info in probing_result['in_bootloader']:

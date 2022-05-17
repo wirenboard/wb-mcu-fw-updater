@@ -107,7 +107,7 @@ def update_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade)
+        update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade, minimal_serial_timeout=args.minimal_serial_timeout)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -118,7 +118,7 @@ def recover_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._recover_all()
+        update_monitor._recover_all(minimal_serial_timeout=args.minimal_serial_timeout)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -228,6 +228,9 @@ def parse_args():
                                     help='Perform force updates of all devices, even if firmwares are latest. (Default: %(default)s)')
     update_all_fw_parser.add_argument('--allow-downgrade', action='store_true', dest='allow_downgrade', default=False,
                                     help='Firmware versions could be downgraded. (Default: %(default)s)')
+    update_all_fw_parser.add_argument(
+        '-T', '--min-serial-timeout', type=float, dest='minimal_serial_timeout', metavar='<minimal_serial_timeout>', default=0.2,
+        help="Minimal serial_timeout. Actual serial_timeout is: MAX(min_serial_timeout, wb-mqtt-serial's serial timeouts) (Default: %(default)s)")
     update_all_fw_parser.set_defaults(func=update_all)
 
     """
@@ -235,6 +238,9 @@ def parse_args():
     """
     recover_all_parser = subparsers.add_parser(
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
+    recover_all_parser.add_argument(
+        '-T', '--min-serial-timeout', type=float, dest='minimal_serial_timeout', metavar='<minimal_serial_timeout>', default=0.2,
+        help="Minimal serial_timeout. Actual serial_timeout is: MAX(min_serial_timeout, wb-mqtt-serial's serial timeouts) (Default: %(default)s)")
     recover_all_parser.set_defaults(func=recover_all)
 
     """
