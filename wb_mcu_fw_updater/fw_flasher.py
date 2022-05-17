@@ -42,8 +42,8 @@ class ModbusInBlFlasher(object):
 
     def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=1.0):
         self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=StopbitsTolerantInstrument, foregoing_noise_cancelling=True)
-        serial_timeout = serial_timeout if serial_timeout > self._MINIMAL_SERIAL_TIMEOUT else self._MINIMAL_SERIAL_TIMEOUT
-        self.instrument._set_serial_timeout(serial_timeout)
+        self._actual_serial_timeout = max(self._MINIMAL_SERIAL_TIMEOUT, serial_timeout)
+        self.instrument._set_serial_timeout(self._actual_serial_timeout)
 
     def _read_to_u16s(self, fw_fpath):
         """
@@ -74,12 +74,17 @@ class ModbusInBlFlasher(object):
         if len(regs_row) != self.INFO_BLOCK_LENGTH:
             raise IncorrectFwError("Info block size should be %d regs! Got %d instead\nRaw regs: %s" % (self.INFO_BLOCK_LENGTH, len(regs_row), str(regs_row)))
 
+        info_block_delay = 1.0  # bootloader needs some additional time to perform info-command-magic
+
         try:
+            self.instrument._set_serial_timeout(self._actual_serial_timeout + info_block_delay)
             self.instrument.write_u16_regs(self.INFO_BLOCK_START, regs_row)
         except minimalmodbus.IllegalRequestError as e:
             six.raise_from(NotInBootloaderError, e)
         except Exception as e:
             six.raise_from(FlashingError, e)
+        finally:
+            self.instrument._set_serial_timeout(self._actual_serial_timeout)
 
     def _send_data(self, regs_row):
         """
@@ -88,11 +93,20 @@ class ModbusInBlFlasher(object):
         chunk_size = self.DATA_BLOCK_LENGTH  # bootloader accepts only fixed-length chunks
         chunks = [regs_row[i:i+chunk_size] for i in range(0, len(regs_row), chunk_size)]
 
+        _has_previous_chunk_failed = False  # Due to bootloader's behaviour, actual flashing failure is current-chunk failure + next-chunk failure
         for chunk in tqdm(chunks, ascii=True, dynamic_ncols=True, bar_format="{l_bar}{bar}|{n}/{total}"):
             try:
                 self.instrument.write_u16_regs(self.DATA_BLOCK_START, chunk)  # retries wb_modbus.ALLOWED_UNSUCCESSFULL_TRIES times
+                _has_previous_chunk_failed = False
             except minimalmodbus.ModbusException as e:
-                six.raise_from(FlashingError, e)
+                if _has_previous_chunk_failed:
+                    six.raise_from(FlashingError, e)
+                else:
+                    _has_previous_chunk_failed = True
+                    continue
+
+        if _has_previous_chunk_failed and self.instrument._has_bootloader_answered():
+            raise FlashingError("Flashing has failed at last frame (device remains in bootloader). Check device's connection!")
 
     def _perform_bootloader_cmd(self, reg):
         try:
