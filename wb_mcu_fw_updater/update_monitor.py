@@ -348,14 +348,14 @@ def probe_all_devices(driver_config_fname, minimal_serial_timeout):  # TODO: rew
     """
     result = defaultdict(list)
 
-    logger.info('Will probe all devices defined in %s', driver_config_fname)
+    logger.info('Will probe all devices on enabled serial ports of %s:', driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
         uart_params = ''.join(map(str, port_params['uart_params']))  # 9600N2
         port_serial_timeout = port_params['serial_timeout']
         devices_on_port = port_params['devices']
         for device_name, device_slaveid, device_serial_timeout in devices_on_port:
             _actual_serial_timeout = max(minimal_serial_timeout, port_serial_timeout, device_serial_timeout)
-            logger.debug('Probing %s (port: %s, slaveid: %d, uart_params: %s, serial_timeout: %.2f)...', device_name, port, device_slaveid, uart_params, _actual_serial_timeout)
+            logger.info('Probing %s (port: %s, slaveid: %d, uart_params: %s, serial_timeout: %.2f)...', device_name, port, device_slaveid, uart_params, _actual_serial_timeout)
             device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params), serial_timeout=_actual_serial_timeout))
             try:
                 device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, uart_params, serial_timeout=_actual_serial_timeout))
