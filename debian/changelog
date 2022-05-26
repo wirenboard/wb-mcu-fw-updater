@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.3.1) stable; urgency=medium
+
+  * wb_modbus.bindings: reworked serial port configuring (no annoying "Opening/closing port" messages anymore)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 26 May 2022 14:02:48 +0300
+
 wb-mcu-fw-updater (1.3.0) stable; urgency=medium
 
   * internal error-handling fixups

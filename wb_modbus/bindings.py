@@ -91,11 +91,18 @@ class MinimalModbusAPIWrapper(object):
         :type settings_dict: dict
         """
         self.settings = settings_dict
-        self.device.serial.apply_settings(self.settings)
-        if not self.device.serial.is_open:
-            logger.debug("Opening and closing port %s to write settings" % self.port)
-            self.device.serial.open()
-            self.device.serial.close()
+        self.device.serial.apply_settings(self.settings)  # only sets params into serial's instance
+        """
+        Settings are applying to serial port at:
+            - each port opening (close_port_after_each_call param in Instrument);
+            - calling serial._reconfigure_port()
+        """
+        if not self.device.close_port_after_each_call:
+            if self.device.serial.is_open:
+                self.device.serial._reconfigure_port()
+            else:
+                self.device.serial.open()  # calls serial.reconfigure_port()
+                self.device.serial.close()
 
     def set_port_settings(self, baudrate, parity, stopbits):
         """
@@ -116,6 +123,7 @@ class MinimalModbusAPIWrapper(object):
             'stopbits' : int(stopbits)
         }
         self._set_port_settings_raw(settings)
+        logger.debug("Set %s to %s", str(self.settings), self.port)
 
     @force()
     def read_bit(self, addr):
