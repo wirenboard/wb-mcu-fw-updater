@@ -233,7 +233,8 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         """
         self._initial_stopbits = self.serial._stopbits
         super(StopbitsTolerantInstrument, self)._write_to_bus(request)
-        while self.serial.out_waiting > 0:
+        write_ts = time.time()
+        while (self.serial.out_waiting > 0) and (time.time() - write_ts < self.serial.timeout):
             time.sleep(0.1)
         termios.tcdrain(self.serial.fd)  # ensuring, all buffered data has transmitted
         self._set_stopbits_onthefly(stopbits=1)
