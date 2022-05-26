@@ -17,11 +17,11 @@ def check_internet_connection():
         die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
 
 
-def _update_alive_device(slaveid, port, mode, serial_timeout, branch, version, force, erase_settings):
+def _update_alive_device(slaveid, port, mode, response_timeout, branch, version, force, erase_settings):
     check_internet_connection()
 
     try:
-        modbus_connection = update_monitor.get_correct_modbus_connection(slaveid, port, serial_timeout=serial_timeout)
+        modbus_connection = update_monitor.get_correct_modbus_connection(slaveid, port, response_timeout=response_timeout)
     except ModbusException as e:
         logger.error("Check device's connection, slaveid and serial port settings!")
         die(e)
@@ -45,7 +45,7 @@ def update_fw(args):
     Updating device's firmware.
     Could install specified fw_version from specified branch.
     """
-    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', serial_timeout=args.serial_timeout, branch=args.branch_name, version=args.specified_version, force=args.force, erase_settings=args.erase_settings)
+    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', response_timeout=args.response_timeout, branch=args.branch_name, version=args.specified_version, force=args.force, erase_settings=args.erase_settings)
 
 
 def update_bootloader(args):
@@ -53,7 +53,7 @@ def update_bootloader(args):
     Updating device's bootloader.
     Only latest version from stable branch is available.
     """
-    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', serial_timeout=args.serial_timeout, branch='', version='latest', force=args.force, erase_settings=False)
+    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', response_timeout=args.response_timeout, branch='', version='latest', force=args.force, erase_settings=False)
 
 
 def recover_fw(args):
@@ -65,22 +65,22 @@ def recover_fw(args):
     device_str = "%d %s" % (args.slaveid, args.port)
 
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
-        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=StopbitsTolerantInstrument, serial_timeout=args.serial_timeout)
+        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=StopbitsTolerantInstrument, response_timeout=args.response_timeout)
         if not device.is_in_bootloader():
             die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
 
     try:
         fw_signatures_list = fw_downloader.get_fw_signatures_list()
-        args.known_signature = args.known_signature or update_monitor._restore_fw_signature(args.slaveid, args.port, serial_timeout=args.serial_timeout)
+        args.known_signature = args.known_signature or update_monitor._restore_fw_signature(args.slaveid, args.port, response_timeout=args.response_timeout)
 
         if args.known_signature:
-            update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port, in_bl_serial_timeout=args.serial_timeout)
+            update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port, in_bl_response_timeout=args.response_timeout)
 
-        elif update_monitor.ask_user('Try all possible fw_signatures (%s) for (%s); serial_timeout: %.2f?' % (', '.join(fw_signatures_list), device_str, args.serial_timeout)):
+        elif update_monitor.ask_user('Try all possible fw_signatures (%s) for (%s); response_timeout: %.2f?' % (', '.join(fw_signatures_list), device_str, args.response_timeout)):
             for fw_sig in fw_signatures_list:
                 logger.info('Trying %s:', fw_sig)
                 try:
-                    update_monitor.recover_device_iteration(fw_sig, args.slaveid, args.port, in_bl_serial_timeout=args.serial_timeout)
+                    update_monitor.recover_device_iteration(fw_sig, args.slaveid, args.port, in_bl_response_timeout=args.response_timeout)
                     break
                 except fw_flasher.FlashingError:
                     continue
@@ -107,7 +107,7 @@ def update_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade, minimal_serial_timeout=args.minimal_serial_timeout)
+        update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade, minimal_response_timeout=args.minimal_response_timeout)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -118,7 +118,7 @@ def recover_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._recover_all(minimal_serial_timeout=args.minimal_serial_timeout)
+        update_monitor._recover_all(minimal_response_timeout=args.minimal_response_timeout)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -130,14 +130,14 @@ def flash_fw_file(args):
     device_str = "%s %d %s" % (args.port, args.slaveid, str(args.conn_settings))
 
     if args.jump_in_bl:
-        _device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, serial_timeout=args.serial_timeout)
+        _device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout)
         try:
             _device.reboot_to_bootloader()
         except ModbusException as e:
             die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
 
     try:
-        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.erase_all, args.erase_uart, serial_timeout=args.serial_timeout)
+        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.erase_all, args.erase_uart, response_timeout=args.response_timeout)
         return
     except fw_flasher.NotInBootloaderError as e:
         logger.error("Seems, device (%s) is not in bootloader now!", device_str)
@@ -178,8 +178,8 @@ def parse_args():
                                   default=False, help="Erase all device's settings during update. (Default: %(default)s)")
     update_fw_parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                   help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
-    update_fw_parser.add_argument('-T', '--serial-timeout', type=float, dest='serial_timeout', metavar='<serial_timeout>', default=0.2,
-                                  help='Serial_timeout to communicate with device. (Default: %(default)s)')
+    update_fw_parser.add_argument('-T', '--response-timeout', type=float, dest='response_timeout', metavar='<response_timeout>', default=0.2,
+                                  help='Modbus response timeout. (Default: %(default)s)')
     update_fw_parser.add_argument(
         '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, choices=range(1, 247), help='Slave address of the device.')
     update_fw_parser.add_argument(
@@ -196,8 +196,8 @@ def parse_args():
     update_bootloader_parser.add_argument(
         '-a', '--slaveid', type=int, metavar='<slaveid>', dest='slaveid', required=True, choices=range(1, 247), help='Slave address of the device.')
     update_bootloader_parser.add_argument(
-        '-T', '--serial-timeout', type=float, dest='serial_timeout', metavar='<serial_timeout>', default=0.2,
-        help='Serial_timeout to communicate with device. (Default: %(default)s)')
+        '-T', '--response-timeout', type=float, dest='response_timeout', metavar='<response_timeout>', default=0.2,
+        help='Modbus response timeout. (Default: %(default)s)')
     update_bootloader_parser.add_argument(
         "port", type=str, metavar='<port>', help='Serial port, device connected to.')
     update_bootloader_parser.set_defaults(func=update_bootloader)
@@ -211,8 +211,8 @@ def parse_args():
                                    help="Force specify device's firmware signature. (Default: %(default)s)")
     recover_fw_parser.add_argument('--restore-defaults', action='store_true', dest='erase_settings',
                                    default=False, help="Erase all device's settings during flashing. (Default: %(default)s)")
-    recover_fw_parser.add_argument('-T', '--serial-timeout', type=float, dest='serial_timeout', metavar='<serial_timeout>', default=0.2,
-                                  help='Serial_timeout to communicate with device. (Default: %(default)s)')
+    recover_fw_parser.add_argument('-T', '--response-timeout', type=float, dest='response_timeout', metavar='<response_timeout>', default=0.2,
+                                  help="Modbus response timeout. (Default: %(default)s)")
     recover_fw_parser.add_argument(
         '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device.')
     recover_fw_parser.add_argument(
@@ -229,8 +229,8 @@ def parse_args():
     update_all_fw_parser.add_argument('--allow-downgrade', action='store_true', dest='allow_downgrade', default=False,
                                     help='Firmware versions could be downgraded. (Default: %(default)s)')
     update_all_fw_parser.add_argument(
-        '-T', '--min-serial-timeout', type=float, dest='minimal_serial_timeout', metavar='<minimal_serial_timeout>', default=0.2,
-        help="Minimal serial_timeout. Actual serial_timeout is: MAX(min_serial_timeout, wb-mqtt-serial's serial timeouts) (Default: %(default)s)")
+        '-T', '--min-response-timeout', type=float, dest='minimal_response_timeout', metavar='<minimal_response_timeout>', default=0.2,
+        help="Minimal modbus response timeout. Actual response timeout is: MAX(min_response_timeout, wb-mqtt-serial's response timeouts) (Default: %(default)s)")
     update_all_fw_parser.set_defaults(func=update_all)
 
     """
@@ -239,8 +239,8 @@ def parse_args():
     recover_all_parser = subparsers.add_parser(
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.add_argument(
-        '-T', '--min-serial-timeout', type=float, dest='minimal_serial_timeout', metavar='<minimal_serial_timeout>', default=0.2,
-        help="Minimal serial_timeout. Actual serial_timeout is: MAX(min_serial_timeout, wb-mqtt-serial's serial timeouts) (Default: %(default)s)")
+        '-T', '--min-response-timeout', type=float, dest='minimal_response_timeout', metavar='<minimal_response_timeout>', default=0.2,
+        help="Minimal modbus response timeout. Actual response timeout is: MAX(min_response_timeout, wb-mqtt-serial's response timeouts) (Default: %(default)s)")
     recover_all_parser.set_defaults(func=recover_all)
 
     """
@@ -253,8 +253,8 @@ def parse_args():
     direct_flash_parser.add_argument(
         '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device')
     direct_flash_parser.add_argument(
-        '-T', '--serial-timeout', type=float, dest='serial_timeout', metavar='<serial_timeout>', default=0.2,
-        help='Serial_timeout to communicate with device. (Default: %(default)s)')
+        '-T', '--response-timeout', type=float, dest='response_timeout', metavar='<response_timeout>', default=0.2,
+        help='Modbus response timeout. (Default: %(default)s)')
     direct_flash_parser.add_argument(
         '--conn-settings', type=parse_conn_settings_arg, dest='conn_settings', metavar='<connection_settings_str>', default='9600N2', help="Connection settings to communicate with alive device (Default: %(default)s)")
     direct_flash_parser.add_argument(

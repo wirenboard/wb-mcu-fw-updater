@@ -38,12 +38,12 @@ class ModbusInBlFlasher(object):
     UART_SETTINGS_RESET_REG = 1000  # in-bl only
     EEPROM_ERASE_REG = 1001  # in-bl only
 
-    _MINIMAL_SERIAL_TIMEOUT = 1.0
+    MINIMAL_RESPONSE_TIMEOUT = 5.0  # should be relatively huge (for wireless devices)
 
-    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=1.0):
+    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, response_timeout=1.0):
         self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=StopbitsTolerantInstrument, foregoing_noise_cancelling=True)
-        self._actual_serial_timeout = max(self._MINIMAL_SERIAL_TIMEOUT, serial_timeout)
-        self.instrument._set_serial_timeout(self._actual_serial_timeout)
+        self._actual_response_timeout = max(self.MINIMAL_RESPONSE_TIMEOUT, response_timeout)
+        self.instrument.set_response_timeout(self._actual_response_timeout)
 
     def _read_to_u16s(self, fw_fpath):
         """
@@ -77,14 +77,14 @@ class ModbusInBlFlasher(object):
         info_block_delay = 1.0  # bootloader needs some additional time to perform info-command-magic
 
         try:
-            self.instrument._set_serial_timeout(self._actual_serial_timeout + info_block_delay)
+            self.instrument.set_response_timeout(self._actual_response_timeout + info_block_delay)
             self.instrument.write_u16_regs(self.INFO_BLOCK_START, regs_row)
         except minimalmodbus.IllegalRequestError as e:
             six.raise_from(NotInBootloaderError, e)
         except Exception as e:
             six.raise_from(FlashingError, e)
         finally:
-            self.instrument._set_serial_timeout(self._actual_serial_timeout)
+            self.instrument.set_response_timeout(self._actual_response_timeout)
 
     def _send_data(self, regs_row):
         """

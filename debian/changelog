@@ -1,8 +1,8 @@
 wb-mcu-fw-updater (1.4.0) stable; urgency=medium
 
   * added stopbits-tolerant instrument (write - 2sb; read - 1sb; only for in-bootloader communications now)
-  * update-fw/update-bl/recover/flash-file: added -T / --serial-timeout arg
-  * update-all/recover-all: added -T / --min-serial-timeout arg (look at help for explanation)
+  * update-fw/update-bl/recover/flash-file: added -T / --response-timeout arg
+  * update-all/recover-all: added -T / --min-response-timeout arg (actual response_timeout is: max(minimal, from_config))
   * fixups: minimalmodbus's debug frames; improved in-bl errors handling
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 18 May 2022 10:44:28 +0300

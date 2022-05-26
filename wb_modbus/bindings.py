@@ -466,15 +466,15 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     FIRMWARE_SIGNATURE_LENGTH = 12  # 290-301 u16 regs
     BOOTLOADER_VERSION_LENGTH = 8  # 330-337 u16 regs
 
-    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, serial_timeout=0.1, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
+    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, response_timeout=0.2, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
         super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument, foregoing_noise_cancelling=foregoing_noise_cancelling)
-        self._set_serial_timeout(serial_timeout)
+        self.set_response_timeout(response_timeout)
         self.instrument = instrument
 
-    def _set_serial_timeout(self, serial_timeout):
-        self.serial_timeout = serial_timeout
-        self.device.serial.timeout = serial_timeout
-        logger.debug("%s serial_timeout -> %.2f", self.port, self.serial_timeout)
+    def set_response_timeout(self, response_timeout):
+        self.response_timeout = response_timeout
+        self.device.serial.timeout = response_timeout
+        logger.debug("%s response_timeout -> %.2f", self.port, self.response_timeout)
 
     def find_uart_settings(self, probe_method_callable, *args, **kwargs):
         """
@@ -692,14 +692,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         _dummy_payload_minimal_timeout = 0.5  # bootloader needs some time to proceed a dummy-cmd
 
         initial_port_settings = deepcopy(self.settings)
-        initial_serial_timeout = self.device.serial.timeout
+        initial_response_timeout = self.device.serial.timeout
 
         bootloader_uart_params = [baudrate, 'N', 2]
         logger.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
         self.set_port_settings(*bootloader_uart_params)
-
-        if initial_serial_timeout < _dummy_payload_minimal_timeout:
-            self._set_serial_timeout(_dummy_payload_minimal_timeout)
+        self.set_response_timeout(max(initial_response_timeout, _dummy_payload_minimal_timeout))
 
         try:
             self.write_u16_regs(0x1000, [0] * 16)  # A dummy payload
@@ -710,7 +708,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         finally:
             logger.debug('Setting params to port %s back' % self.port)
             self._set_port_settings_raw(initial_port_settings)
-            self._set_serial_timeout(initial_serial_timeout)
+            self.set_response_timeout(initial_response_timeout)
 
     def is_in_bootloader(self, baudrate=9600):
         """
