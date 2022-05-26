@@ -19,21 +19,20 @@ class UARTSettingsNotFoundError(Exception):
     pass
 
 
-def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
+def force():
     """
-    A decorator, handling accidential connection errors on bus.
-
-    :param errtypes: Error types, minimalmodbus is raising, defaults to (IOError, ValueError)
-    :type errtypes: tuple, optional
-    :param tries: number of tries after raising error from errtypes, defaults to ALLOWED_UNSUCCESSFUL_TRIES
-    :type tries: int, optional
+    A decorator, applying settings to serial port and handling accidential connection errors on bus.
     """
+    errtypes = (minimalmodbus.ModbusException, ValueError)
     def real_decorator(f):
-        def wrapper(*args, **kwargs):
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            tries = getattr(self, 'allowed_unsuccessful_tries', None) or ALLOWED_UNSUCCESSFUL_TRIES
             thrown_exc = None
+            self._set_port_settings_raw(self.settings)
             for _ in range(tries):
                 try:
-                    return f(*args, **kwargs)
+                    return f(self, *args, **kwargs)
                 except errtypes as e:
                     thrown_exc = e
             else:
