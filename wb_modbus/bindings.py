@@ -466,6 +466,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     FIRMWARE_SIGNATURE_LENGTH = 12  # 290-301 u16 regs
     BOOTLOADER_VERSION_LENGTH = 8  # 330-337 u16 regs
 
+    BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT = 1.0  # Bl needs some time to perform info-block magic
+
     def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, response_timeout=0.2, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
         super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument, foregoing_noise_cancelling=foregoing_noise_cancelling)
         self.set_response_timeout(response_timeout)
@@ -689,15 +691,13 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: has device raised modbus error 04 or not
         :rtype: bool
         """
-        _dummy_payload_minimal_timeout = 0.5  # bootloader needs some time to proceed a dummy-cmd
-
         initial_port_settings = deepcopy(self.settings)
         initial_response_timeout = self.device.serial.timeout
 
         bootloader_uart_params = [baudrate, 'N', 2]
         logger.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
         self.set_port_settings(*bootloader_uart_params)
-        self.set_response_timeout(max(initial_response_timeout, _dummy_payload_minimal_timeout))
+        self.set_response_timeout(initial_response_timeout + self.BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT)
 
         try:
             self.write_u16_regs(0x1000, [0] * 16)  # A dummy payload
