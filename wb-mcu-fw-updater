@@ -107,7 +107,7 @@ def update_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._update_all(force=args.force, allow_downgrade=args.allow_downgrade, minimal_response_timeout=args.minimal_response_timeout)
+        update_monitor._update_all(force=args.force, minimal_response_timeout=args.minimal_response_timeout, allow_downgrade=args.allow_downgrade)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -137,7 +137,7 @@ def flash_fw_file(args):
             die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
 
     try:
-        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.erase_all, args.erase_uart, response_timeout=args.response_timeout)
+        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.response_timeout, args.erase_all, args.erase_uart)
         return
     except fw_flasher.NotInBootloaderError as e:
         logger.error("Seems, device (%s) is not in bootloader now!", device_str)
