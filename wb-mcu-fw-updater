@@ -229,7 +229,7 @@ def parse_args():
     update_all_fw_parser.add_argument('--allow-downgrade', action='store_true', dest='allow_downgrade', default=False,
                                     help='Firmware versions could be downgraded. (Default: %(default)s)')
     update_all_fw_parser.add_argument(
-        '-T', '--min-response-timeout', type=float, dest='minimal_response_timeout', metavar='<minimal_response_timeout>', default=0.2,
+        '-T', '--min-response-timeout', type=float, dest='minimal_response_timeout', metavar='<minimal_response_timeout>', default=0.5,
         help="Minimal modbus response timeout. Actual response timeout is: MAX(min_response_timeout, wb-mqtt-serial's response timeouts) (Default: %(default)s)")
     update_all_fw_parser.set_defaults(func=update_all)
 
@@ -239,7 +239,7 @@ def parse_args():
     recover_all_parser = subparsers.add_parser(
         'recover-all', help="Trying to recover all devices, added to wb-mqtt-serial's config.")
     recover_all_parser.add_argument(
-        '-T', '--min-response-timeout', type=float, dest='minimal_response_timeout', metavar='<minimal_response_timeout>', default=0.2,
+        '-T', '--min-response-timeout', type=float, dest='minimal_response_timeout', metavar='<minimal_response_timeout>', default=0.5,
         help="Minimal modbus response timeout. Actual response timeout is: MAX(min_response_timeout, wb-mqtt-serial's response timeouts) (Default: %(default)s)")
     recover_all_parser.set_defaults(func=recover_all)
 
@@ -253,7 +253,7 @@ def parse_args():
     direct_flash_parser.add_argument(
         '-a', '--slaveid', type=int, dest='slaveid', metavar='<slaveid>', required=True, help='Slave address of the device')
     direct_flash_parser.add_argument(
-        '-T', '--response-timeout', type=float, dest='response_timeout', metavar='<response_timeout>', default=0.2,
+        '-T', '--response-timeout', type=float, dest='response_timeout', metavar='<response_timeout>', default=0.5,
         help='Modbus response timeout. (Default: %(default)s)')
     direct_flash_parser.add_argument(
         '--conn-settings', type=parse_conn_settings_arg, dest='conn_settings', metavar='<connection_settings_str>', default='9600N2', help="Connection settings to communicate with alive device (Default: %(default)s)")
