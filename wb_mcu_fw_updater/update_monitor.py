@@ -134,7 +134,7 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):  #
         fw_sig = modbus_connection.get_fw_signature()
     except bindings.TooOldDeviceError as e:
         fw_sig = ''
-    except ValueError as e:  # minimalmodbus's slaveid check performs at _exec_command stage
+    except (ValueError, minimalmodbus.SlaveReportedException) as e:  # minimalmodbus's slaveid check performs at _exec_command stage
         six.raise_from(ForeignDeviceError, e)
 
     try:  # WB devices assume to have all these regs
