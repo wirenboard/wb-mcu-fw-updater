@@ -26,7 +26,7 @@ def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
     def real_decorator(f):
         @wraps(f)
         def wrapper(self, *args, **kwargs):
-            tries = kwargs.get('retries', retries)
+            tries = kwargs.pop('retries', retries)
             thrown_exc = None
             self._set_port_settings_raw(self.settings)
             for i in range(tries):
@@ -92,16 +92,12 @@ class MinimalModbusAPIWrapper(object):
         self.settings = settings_dict
         self.device.serial.apply_settings(self.settings)  # only sets params into serial's instance
         """
-        Settings are applying to serial port at:
-            - each port opening (close_port_after_each_call param in Instrument);
-            - calling serial._reconfigure_port()
+        Settings are writing to serial's fd (posix) at:
+            - each port opening (before next call to device, if close_port_after_each_call param is set in Instrument);
+            - calling serial._reconfigure_port() (raises exception, if fd is not valid)
         """
         if not self.device.close_port_after_each_call:
-            if self.device.serial.is_open:
-                self.device.serial._reconfigure_port()
-            else:
-                self.device.serial.open()  # calls serial.reconfigure_port()
-                self.device.serial.close()
+            self.device.serial._reconfigure_port()
 
     def set_port_settings(self, baudrate, parity, stopbits):
         """
