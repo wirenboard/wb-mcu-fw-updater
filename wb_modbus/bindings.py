@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-import logging
 import time
 from binascii import unhexlify
 from copy import deepcopy
@@ -19,7 +18,7 @@ class UARTSettingsNotFoundError(Exception):
     pass
 
 
-def force():
+def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
     """
     A decorator, applying settings to serial port and handling accidential connection errors on bus.
     """
@@ -27,14 +26,15 @@ def force():
     def real_decorator(f):
         @wraps(f)
         def wrapper(self, *args, **kwargs):
-            tries = getattr(self, 'allowed_unsuccessful_tries', None) or ALLOWED_UNSUCCESSFUL_TRIES
+            tries = kwargs.get('retries', retries)
             thrown_exc = None
             self._set_port_settings_raw(self.settings)
-            for _ in range(tries):
+            for i in range(tries):
                 try:
                     return f(self, *args, **kwargs)
                 except errtypes as e:
                     thrown_exc = e
+                    logger.debug("%s not succeed (try %d/%d)", f.__name__, i + 1, tries)
             else:
                 if thrown_exc: #python3 wants exception to be defined already
                     raise thrown_exc
