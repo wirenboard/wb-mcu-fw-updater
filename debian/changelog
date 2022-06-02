@@ -1,7 +1,7 @@
 wb-mcu-fw-updater (1.3.1) stable; urgency=medium
 
-  * improved non-wb devices recognition (in cases, when could not read fw_signature or sn because of missing regs in sequence)
-  * explained foreign-devices-recognition algo (comments in update_monitor.py)
+  * improved non-wb devices recognition (in cases, when could not read
+  fw_signature or S/N because of missing registers in sequence)
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 27 May 2022 10:46:11 +0300
 
@@ -29,7 +29,8 @@ wb-mcu-fw-updater (1.1.1) stable; urgency=medium
 
 wb-mcu-fw-updater (1.1.0) stable; urgency=medium
 
-  * added fw releases support: trying to guess target fw version from releases, when updating fw
+  * added fw releases support: trying to guess target fw version from releases,
+  when updating fw
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 12 Jan 2022 15:55:29 +0300
 
