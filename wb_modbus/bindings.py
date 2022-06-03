@@ -34,7 +34,7 @@ def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
     errtypes = (minimalmodbus.ModbusException, ValueError)
     def real_decorator(f):
         @wraps(f)
-        def wrapper(self, *args, **kwargs):
+        def wrapper(*args, **kwargs):
             tries = kwargs.pop('retries', retries)
             thrown_exc = None
             f_args = [repr(a) for a in args]
@@ -42,7 +42,7 @@ def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
             f_signature = "%s(%s)" % (f.__name__, ", ".join(f_args + f_kwargs))
             for i in range(tries):
                 try:
-                    return f(self, *args, **kwargs)
+                    return f(*args, **kwargs)
                 except errtypes as e:
                     thrown_exc = e
                     logger.debug("f = %s not succeed (try %d/%d)", f_signature, i + 1, tries)
