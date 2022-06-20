@@ -11,13 +11,16 @@ import logging
 import semantic_version
 from io import open
 from collections import namedtuple, defaultdict
-from . import fw_flasher, fw_downloader, user_log, jsondb, releases, CONFIG, logger
 
-import wb_modbus  # Setting up module's params
+# TODO: rework params setting to get rid of imports-order-magic
+# isort: off
+from . import CONFIG, logger
+import wb_modbus  # Params should be set before any wb_modbus usage!
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
-
 from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
+from . import fw_flasher, fw_downloader, user_log, jsondb, releases
+# isort: on
 
 db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
 
@@ -110,13 +113,13 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
     return downloaded_fw
 
 
-def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):  # TODO: to device_prober module?
+def get_correct_modbus_connection(slaveid, port, response_timeout, known_uart_params_str=None):  # TODO: to device_prober module?
     """
     Alive device only:
         searching device's uart settings (if not passed);
         checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
     """
-    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
 
     if known_uart_params_str:
         modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
@@ -182,31 +185,33 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
         if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
             port_name = port['path']
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
+            port_response_timeout = int(port.get('response_timeout_ms', 0)) * 1E-3
             devices_on_port = set()
             for serial_device in port['devices']:
                 device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
+                device_response_timeout = int(serial_device.get('response_timeout_ms', 0)) * 1E-3
                 if device_name.startswith('WBIO-'):
                     logger.debug("Has found WBIO device: %s", device_name)
                     device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
-                devices_on_port.add((device_name, int(slaveid)))
+                devices_on_port.add((device_name, int(slaveid), device_response_timeout))
             if devices_on_port:
-                found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port}})
+                found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port, 'response_timeout' : port_response_timeout}})
 
     if not found_devices:
         logger.error("No devices has found in %s", driver_config_fname)
     return found_devices
 
 
-def recover_device_iteration(fw_signature, slaveid, port):
+def recover_device_iteration(fw_signature, slaveid, port, in_bl_response_timeout):
     """
     A device supposed to be in "dead" state => fw_signature, slaveid, port have passed instead of modbus_connection
     """
     downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
-    direct_flash(downloaded_fw, slaveid, port)
+    direct_flash(downloaded_fw, slaveid, port, response_timeout=in_bl_response_timeout)
 
 
-def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_only=False):
+def direct_flash(fw_fpath, slaveid, port, response_timeout, erase_all_settings=False, erase_uart_only=False):
     """
     Performing operations in bootloader (device is already into):
         flashing .wbfw
@@ -220,7 +225,7 @@ def direct_flash(fw_fpath, slaveid, port, erase_all_settings=False, erase_uart_o
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
-    flasher = fw_flasher.ModbusInBlFlasher(slaveid, port)
+    flasher = fw_flasher.ModbusInBlFlasher(slaveid, port, response_timeout=response_timeout)
 
     if (erase_uart_only and _ensure(default_msg)):
         flasher.reset_uart()
@@ -328,12 +333,12 @@ def _do_flash(modbus_connection, fw_fpath, mode, erase_settings):
     fw_signature = modbus_connection.get_fw_signature()
     logger.debug('Flashing approved for "%s" (%s : %d)', fw_signature, modbus_connection.port, modbus_connection.slaveid)
     modbus_connection.reboot_to_bootloader()
-    direct_flash(fw_fpath, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+    direct_flash(fw_fpath, modbus_connection.slaveid, modbus_connection.port, modbus_connection.response_timeout, erase_settings)
 
     if mode == 'bootloader':
         logger.info('Bootloader was successfully flashed. Will flash released firmware for "%s"', fw_signature)
         downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO)
-        direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, erase_settings)
+        direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port, modbus_connection.response_timeout, erase_settings)
 
 
 class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
@@ -343,7 +348,7 @@ class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
         return "%s (%d, %s)" % (self.name, self.modbus_connection.slaveid, self.modbus_connection.port)
 
 
-def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (to get rid of passing lists)
+def probe_all_devices(driver_config_fname, minimal_response_timeout):  # TODO: rework entire data model (to get rid of passing lists)
     """
     Acquiring states of all devies, added to config.
     States could be:
@@ -355,20 +360,22 @@ def probe_all_devices(driver_config_fname):  # TODO: rework entire data model (t
     """
     result = defaultdict(list)
 
-    logger.info('Will probe all devices defined in %s', driver_config_fname)
+    logger.info('Will probe all devices on enabled serial ports of %s:', driver_config_fname)
     for port, port_params in get_devices_on_driver(driver_config_fname).items():
         uart_params = ''.join(map(str, port_params['uart_params']))  # 9600N2
+        port_response_timeout = port_params['response_timeout']
         devices_on_port = port_params['devices']
-        for device_name, device_slaveid in devices_on_port:
-            logger.debug('Probing device %s (port: %s, slaveid: %d, uart_params: %s)...', device_name, port, device_slaveid, uart_params)
-            device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params)))
+        for device_name, device_slaveid, device_response_timeout in devices_on_port:
+            actual_response_timeout = max(minimal_response_timeout, port_response_timeout, device_response_timeout)
+            logger.info('Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)...', device_name, port, device_slaveid, uart_params, actual_response_timeout)
+            device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params), response_timeout=actual_response_timeout))
             try:
-                device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, uart_params))
+                device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, actual_response_timeout, uart_params))
             except ForeignDeviceError as e:
                 result['foreign'].append(device_info)
                 continue
             except minimalmodbus.NoResponseError as e:
-                bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port)
+                bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port, response_timeout=actual_response_timeout)
                 if bootloader_connection.is_in_bootloader():
                     result['in_bootloader'].append(DeviceInfo(name=device_name, modbus_connection=bootloader_connection))
                 else:
@@ -392,8 +399,8 @@ def print_status(loglevel, status='', devices_list=[], additional_info=''):
     logger.log(loglevel, additional_info)
 
 
-def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
-    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+def _update_all(force, minimal_response_timeout, allow_downgrade=False):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
+    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], minimal_response_timeout)
     cmd_status = defaultdict(list)
 
     for device_info in probing_result['alive']:
@@ -461,13 +468,13 @@ def _update_all(force, allow_downgrade=False):  # TODO: maybe store fw endpoint 
     )
 
 
-def _restore_fw_signature(slaveid, port):
+def _restore_fw_signature(slaveid, port, response_timeout):
     """
     Getting fw_signature of devices in bootloader
     """
     try:
         logger.debug("Will ask a bootloader for fw_signature")
-        fw_signature = bindings.WBModbusDeviceBase(slaveid, port).get_fw_signature()  # latest bootloaders could answer a fw_signature
+        fw_signature = bindings.WBModbusDeviceBase(slaveid, port, instrument=wb_modbus.instruments.StopbitsTolerantInstrument, response_timeout=response_timeout).get_fw_signature()  # latest bootloaders could answer a fw_signature
     except minimalmodbus.ModbusException as e:
         logger.debug("Will try to restore fw_signature from db by slaveid: %d and port %s", slaveid, port)
         fw_signature = db.get_fw_signature(slaveid, port)
@@ -475,12 +482,12 @@ def _restore_fw_signature(slaveid, port):
     return fw_signature
 
 
-def _recover_all():
-    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'])
+def _recover_all(minimal_response_timeout):
+    probing_result = probe_all_devices(CONFIG['SERIAL_DRIVER_CONFIG_FNAME'], minimal_response_timeout)
     cmd_status = defaultdict(list)
 
     for device_info in probing_result['in_bootloader']:
-        fw_signature = _restore_fw_signature(device_info.modbus_connection.slaveid, device_info.modbus_connection.port)
+        fw_signature = _restore_fw_signature(device_info.modbus_connection.slaveid, device_info.modbus_connection.port, device_info.modbus_connection.response_timeout)
         if fw_signature is None:
             logger.info('%s %s', user_log.colorize('Unknown fw_signature:', 'RED'), str(device_info))
             cmd_status['skipped'].append(device_info)
@@ -492,7 +499,7 @@ def _recover_all():
         logger.info('Flashing the most recent stable firmware:')
         for device_info, fw_signature in cmd_status['to_perform']:
             try:
-                recover_device_iteration(fw_signature, device_info.modbus_connection.slaveid, device_info.modbus_connection.port)
+                recover_device_iteration(fw_signature, device_info.modbus_connection.slaveid, device_info.modbus_connection.port, in_bl_response_timeout=device_info.modbus_connection.response_timeout)
             except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
                 logger.exception(e)
                 cmd_status['skipped'].append(device_info)

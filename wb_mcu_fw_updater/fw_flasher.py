@@ -5,6 +5,7 @@ import os
 import six
 from tqdm import tqdm
 from wb_modbus import minimalmodbus, bindings
+from wb_modbus.instruments import StopbitsTolerantInstrument
 from . import logger
 
 
@@ -37,9 +38,12 @@ class ModbusInBlFlasher(object):
     UART_SETTINGS_RESET_REG = 1000  # in-bl only
     EEPROM_ERASE_REG = 1001  # in-bl only
 
-    def __init__(self, addr, port, bd=9600, parity='N', stopbits=2, serial_timeout=2.0):
-        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, foregoing_noise_cancelling=True)
-        self.instrument.device.serial.timeout = serial_timeout
+    MINIMAL_RESPONSE_TIMEOUT = 5.0  # should be relatively huge (for wireless devices)
+
+    def __init__(self, addr, port, response_timeout, bd=9600, parity='N', stopbits=2):
+        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=StopbitsTolerantInstrument, foregoing_noise_cancelling=True)
+        self._actual_response_timeout = max(self.MINIMAL_RESPONSE_TIMEOUT, response_timeout)
+        self.instrument.set_response_timeout(self._actual_response_timeout)
 
     def _read_to_u16s(self, fw_fpath):
         """
@@ -71,11 +75,14 @@ class ModbusInBlFlasher(object):
             raise IncorrectFwError("Info block size should be %d regs! Got %d instead\nRaw regs: %s" % (self.INFO_BLOCK_LENGTH, len(regs_row), str(regs_row)))
 
         try:
+            self.instrument.set_response_timeout(self._actual_response_timeout + self.instrument.BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT)
             self.instrument.write_u16_regs(self.INFO_BLOCK_START, regs_row)
         except minimalmodbus.IllegalRequestError as e:
             six.raise_from(NotInBootloaderError, e)
         except Exception as e:
             six.raise_from(FlashingError, e)
+        finally:
+            self.instrument.set_response_timeout(self._actual_response_timeout)
 
     def _send_data(self, regs_row):
         """
@@ -84,11 +91,20 @@ class ModbusInBlFlasher(object):
         chunk_size = self.DATA_BLOCK_LENGTH  # bootloader accepts only fixed-length chunks
         chunks = [regs_row[i:i+chunk_size] for i in range(0, len(regs_row), chunk_size)]
 
+        has_previous_chunk_failed = False  # Due to bootloader's behaviour, actual flashing failure is current-chunk failure + next-chunk failure
         for chunk in tqdm(chunks, ascii=True, dynamic_ncols=True, bar_format="{l_bar}{bar}|{n}/{total}"):
             try:
                 self.instrument.write_u16_regs(self.DATA_BLOCK_START, chunk)  # retries wb_modbus.ALLOWED_UNSUCCESSFULL_TRIES times
+                has_previous_chunk_failed = False
             except minimalmodbus.ModbusException as e:
-                six.raise_from(FlashingError, e)
+                if has_previous_chunk_failed:
+                    six.raise_from(FlashingError, e)
+                else:
+                    has_previous_chunk_failed = True
+                    continue
+
+        if has_previous_chunk_failed and self.instrument._has_bootloader_answered():
+            raise FlashingError("Flashing has failed at last frame (device remains in bootloader). Check device's connection!")
 
     def _perform_bootloader_cmd(self, reg):
         try:
