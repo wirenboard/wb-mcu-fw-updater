@@ -11,15 +11,16 @@ import logging
 import semantic_version
 from io import open
 from collections import namedtuple, defaultdict
-from . import CONFIG, logger
 
 # TODO: rework params setting to get rid of imports-order-magic
+# isort: off
+from . import CONFIG, logger
 import wb_modbus  # Params should be set before any wb_modbus usage!
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
-
 from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
 from . import fw_flasher, fw_downloader, user_log, jsondb, releases
+# isort: on
 
 db = jsondb.JsonDB(CONFIG['DB_FILE_LOCATION'])
 
