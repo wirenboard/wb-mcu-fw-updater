@@ -234,8 +234,13 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         self._initial_stopbits = self.serial._stopbits
         super(StopbitsTolerantInstrument, self)._write_to_bus(request)
         write_ts = time.time()
-        while (self.serial.out_waiting > 0) and (time.time() - write_ts < self.serial.timeout):
-            time.sleep(0.1)
+        while self.serial.out_waiting > 0:
+            if time.time() - write_ts < self.serial.timeout:
+                time.sleep(0.1)
+            else:
+                raise minimalmodbus.MasterReportedException(
+                    "Output serial buffer is not empty after %.2fs (serial.timeout)" % self.serial.timeout
+                )
         termios.tcdrain(self.serial.fd)  # ensuring, all buffered data has transmitted
         self._set_stopbits_onthefly(stopbits=1)
 
