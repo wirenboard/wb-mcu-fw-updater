@@ -5,7 +5,25 @@ wb-mcu-fw-updater (1.4.0) stable; urgency=medium
   * update-all/recover-all: added -T / --min-response-timeout arg (actual response_timeout is: max(minimal, from_config))
   * fixups: minimalmodbus's debug frames; improved in-bl errors handling
 
- -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 18 May 2022 10:44:28 +0300
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 20 Jun 2022 12:21:45 +0300
+
+wb-mcu-fw-updater (1.3.2) stable; urgency=medium
+
+  * wb_modbus.bindings: reworked serial port configuring
+  (no annoying "Opening/closing port" messages in debug anymore)
+  * wb_modbus.bindings: applying actual settings to serial port
+  before each communication
+  * wb_modbus.bindings: printing function_signature of each unsuccessful try
+  to debug
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 2 Jun 2022 16:35:53 +0300
+
+wb-mcu-fw-updater (1.3.1) stable; urgency=medium
+
+  * improved non-wb devices recognition (in cases, when could not read
+  fw_signature or S/N because of missing registers in sequence)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 27 May 2022 10:46:11 +0300
 
 wb-mcu-fw-updater (1.3.0) stable; urgency=medium
 
@@ -31,7 +49,8 @@ wb-mcu-fw-updater (1.1.1) stable; urgency=medium
 
 wb-mcu-fw-updater (1.1.0) stable; urgency=medium
 
-  * added fw releases support: trying to guess target fw version from releases, when updating fw
+  * added fw releases support: trying to guess target fw version from releases,
+  when updating fw
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 12 Jan 2022 15:55:29 +0300
 
