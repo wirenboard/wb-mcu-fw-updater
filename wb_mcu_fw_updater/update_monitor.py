@@ -113,25 +113,19 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True):
     return downloaded_fw
 
 
-def get_correct_modbus_connection(slaveid, port, response_timeout, known_uart_params_str=None):  # TODO: to device_prober module?
-    """
-    Alive device only:
-        searching device's uart settings (if not passed);
-        checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
-    """
+def find_connection_params(slaveid, port, response_timeout):
     modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
+    logger.info("Will find serial port settings for (%s : %d; response_timeout: %.2f)...",
+                                    port, slaveid, response_timeout)
+    try:
+        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+    except bindings.UARTSettingsNotFoundError as e:
+        six.raise_from(minimalmodbus.NoResponseError, e)
+    logger.info('Has found serial port settings: %s', str(uart_settings_dict))
+    return uart_settings_dict
 
-    if known_uart_params_str:
-        modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
-    else:
-        logger.info("Will find serial port settings for (%s : %d)...", port, slaveid)
-        try:
-            uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-        except bindings.UARTSettingsNotFoundError as e:
-            six.raise_from(minimalmodbus.NoResponseError, e)
-        logger.info('Has found serial port settings: %s', str(uart_settings_dict))
-        modbus_connection._set_port_settings_raw(uart_settings_dict)
 
+def check_device_is_a_wb_one(modbus_connection):
     """
     Foreign devices recognition:
         1) performing any wb-specific modbus call (get_sn for example). Could raise:
@@ -152,7 +146,7 @@ def get_correct_modbus_connection(slaveid, port, response_timeout, known_uart_pa
         six.raise_from(ForeignDeviceError, e)
 
     try:  # WB devices assume to have all these regs
-        logger.debug("%s %d:", port, slaveid)
+        logger.debug("%s %d:", modbus_connection.port, modbus_connection.slaveid)
         logger.debug("\t%s %d %s %s %d",
             modbus_connection.get_device_signature(),
             sn,
@@ -161,8 +155,24 @@ def get_correct_modbus_connection(slaveid, port, response_timeout, known_uart_pa
             modbus_connection.get_uptime()
         )
     except minimalmodbus.ModbusException as e:
-        raise ForeignDeviceError("Possibly, device (%s %d) is not a WB-one!" % (port, slaveid))
+        raise ForeignDeviceError("Possibly, device (%s %d) is not a WB-one!" % (modbus_connection.port, modbus_connection.slaveid))
 
+
+def get_correct_modbus_connection(slaveid, port, response_timeout, known_uart_params_str=None):  # TODO: to device_prober module?
+    """
+    Alive device only:
+        searching device's uart settings (if not passed);
+        checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
+    """
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
+
+    if known_uart_params_str:
+        modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
+    else:
+        raw_uart_params = find_connection_params(slaveid, port, response_timeout)
+        modbus_connection._set_port_settings_raw(raw_uart_params)
+
+    check_device_is_a_wb_one(modbus_connection)
     return modbus_connection
 
 
