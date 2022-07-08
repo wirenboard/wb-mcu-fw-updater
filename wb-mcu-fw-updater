@@ -61,19 +61,17 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
 
 
 def update_fw(args):
-    """
-    Updating device's firmware.
-    Could install specified fw_version from specified branch.
-    """
-    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', response_timeout=args.response_timeout, branch=args.branch_name, version=args.specified_version, force=args.force, erase_settings=args.erase_settings)
+    # Could install specified fw_version from specified branch.
+    version = args.version or "release"
+    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', response_timeout=args.response_timeout,
+        branch=args.branch_name, version=version, force=args.force, erase_settings=args.erase_settings)
 
 
 def update_bootloader(args):
-    """
-    Updating device's bootloader.
-    Only latest version from stable branch is available.
-    """
-    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', response_timeout=args.response_timeout, branch='', version='latest', force=args.force, erase_settings=False)
+    # Could install specified bl_version from specified branch.
+    version = args.version or "latest"  # no bl-releases.yaml yet
+    _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', response_timeout=args.response_timeout,
+        branch=args.branch_name, version=args.specified_version, force=args.force, erase_settings=False)
 
 
 def recover_fw(args):
@@ -195,9 +193,9 @@ def add_modbus_connection_args(parser):
 
 def add_fw_source_args(parser):
     parser.add_argument('--branch', type=str, dest='branch_name', metavar='<branch_name>', default='',
-                                help='Install firmware from specified branch. (Default: %(default)s)')
+                                help='Install from specified branch. (Default: %(default)s)')
     parser.add_argument('--version', type=str, dest='specified_version', metavar='<fw_version>',
-                                default='release', help='Download a specified firmware version. (Default: %(default)s)')
+                                default=None, help='Download a specified version. (Default: %(default)s)')
 
 
 def parse_args():
@@ -218,6 +216,7 @@ def parse_args():
     update_bootloader_parser = subparsers.add_parser('update-bl', help='Update bootloader on single working device.')
     add_common_logic_args(update_bootloader_parser)
     add_modbus_connection_args(update_bootloader_parser)
+    add_fw_source_args(update_bootloader_parser)
     update_bootloader_parser.set_defaults(func=update_bootloader)
 
     #Flash single device, stuck in the bootloader
