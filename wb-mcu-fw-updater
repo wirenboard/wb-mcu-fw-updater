@@ -127,12 +127,13 @@ def flash_fw_file(args):
     """
     Directly flashing a fw-file (passed as arg) (args are almost compatible to wb-mcu-fw-flasher)
     """
-    device_str = "%s %d %s" % (args.port, args.slaveid, str(args.conn_settings))
-
-    if args.jump_in_bl:
-        _device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout)
+    device_str = "%s %d %s (response timeout: %.2f)" % (
+                                args.port, args.slaveid, str(args.conn_settings), args.response_timeout)
+    device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout)
+    if not device.is_in_bootloader():
+        logger.debug("Rebooting %s to bootloader", device_str)
         try:
-            _device.reboot_to_bootloader()
+            device.reboot_to_bootloader()
         except ModbusException as e:
             die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
 
@@ -140,8 +141,7 @@ def flash_fw_file(args):
         update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.response_timeout, args.erase_all, args.erase_uart)
         return
     except fw_flasher.NotInBootloaderError as e:
-        logger.error("Seems, device (%s) is not in bootloader now!", device_str)
-        logger.error("Try again with '-j' arg")
+        logger.error("Seems, device (%s) is not in bootloader mode", device_str)
     except (fw_flasher.FlashingError, update_monitor.UserCancelledError) as e:
         logger.exception(e)
     logger.error("Unsuccessful flashing!")
@@ -240,8 +240,6 @@ def parse_args():
     direct_flash_parser.add_argument('--conn-settings', type=parse_conn_settings_arg, dest='conn_settings',
                                 metavar='<connection_settings_str>', default='9600N2',
                                 help="Connection settings to communicate with alive device (Default: %(default)s)")
-    direct_flash_parser.add_argument('-j', action='store_true', dest='jump_in_bl', default=False,
-                                help='Jump to bootloader? (use on alive devices; default: %(default)s)')
     direct_flash_parser.add_argument('-u', '--erase-uart', action='store_true', dest='erase_uart',
                                 default=False, help="Erase device's uart settings? (Default: %(default)s)")
     direct_flash_parser.add_argument('-e', '--erase-all', action='store_true', dest='erase_all',
