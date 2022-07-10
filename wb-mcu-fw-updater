@@ -62,16 +62,16 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
 
 def update_fw(args):
     # Could install specified fw_version from specified branch.
-    version = args.version or "release"
+    version = args.specified_version or "release"
     _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', response_timeout=args.response_timeout,
         branch=args.branch_name, version=version, force=args.force, erase_settings=args.erase_settings)
 
 
 def update_bootloader(args):
     # Could install specified bl_version from specified branch.
-    version = args.version or "latest"  # no bl-releases.yaml yet
+    version = args.specified_version or "latest"  # no bl-releases.yaml yet
     _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', response_timeout=args.response_timeout,
-        branch=args.branch_name, version=args.specified_version, force=args.force, erase_settings=False)
+        branch=args.branch_name, version=version, force=args.force, erase_settings=False)
 
 
 def recover_fw(args):
@@ -136,7 +136,7 @@ def recover_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._recover_all(minimal_response_timeout=args.minimal_response_timeout)
+        update_monitor._recover_all(minimal_response_timeout=args.minimal_response_timeout, force=args.force)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
