@@ -554,7 +554,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     def _get_serial_number_map(self):
         int_values = self.read_u16_inputs(self.COMMON_REGS_MAP['serial_number'], 2)
-        return ((int_values[0] % 256) * 65536) + int_values[1]
+        return int_values[0] << 16 + int_values[1] - 0xFE000000
 
     def get_fw_version(self):
         return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH)
