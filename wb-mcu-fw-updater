@@ -38,8 +38,14 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
             logger.debug("Trying to acquire fw-signature...")
             fw_sig = update_monitor._restore_fw_signature(slaveid, port, response_timeout)
             if fw_sig:
-                logger.info("Will flash latest released FW to bring %s %s alive", fw_sig, device_str)
-                update_monitor.recover_device_iteration(fw_sig, slaveid, port, response_timeout)
+                downloaded_fw, fw_version = update_monitor._do_download(fw_sig, version, branch, mode,
+                    retrieve_latest_vnum=False)
+                logger.info("Will flash %s v_%s to bring %s %s alive", mode, fw_version, fw_sig, device_str)
+                update_monitor.direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port,
+                    response_timeout, erase_all_settings=erase_settings, force=force)
+                if mode == "bootloader":  # we don't know fw's branch/version (only bl's ones)
+                    update_monitor.recover_device_iteration(fw_sig, modbus_connection.slaveid,
+                        modbus_connection.port, response_timeout, force)
             else:
                 logger.error("Could not find fw-signature for %s", device_str)
                 logger.error('Try to launch "recover" mode with --fw-sig provided manually')

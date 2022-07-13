@@ -282,71 +282,40 @@ def is_reflash_necessary(actual_version, provided_version, force_reflash=False, 
         return _do_flash
 
 
-def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
+def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     """
-    Checking for update, if branch is stable;
-    Just flashing specified fw version, if branch is unstable.
+    Generic .wbfw downloading logic:
+        version=="release"; branch==None -> looking into release-versions.yaml (default case)
+        version=="release"; branch==<specified_branch> -> looking into branch/latest
+        version==<specified_version>; branch==None -> looking into main/version
+        version==<specified_version>; branch==<specified_branch> -> looking into branch/version
+        version==None/"latest"; branch==None -> looking into main/version
+        version==None/"latest"; branch==<specified_branch> -> looking into branch/latest
+
+    Retrieves "latest" version number (from latest.txt on s3); returns ("downloaded_fpath", "version_number")
     """
-    fw_signature = modbus_connection.get_fw_signature()
-    db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
-    downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch_name)
-    mode_name = 'firmware' if mode == 'fw' else 'bootloader'
+    downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch)
+    mode_name = "firmware" if mode == "fw" else "bootloader"
 
     downloaded_fw = None
 
-    """
-    Flashing specified fw version (without any update-checking), if branch is unstable
-    """
-    if branch_name:
+    if branch:
+        if version == "release":  # default fw_version now is 'release'; will flash latest, if branch has specified
+            version = "latest"
+            downloaded_fw = downloader.download(fw_sig, version)
 
-        if specified_fw_version == "release":  # default fw_version now is 'release'; will flash latest, if branch has specified
-            specified_fw_version = "latest"
-
-        if ask_user("""Flashing device: "%s" branch: "%s" version: "%s" is requested.
-        Stability cannot be guaranteed. Flash at your own risk?""" % (
-            fw_signature,
-            branch_name,
-            specified_fw_version), force_yes=force
-        ):
-            downloaded_fw = downloader.download(fw_signature, specified_fw_version)
-            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
-            return
-
-        else:
-            raise UserCancelledError("Flashing %s has rejected" % fw_signature)
-
+    if version == "release":  # triggered updating from releases
+        version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO)
+        downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint))
     else:
-        branch_name = CONFIG['DEFAULT_SOURCE']
+        logger.debug("%s version has specified manually: %s", mode_name, version)
 
-    """
-    Retrieving, which passed version actually is
-    """
-    if specified_fw_version == 'release':  # triggered updating from releases
-        specified_fw_version, released_fw_endpoint = get_released_fw(fw_signature, RELEASE_INFO)
-        downloaded_fw = fw_downloader.download_remote_file(six.moves.urllib.parse.urljoin(CONFIG['ROOT_URL'], released_fw_endpoint))
-    else:
-        logger.debug("%s version has specified manually: %s", mode_name, specified_fw_version)
+    if version == "latest" and retrieve_latest_vnum:  # TODO: put unstable_bl version to latest.txt on ci; then remove
+        logger.debug("Retrieving latest %s version number for %s", mode_name, fw_sig)
+        version = downloader.get_latest_version_number(fw_sig)  # to guess, is reflash needed or not
 
-    if specified_fw_version == 'latest':
-        logger.debug('Retrieving latest %s version number for %s', mode_name, fw_signature)
-        specified_fw_version = downloader.get_latest_version_number(fw_signature)  # to guess, is reflash needed or not
-
-    downloaded_fw = downloaded_fw or downloader.download(fw_signature, specified_fw_version)
-
-    """
-    Reflashing with update-checking
-    """
-    device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
-
-    logger.info("%s (%s %d)", modbus_connection.port, fw_signature, modbus_connection.slaveid)
-    if is_reflash_necessary(
-        actual_version=device_fw_version,
-        provided_version=specified_fw_version,
-        force_reflash=force,
-        allow_downgrade=True,
-        debug_info='(%s %d %s)' % (fw_signature, modbus_connection.slaveid, modbus_connection.port)
-        ):
-        _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
+    downloaded_fw = downloaded_fw or downloader.download(fw_sig, version)
+    return downloaded_fw, version
 
 
 def _do_flash(modbus_connection, fw_fpath, mode, erase_settings, force=False):
@@ -361,6 +330,49 @@ def _do_flash(modbus_connection, fw_fpath, mode, erase_settings, force=False):
         downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO, force=force)
         direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port,
             modbus_connection.response_timeout, erase_settings, force=force)
+
+
+def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
+    """
+    Checking for update, if branch is stable;
+    Just flashing specified fw version, if branch is unstable.
+    """
+    fw_signature = modbus_connection.get_fw_signature()
+    db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
+
+    device_str = "(%s %d on %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port)
+
+    downloaded_fw, specified_fw_version = _do_download(fw_signature, specified_fw_version, branch_name, mode)
+
+    """
+    Flashing specified fw version (without any update-checking), if branch is unstable
+    """
+    if branch_name:
+        if ask_user("""Flashing device: "%s" branch: "%s" version: "%s" is requested.
+        Stability cannot be guaranteed. Flash at your own risk?""" % (
+            fw_signature,
+            branch_name,
+            specified_fw_version), force_yes=force
+        ):
+            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
+            return
+        else:
+            raise UserCancelledError("Flashing %s has rejected" % fw_signature)
+
+    """
+    Reflashing with update-checking
+    """
+    device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
+
+    logger.info("%s %s:", mode, device_str)
+    if is_reflash_necessary(
+        actual_version=device_fw_version,
+        provided_version=specified_fw_version,
+        force_reflash=force,
+        allow_downgrade=True,
+        debug_info='(%s %d %s)' % (fw_signature, modbus_connection.slaveid, modbus_connection.port)
+        ):
+        _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
 
 
 class DeviceInfo(namedtuple('DeviceInfo', ['name', 'modbus_connection'])):
