@@ -20,7 +20,7 @@ def check_internet_connection():
 def _update_alive_device(slaveid, port, mode, response_timeout, branch, version, force, erase_settings):
     check_internet_connection()
 
-    device_str = "%s %d; response_timeout: %.2fs" % (port, slaveid, response_timeout)
+    device_str = "(%s %d; response_timeout: %.2fs)" % (port, slaveid, response_timeout)
     modbus_connection = WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
 
     is_in_bootloader = modbus_connection.is_in_bootloader()  # 9600N2
@@ -29,19 +29,19 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
             conn_settings = update_monitor.find_connection_params(slaveid, port, response_timeout)
             modbus_connection._set_port_settings_raw(conn_settings)
         except ModbusException as e:
-            logger.error("Check (%s) physical connection, slaveid and serial port!", device_str)
+            logger.error("Can't connect to %s, check physical connection or address/port", device_str)
             die(e)
 
     try:
         if is_in_bootloader:
-            logger.warning("Device (%s) supposed to be alive, but found in bootloader", device_str)
+            logger.info("Device %s supposed to be alive, but found in bootloader", device_str)
             logger.debug("Trying to acquire fw-signature...")
             fw_sig = update_monitor._restore_fw_signature(slaveid, port, response_timeout)
             if fw_sig:
-                logger.info("Will flash latest released FW to bring %s (%s) alive", fw_sig, device_str)
+                logger.info("Will flash latest released FW to bring %s %s alive", fw_sig, device_str)
                 update_monitor.recover_device_iteration(fw_sig, slaveid, port, response_timeout)
             else:
-                logger.error("Could not find fw-signature for (%s)", device_str)
+                logger.error("Could not find fw-signature for %s", device_str)
                 logger.error('Try to launch "recover" mode with --fw-sig provided manually')
                 die()
         else:  # device is alive
@@ -56,7 +56,7 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
         update_monitor.ForeignDeviceError,
         fw_downloader.WBRemoteStorageError,
         fw_flasher.FlashingError ) as e:
-        logger.error("Flashing %s to (%s) has failed!", mode, device_str)
+        logger.error("Flashing %s to %s has failed!", mode, device_str)
         die(e)
 
 
