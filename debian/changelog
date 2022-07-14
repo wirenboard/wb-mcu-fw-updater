@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.4.1) stable; urgency=medium
+
+  * wb_modbus.bindings:_get_serial_number_map() gets 25 bits instead of 24
+
+ -- Narek Kazaryan <d.kazaryan@wirenboard.ru>  Thu, 14 Jul 2022 14:48:32 +0300
+
 wb-mcu-fw-updater (1.4.0) stable; urgency=medium
 
   * added stopbits-tolerant instrument (write - 2sb; read - 1sb; only for in-bootloader communications now)
