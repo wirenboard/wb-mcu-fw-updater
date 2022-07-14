@@ -39,8 +39,8 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
             fw_sig = update_monitor._restore_fw_signature(slaveid, port, response_timeout)
             if fw_sig:
                 downloaded_fw, fw_version = update_monitor._do_download(fw_sig, version, branch, mode,
-                    retrieve_latest_vnum=False)
-                logger.info("Will flash %s v_%s to bring %s %s alive", mode, fw_version, fw_sig, device_str)
+                    retrieve_latest_vnum=False)  # we don't need any update-check here
+                logger.info("Will flash %s v:%s to bring %s %s alive", mode, fw_version, fw_sig, device_str)
                 update_monitor.direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port,
                     response_timeout, erase_all_settings=erase_settings, force=force)
                 if mode == "bootloader":  # we don't know fw's branch/version (only bl's ones)

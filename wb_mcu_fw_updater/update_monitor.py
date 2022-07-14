@@ -342,8 +342,6 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
 
     device_str = "(%s %d on %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port)
 
-    downloaded_fw, specified_fw_version = _do_download(fw_signature, specified_fw_version, branch_name, mode)
-
     """
     Flashing specified fw version (without any update-checking), if branch is unstable
     """
@@ -354,6 +352,8 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             branch_name,
             specified_fw_version), force_yes=force
         ):
+            downloaded_fw, _ = _do_download(fw_signature, specified_fw_version, branch_name, mode,
+                retrieve_latest_vnum=False)  # TODO: fix latest.txt for bl branches on ci
             _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
             return
         else:
@@ -363,6 +363,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     Reflashing with update-checking
     """
     device_fw_version = modbus_connection.get_bootloader_version() if mode == 'bootloader' else modbus_connection.get_fw_version()
+    downloaded_fw, specified_fw_version = _do_download(fw_signature, specified_fw_version, branch_name, mode)
 
     logger.info("%s %s:", mode, device_str)
     if is_reflash_necessary(
