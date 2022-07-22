@@ -97,11 +97,12 @@ def get_released_fw(fw_signature, release_info):
                 logger.debug("FW version for %s on release %s: %s (endpoint: %s)", fw_signature, suite, fw_version, fw_endpoint)
                 return str(fw_version), str(fw_endpoint)
         except fw_downloader.RemoteFileReadingError as e:
-            logger.warning("No released fw for %s in %s", fw_signature, url)
+            logger.warning('No released fw for "%s" in "%s"', fw_signature, url)
         except releases.VersionParsingError as e:
             logger.exception(e)
     else:
-        raise NoReleasedFwError("Released FW not found for %s\nRelease info:\n%s" % (fw_signature, str(release_info)))
+        raise NoReleasedFwError('Released FW not found for "%s"\nRelease info:\n%s' %
+            (fw_signature, json.dumps(release_info, indent=4)))
 
 
 def download_fw_fallback(fw_signature, release_info, ask_for_latest=True, force=False):
@@ -480,7 +481,7 @@ def _update_all(force, minimal_response_timeout, allow_downgrade=False):  # TODO
             additional_info='You may try to run with "--force" or "--allow-downgrade" arg')
 
     if cmd_status['no_fw_release']:
-        print_status(logging.WARNING, status="Not supported in current (%s) release:" % str(RELEASE_INFO),
+        print_status(logging.WARNING, status="Not supported in current %s release:" % RELEASE_INFO.get("RELEASE_NAME", ""),
             devices_list=cmd_status['no_fw_release'], additional_info="You may try to switch to newer release")
 
     if probing_result['disconnected']:
