@@ -285,7 +285,7 @@ def is_reflash_necessary(actual_version, provided_version, force_reflash=False, 
 
 def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     """
-    Generic .wbfw downloading logic:
+    Generic .wbfw downloading logic: ("release" is a default val for version)
         version=="release"; branch==None -> looking into release-versions.yaml (default case)
         version=="release"; branch==<specified_branch> -> looking into branch/latest
         version==<specified_version>; branch==None -> looking into main/version
@@ -311,7 +311,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     else:
         logger.debug("%s version has specified manually: %s", mode_name, version)
 
-    if version == "latest" and retrieve_latest_vnum:  # TODO: put unstable_bl version to latest.txt on ci; then remove
+    if version == "latest" and retrieve_latest_vnum:  # TODO: put unstable_bl version to latest.txt on ci; then remove (task 51352)
         logger.debug("Retrieving latest %s version number for %s", mode_name, fw_sig)
         version = downloader.get_latest_version_number(fw_sig)  # to guess, is reflash needed or not
 
@@ -354,7 +354,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             specified_fw_version), force_yes=force
         ):
             downloaded_fw, _ = _do_download(fw_signature, specified_fw_version, branch_name, mode,
-                retrieve_latest_vnum=False)  # TODO: fix latest.txt for bl branches on ci
+                retrieve_latest_vnum=False)  # TODO: fix latest.txt for bl branches on ci (task 51352)
             _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
             return
         else:

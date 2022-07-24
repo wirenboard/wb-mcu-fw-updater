@@ -182,7 +182,7 @@ def parse_conn_settings_arg(conn_settings_str):
 
 
 def add_common_logic_args(parser):
-    parser.add_argument('--force', action='store_true', dest='force', default=False,
+    parser.add_argument('-f', '--force', action='store_true', dest='force', default=False,
                                 help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const',
                                 const=10, help='Setting the least loglevel. (Default: %(default)s)')
@@ -269,7 +269,7 @@ def parse_args():
                                 default=False, help="Erase device's uart settings? (Default: %(default)s)")
     direct_flash_parser.add_argument('-e', '--erase-all', action='store_true', dest='erase_all',
                                 default=False, help="Erase ALL device's uart settings? (Default: %(default)s)")
-    direct_flash_parser.add_argument('-f', type=str, dest='fname', metavar='<firmware_file>',
+    direct_flash_parser.add_argument('--file', type=str, dest='fname', metavar='<firmware_file>',
                                 required=True, help='File to flash')
     add_common_logic_args(direct_flash_parser)
     add_modbus_connection_args(direct_flash_parser)
