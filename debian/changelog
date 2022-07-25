@@ -1,8 +1,9 @@
 wb-mcu-fw-updater (1.5.0) stable; urgency=medium
 
   * update-fw/flash-file handle in-bootloader devices automatically
+  * update-all automatically flash in-bootloader devices
   * remove -j arg from flash-file
-  * --force arg removes all interactivity
+  * -f/--force arg removes all interactivity
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 11 Jul 2022 08:57:38 +0300
 

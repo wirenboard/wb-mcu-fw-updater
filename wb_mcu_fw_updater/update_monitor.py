@@ -476,6 +476,21 @@ def _update_all(force, minimal_response_timeout, allow_downgrade=False):  # TODO
         else:
             cmd_status['ok'].append(device_info)
 
+    for device_info in probing_result['in_bootloader'][:]:
+        fw_signature = _restore_fw_signature(device_info.modbus_connection.slaveid, device_info.modbus_connection.port, device_info.modbus_connection.response_timeout)
+        logger.info("Found in bootloader: %s; fw_signature: %s", str(device_info), str(fw_signature))
+        if not fw_signature:
+            continue  # remain as in-bootloader
+        try:
+            recover_device_iteration(fw_signature, device_info.modbus_connection.slaveid,
+                device_info.modbus_connection.port,
+                in_bl_response_timeout=device_info.modbus_connection.response_timeout, force=force)
+        except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
+            logger.exception(e)
+        else:
+            cmd_status['ok'].append(device_info)
+            probing_result['in_bootloader'].remove(device_info)
+
     if cmd_status['skipped']:  # TODO: maybe split by reasons?
         print_status(logging.WARNING, status="Not updated:", devices_list=cmd_status['skipped'],
             additional_info='You may try to run with "--force" or "--allow-downgrade" arg')
