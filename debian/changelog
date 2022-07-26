@@ -1,3 +1,12 @@
+wb-mcu-fw-updater (1.5.0) stable; urgency=medium
+
+  * update-fw/flash-file handle in-bootloader devices automatically
+  * update-all automatically flash in-bootloader devices
+  * remove -j arg from flash-file
+  * -f/--force arg removes all interactivity
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 11 Jul 2022 08:57:38 +0300
+
 wb-mcu-fw-updater (1.4.1) stable; urgency=medium
 
   * wb_modbus.bindings:_get_serial_number_map() gets 25 bits instead of 24
