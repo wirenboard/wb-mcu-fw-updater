@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.3.2-wb100) stable; urgency=medium
+
+  * wb_modbus.bindings: fix failing on decode error, when reading from modbus regs
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 5 Aug 2022 01:17:54 +0300
+
 wb-mcu-fw-updater (1.3.2) stable; urgency=medium
 
   * wb_modbus.bindings: reworked serial port configuring
