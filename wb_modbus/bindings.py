@@ -450,11 +450,7 @@ class MinimalModbusAPIWrapper(object):
         ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
         for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
             ret = ret.replace(placeholder, '')  # 'A1B2C3' bytes-only string
-        try:
-            return str(unhexlify(ret).decode('utf-8')).strip()
-        except UnicodeDecodeError as e:
-            logger.exception(e)
-            return ''
+        return str(unhexlify(ret).decode(encoding='utf-8', errors='ignore')).strip()  # TODO: "backslashreplace" when drop py2
 
 
 def auto_find_uart_settings(method_to_decorate):
