@@ -129,12 +129,23 @@ def get_correct_modbus_connection(slaveid, port, known_uart_params_str=None):  #
         logger.info('Has found serial port settings: %s', str(uart_settings_dict))
         modbus_connection._set_port_settings_raw(uart_settings_dict)
 
+    """
+    Foreign devices recognition:
+        1) performing any wb-specific modbus call (get_sn for example). Could raise:
+            minimalmodbus.SlaveReportedException() if foreign device;
+            minimalmodbus.NoResponseError() if disconnected;
+            ValueError() if minimalmodbus's slaveid check failed => device is foreign
+        2) performing get_fw_signature() call. If 1) succeed, could raise:
+            minimalmodbus.IllegalRequestError() (inside!!; reraises TooOldDeviceError()) if device is a wb-one, but too old for any updates
+        3) performing a set of additional wb-specific calls: get_device_signature(), get_fw_version(), get_uptime()
+            if 1), 2) are succeed, any modbus error here means, device is foreign
+    """
     try:
         sn = modbus_connection.get_serial_number()  # Will raise NoResponseError, if disconnected
         fw_sig = modbus_connection.get_fw_signature()
     except bindings.TooOldDeviceError as e:
         fw_sig = ''
-    except ValueError as e:  # minimalmodbus's slaveid check performs at _exec_command stage
+    except (ValueError, minimalmodbus.SlaveReportedException) as e:  # minimalmodbus's slaveid check performs at _exec_command stage
         six.raise_from(ForeignDeviceError, e)
 
     try:  # WB devices assume to have all these regs

@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-import logging
 import time
 from binascii import unhexlify
 from copy import deepcopy
@@ -18,24 +17,35 @@ class TooOldDeviceError(minimalmodbus.ModbusException):
 class UARTSettingsNotFoundError(Exception):
     pass
 
-
-def force(errtypes=(minimalmodbus.ModbusException, ValueError), tries=ALLOWED_UNSUCCESSFUL_TRIES):
+def apply_serial_settings(f):
     """
-    A decorator, handling accidential connection errors on bus.
-
-    :param errtypes: Error types, minimalmodbus is raising, defaults to (IOError, ValueError)
-    :type errtypes: tuple, optional
-    :param tries: number of tries after raising error from errtypes, defaults to ALLOWED_UNSUCCESSFUL_TRIES
-    :type tries: int, optional
+    A decorator, applying actual settings to serial port before communication
     """
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        self._set_port_settings_raw(self.settings)
+        return f(self, *args, **kwargs)
+    return wrapper
+
+def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
+    """
+    A decorator, applying settings to serial port and handling accidential connection errors on bus.
+    """
+    errtypes = (minimalmodbus.ModbusException, ValueError)
     def real_decorator(f):
+        @wraps(f)
         def wrapper(*args, **kwargs):
+            tries = kwargs.pop('retries', retries)
             thrown_exc = None
-            for _ in range(tries):
+            f_args = [repr(a) for a in args]
+            f_kwargs = ["%s=%s" % (k, repr(v)) for k, v in kwargs.items()]
+            f_signature = "%s(%s)" % (f.__name__, ", ".join(f_args + f_kwargs))
+            for i in range(tries):
                 try:
                     return f(*args, **kwargs)
                 except errtypes as e:
                     thrown_exc = e
+                    logger.debug("f = %s not succeed (try %d/%d)", f_signature, i + 1, tries)
             else:
                 if thrown_exc: #python3 wants exception to be defined already
                     raise thrown_exc
@@ -91,11 +101,14 @@ class MinimalModbusAPIWrapper(object):
         :type settings_dict: dict
         """
         self.settings = settings_dict
-        self.device.serial.apply_settings(self.settings)
-        if not self.device.serial.is_open:
-            logger.debug("Opening and closing port %s to write settings" % self.port)
-            self.device.serial.open()
-            self.device.serial.close()
+        self.device.serial.apply_settings(self.settings)  # only sets params into serial's instance
+        """
+        Settings are writing to serial's fd (posix) at:
+            - each port opening (before next call to device, if close_port_after_each_call param is set in Instrument);
+            - calling serial._reconfigure_port() (raises exception, if fd is not valid)
+        """
+        if not self.device.close_port_after_each_call:
+            self.device.serial._reconfigure_port()
 
     def set_port_settings(self, baudrate, parity, stopbits):
         """
@@ -116,7 +129,9 @@ class MinimalModbusAPIWrapper(object):
             'stopbits' : int(stopbits)
         }
         self._set_port_settings_raw(settings)
+        logger.debug("Set %s to %s", str(self.settings), self.port)
 
+    @apply_serial_settings
     @force()
     def read_bit(self, addr):
         """
@@ -129,6 +144,7 @@ class MinimalModbusAPIWrapper(object):
         """
         return self.device.read_bit(addr, 2)
 
+    @apply_serial_settings
     @force()
     def write_bit(self, addr, value):
         """
@@ -141,6 +157,7 @@ class MinimalModbusAPIWrapper(object):
         """
         self.device.write_bit(addr, value, 5)
 
+    @apply_serial_settings
     @force()
     def read_bits(self, addr, length):
         """
@@ -155,6 +172,7 @@ class MinimalModbusAPIWrapper(object):
         """
         return self.device.read_bits(addr, length, 2)
 
+    @apply_serial_settings
     @force()
     def write_bits(self, addr, values_list):
         """
@@ -167,6 +185,7 @@ class MinimalModbusAPIWrapper(object):
         """
         self.device.write_bits(addr, values_list)
 
+    @apply_serial_settings
     @force()
     def read_u16(self, addr):
         """
@@ -179,6 +198,7 @@ class MinimalModbusAPIWrapper(object):
         """
         return self.device.read_register(addr, 0, 3, signed=False)
 
+    @apply_serial_settings
     @force()
     def read_s16(self, addr):
         """
@@ -191,6 +211,7 @@ class MinimalModbusAPIWrapper(object):
         """
         return self.device.read_register(addr, 0, 3, signed=True)
 
+    @apply_serial_settings
     @force()
     def write_u16(self, addr, value):
         """
@@ -203,6 +224,7 @@ class MinimalModbusAPIWrapper(object):
         """
         self.device.write_register(addr, value, 0, 6, signed=False)
 
+    @apply_serial_settings
     @force()
     def write_u16_regs(self, beginning, values):
         """
@@ -215,6 +237,7 @@ class MinimalModbusAPIWrapper(object):
         """
         self.device.write_registers(beginning, values)
 
+    @apply_serial_settings
     @force()
     def read_u16_holdings(self, beginning, number_of_regs):
         """
@@ -229,6 +252,7 @@ class MinimalModbusAPIWrapper(object):
         """
         return self.device.read_registers(beginning, number_of_regs, 3)
 
+    @apply_serial_settings
     @force()
     def read_u16_inputs(self, beginning, number_of_regs):
         """
@@ -243,6 +267,7 @@ class MinimalModbusAPIWrapper(object):
         """
         return self.device.read_registers(beginning, number_of_regs, 4)
 
+    @apply_serial_settings
     @force()
     def write_s16(self, addr, value):
         """
@@ -255,6 +280,7 @@ class MinimalModbusAPIWrapper(object):
         """
         self.device.write_register(addr, value, 0, 6, signed=True)
 
+    @apply_serial_settings
     @force()
     def read_u32_big_endian(self, addr, byteswap=False):
         """
@@ -273,6 +299,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_BIG
         return self.device.read_long(addr, 3, signed=False, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def read_u32_little_endian(self, addr, byteswap=False):
         """
@@ -291,6 +318,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_LITTLE
         return self.device.read_long(addr, 3, signed=False, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def read_s32_big_endian(self, addr, byteswap=False):
         """
@@ -309,6 +337,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_BIG
         return self.device.read_long(addr, 3, signed=True, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def read_s32_little_endian(self, addr, byteswap=False):
         """
@@ -327,6 +356,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_LITTLE
         return self.device.read_long(addr, 3, signed=True, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def write_u32_big_endian(self, addr, value, byteswap=False):
         """
@@ -345,6 +375,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_BIG
         self.device.write_long(addr, value, signed=False, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def write_u32_little_endian(self, addr, value, byteswap=False):
         """
@@ -363,6 +394,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_LITTLE
         self.device.write_long(addr, value, signed=False, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def write_s32_big_endian(self, addr, value, byteswap=False):
         """
@@ -381,6 +413,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_BIG
         self.device.write_long(addr, value, signed=True, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def write_s32_little_endian(self, addr, value, byteswap=False):
         """
@@ -399,6 +432,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_LITTLE
         self.device.write_long(addr, value, signed=True, byteorder=order)
 
+    @apply_serial_settings
     @force()
     def read_string(self, addr, regs_lenght):
         """
@@ -416,7 +450,7 @@ class MinimalModbusAPIWrapper(object):
         ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
         for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
             ret = ret.replace(placeholder, '')  # 'A1B2C3' bytes-only string
-        return str(unhexlify(ret).decode('utf-8')).strip()
+        return str(unhexlify(ret).decode(encoding='utf-8', errors='ignore')).strip()  # TODO: "backslashreplace" when drop py2
 
 
 def auto_find_uart_settings(method_to_decorate):
