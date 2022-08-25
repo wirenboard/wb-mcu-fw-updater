@@ -206,6 +206,8 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
             port_response_timeout = int(port.get('response_timeout_ms', 0)) * 1E-3
             devices_on_port = set()
             for serial_device in port['devices']:
+                if not serial_device.get('enabled', True):
+                    continue;
                 device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
                 device_response_timeout = int(serial_device.get('response_timeout_ms', 0)) * 1E-3
