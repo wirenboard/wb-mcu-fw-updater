@@ -212,7 +212,7 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
                 if device_name.startswith('WBIO-'):
                     logger.debug("Has found WBIO device: %s", device_name)
                     device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
-                devices_on_port.add((device_name, int(slaveid), device_response_timeout))
+                devices_on_port.add((device_name, int(slaveid, 0), device_response_timeout))
             if devices_on_port:
                 found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port, 'response_timeout' : port_response_timeout}})
 
