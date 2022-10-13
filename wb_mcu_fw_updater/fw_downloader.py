@@ -75,8 +75,8 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
     if not fname:
         logger.debug("Trying to get fname from content-disposition")
         default_fname = ret.info().get('Content-Disposition')
-        fname = default_fname.split('filename=')[1].strip('"\'') if default_fname else None
-        logger.debug("Got fname from content-disposition: %s", str(fname))
+        fname = default_fname.split('filename=')[1].strip('"\'') if default_fname else "tmp%s" % CONFIG['FW_EXTENSION']
+        logger.debug("Got fname: %s", str(fname))
     if fname:
         file_path = os.path.join(saving_dir, fname)
         logger.debug("%s => %s", url_path, file_path)
