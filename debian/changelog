@@ -1,3 +1,10 @@
+wb-mcu-fw-updater (1.5.2) stable; urgency=medium
+
+  * update_monitor: support hex in slaveid parsing
+  * fw_downloader: add default fname, if file's content-disposition is empty
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 13 Oct 2022 09:45:39 +0300
+
 wb-mcu-fw-updater (1.5.1) stable; urgency=medium
 
   * wb_modbus.bindings: fix failing on decode error, when reading from modbus regs
