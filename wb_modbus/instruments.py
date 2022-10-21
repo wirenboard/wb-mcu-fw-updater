@@ -1,7 +1,12 @@
+import os
 import sys
 import time
 import termios
-from . import minimalmodbus
+from contextlib import contextmanager
+import six
+import paho.mqtt.client as mosquitto
+from mqttrpc import client as rpcclient
+from . import minimalmodbus, logger
 
 
 class PyserialBackendInstrument(minimalmodbus.Instrument):
@@ -251,3 +256,108 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         ret = super(StopbitsTolerantInstrument, self)._read_from_bus(number_of_bytes_to_read, minimum_silent_period)
         self._set_stopbits_onthefly(self._initial_stopbits)
         return ret
+
+
+class RPCError(minimalmodbus.MasterReportedException):
+    pass
+
+class RPCConnectionError(RPCError):
+    pass
+
+class RPCCommunicationError(RPCError):
+    pass
+
+
+class PySerialMock(object):
+    def __getattr__(self, name):
+        def wrapper(*args, **kwargs):  # TODO: pass serial_port_settings
+            logger.debug("%s -> %s(args: %s; kwargs: %s)", self.__class__.__name__, name, str(args), str(kwargs))
+            return self
+        setattr(self, name, wrapper)
+        return wrapper
+
+
+class SeriaRPCBackendInstrument(minimalmodbus.Instrument):
+    RPC_ERR_STATES = {
+        "JSON_PARSE": -32700,
+        "REQUEST_HANDLING": -32000,
+        "REQUEST_TIMEOUT": -32100
+    }
+
+    def __init__(self, port, slaveaddress, **kwargs):
+        broker_addr = kwargs.get("broker_addr", "127.0.0.1:1883")
+        self.mqtt_host, self.mqtt_port = broker_addr.split(":", maxsplit=1)
+        self.mqtt_port = int(self.mqtt_port)
+        self.mqtt_client_name = "minimalmodbus-rpc-instrument_%d" % os.getpid()
+
+        self.address = slaveaddress
+        self.mode = kwargs.get("mode", minimalmodbus.MODE_RTU)
+        self.precalculate_read_size = True
+        self.debug = kwargs.get("debug", False)
+        self.close_port_after_each_call = False
+        self.serial = PySerialMock()  # respect current .minimalmodbus & .bindings design
+
+        self.port = port
+        self.serial.port = port
+
+    def __repr__(self):
+        """Give string representation of the :class:`.Instrument` object."""
+        template = (
+            "{}.{}<id=0x{:x}, address={}, mode={}, "
+            + "precalculate_read_size={}, "
+            + "debug={}, serial={}>"
+        )
+        return template.format(
+            self.__module__,
+            self.__class__.__name__,
+            id(self),
+            self.address,
+            self.mode,
+            self.precalculate_read_size,
+            self.debug,
+            self.serial,
+        )
+
+    @contextmanager
+    def init_mqtt_client(self):
+        try:
+            client = mosquitto.Mosquitto(self.mqtt_client_name)
+            logger.debug("Connecting: %s:%s", self.mqtt_host, self.mqtt_port)
+            client.connect(self.mqtt_host, self.mqtt_port)
+            client.loop_start()
+            yield client
+        except (TimeoutError, ConnectionRefusedError) as e:
+            six.raise_from(RPCConnectionError, e)
+        finally:
+            client.loop_stop()
+            client.disconnect()
+
+    def _communicate(self, request, number_of_bytes_to_read):
+        minimalmodbus._check_string(request, minlength=1, description="request")
+        minimalmodbus._check_int(number_of_bytes_to_read)
+
+        min_response_timeout = 0.5  # mqtt-serial's validation
+
+        rpc_request = {
+            "response_size": number_of_bytes_to_read,
+            "format": "HEX",
+            "msg": minimalmodbus._hexencode(request),
+            "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1E3),
+            "path": self.serial.port  # TODO: somehow guess rtu or tcp?
+        }
+
+        with self.init_mqtt_client() as mqtt_client:
+            rpc_call_timeout = 10
+            try:
+                rpc_client = rpcclient.TMQTTRPCClient(mqtt_client)
+                mqtt_client.on_message = rpc_client.on_mqtt_message
+                # logger.debug("RPC Client -> %s (%d timeout ms)", rpc_request, rpc_call_timeout)
+                print("RPC Client -> %s (%d timeout ms)" % (str(rpc_request), rpc_call_timeout))
+                response = rpc_client.call("wb-mqtt-serial", "port", "Load", rpc_request, rpc_call_timeout)
+                # logger.debug("RPC Client <- %s", response)
+                print("RPC Client <- %s" % str(response))
+            except rpcclient.MQTTRPCError as e:
+                reraise_err = minimalmodbus.NoResponseError if e.code == self.RPC_ERR_STATES["REQUEST_HANDLING"] else RPCCommunicationError
+                six.raise_from(reraise_err, e)
+            else:
+                return minimalmodbus._hexdecode(response.get("response", ""))
