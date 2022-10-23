@@ -270,15 +270,35 @@ class RPCCommunicationError(RPCError):
 
 
 class PySerialMock(object):
+    """
+    .bindings and .minimalmodbus assume pyserial-like obj under the hood
+    """
+    SERIAL_SETTINGS = {
+        "baudrate": 9600,
+        "parity": "N",
+        "stopbits": 2
+    }
+
     def __getattr__(self, name):
-        def wrapper(*args, **kwargs):  # TODO: pass serial_port_settings
-            logger.debug("%s -> %s(args: %s; kwargs: %s)", self.__class__.__name__, name, str(args), str(kwargs))
+        def wrapper(*args, **kwargs):
+            logger.debug("Calling undefined %s(args: %s; kwargs: %s) on %s",
+                name, str(args), str(kwargs), self.__class__.__name__)
             return self
         setattr(self, name, wrapper)
         return wrapper
 
+    def _reconfigure_port(self):
+        pass
+
+    def apply_settings(self, settings):
+        self.SERIAL_SETTINGS.update(settings)
+
 
 class SerialRPCBackendInstrument(minimalmodbus.Instrument):
+    """
+    Generic minimalmodbus instrument's logic with mqtt-rpc to wb-mqtt-serial as transport
+    (instead of pyserial)
+    """
     __MQTT_CONNECTIONS = {}
 
     DEFAULT_MQTT_HOST = "127.0.0.1"
@@ -361,14 +381,17 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
         minimalmodbus._check_string(request, minlength=1, description="request")
         minimalmodbus._check_int(number_of_bytes_to_read)
 
-        min_response_timeout = 0.5  # mqtt-serial's validation
+        min_response_timeout = 0.5  # hardcoded in wb-mqtt-serial's validation
 
         rpc_request = {
             "response_size": number_of_bytes_to_read,
             "format": "HEX",
             "msg": minimalmodbus._hexencode(request),
             "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1E3),
-            "path": self.serial.port  # TODO: somehow guess rtu or tcp?
+            "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
+            "baud_rate" : self.serial.SERIAL_SETTINGS["baudrate"],
+            "parity" : self.serial.SERIAL_SETTINGS["parity"],
+            "stop_bits" : self.serial.SERIAL_SETTINGS["stopbits"],
         }
 
         with self.get_mqtt_client(self.broker_addr) as mqtt_client:
