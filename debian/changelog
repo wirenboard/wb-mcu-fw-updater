@@ -1,3 +1,10 @@
+wb-mcu-fw-updater (1.6.0) stable; urgency=medium
+
+  * wb_modbus.instruments: introduce instrument with mqtt-rpc to wb-mqtt-serial as a transport
+  (instead of pyserial)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Sun, 23 Oct 2022 21:19:25 +0300
+
 wb-mcu-fw-updater (1.5.2) stable; urgency=medium
 
   * update_monitor: support hex in slaveid parsing
