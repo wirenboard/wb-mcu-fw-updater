@@ -18,7 +18,7 @@ from . import CONFIG, logger
 import wb_modbus  # Params should be set before any wb_modbus usage!
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG['ALLOWED_UNSUCCESSFUL_MODBUS_TRIES']
 wb_modbus.DEBUG = CONFIG['MODBUS_DEBUG']
-from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str
+from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str, instruments
 from . import fw_flasher, fw_downloader, user_log, jsondb, releases
 # isort: on
 
@@ -122,7 +122,7 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True, force=
 
 
 def find_connection_params(slaveid, port, response_timeout):
-    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout, instrument=instruments.SerialRPCBackendInstrument)
     logger.info("Will find serial port settings for (%s : %d; response_timeout: %.2f)...",
                                     port, slaveid, response_timeout)
     try:
@@ -172,7 +172,8 @@ def get_correct_modbus_connection(slaveid, port, response_timeout, known_uart_pa
         searching device's uart settings (if not passed);
         checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
     """
-    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
+    modbus_connection = bindings.WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout,
+        instrument=instruments.SerialRPCBackendInstrument)
 
     if known_uart_params_str:
         modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
@@ -404,14 +405,14 @@ def probe_all_devices(driver_config_fname, minimal_response_timeout):  # TODO: r
         for device_name, device_slaveid, device_response_timeout in devices_on_port:
             actual_response_timeout = max(minimal_response_timeout, port_response_timeout, device_response_timeout)
             logger.info('Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)...', device_name, port, device_slaveid, uart_params, actual_response_timeout)
-            device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params), response_timeout=actual_response_timeout))
+            device_info = DeviceInfo(name=device_name, modbus_connection=bindings.WBModbusDeviceBase(device_slaveid, port, *parse_uart_settings_str(uart_params), response_timeout=actual_response_timeout, instrument=instruments.SerialRPCBackendInstrument))
             try:
                 device_info = DeviceInfo(name=device_name, modbus_connection=get_correct_modbus_connection(device_slaveid, port, actual_response_timeout, uart_params))
             except ForeignDeviceError as e:
                 result['foreign'].append(device_info)
                 continue
             except minimalmodbus.NoResponseError as e:
-                bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port, response_timeout=actual_response_timeout)
+                bootloader_connection = bindings.WBModbusDeviceBase(device_slaveid, port, response_timeout=actual_response_timeout, instrument=instruments.SerialRPCBackendInstrument)
                 if bootloader_connection.is_in_bootloader():
                     result['in_bootloader'].append(DeviceInfo(name=device_name, modbus_connection=bootloader_connection))
                 else:
@@ -525,7 +526,7 @@ def _restore_fw_signature(slaveid, port, response_timeout):
     """
     try:
         logger.debug("Will ask a bootloader for fw_signature")
-        fw_signature = bindings.WBModbusDeviceBase(slaveid, port, instrument=wb_modbus.instruments.StopbitsTolerantInstrument, response_timeout=response_timeout).get_fw_signature()  # latest bootloaders could answer a fw_signature
+        fw_signature = bindings.WBModbusDeviceBase(slaveid, port, instrument=instruments.SerialRPCBackendInstrument, response_timeout=response_timeout).get_fw_signature()  # latest bootloaders could answer a fw_signature
     except minimalmodbus.ModbusException as e:
         logger.debug("Will try to restore fw_signature from db by slaveid: %d and port %s", slaveid, port)
         fw_signature = db.get_fw_signature(slaveid, port)

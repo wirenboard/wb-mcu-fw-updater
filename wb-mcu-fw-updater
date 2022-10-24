@@ -6,7 +6,7 @@ import atexit
 from wb_mcu_fw_updater import fw_downloader, update_monitor, user_log, die, fw_flasher, CONFIG, logger
 from wb_modbus.bindings import WBModbusDeviceBase, TooOldDeviceError
 from wb_modbus.minimalmodbus import ModbusException
-from wb_modbus.instruments import StopbitsTolerantInstrument
+from wb_modbus.instruments import StopbitsTolerantInstrument, SerialRPCBackendInstrument
 from wb_modbus import parse_uart_settings_str
 
 
@@ -21,7 +21,7 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
     check_internet_connection()
 
     device_str = "(%s %d; response_timeout: %.2fs)" % (port, slaveid, response_timeout)
-    modbus_connection = WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout)
+    modbus_connection = WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout, instrument=SerialRPCBackendInstrument)
 
     is_in_bootloader = modbus_connection.is_in_bootloader()  # 9600N2
     if not is_in_bootloader:  # finding uart params
@@ -89,7 +89,7 @@ def recover_fw(args):
     device_str = "%d %s" % (args.slaveid, args.port)
 
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
-        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=StopbitsTolerantInstrument, response_timeout=args.response_timeout)
+        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=SerialRPCBackendInstrument, response_timeout=args.response_timeout)
         if not device.is_in_bootloader():
             die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
 
@@ -153,7 +153,7 @@ def flash_fw_file(args):
     """
     device_str = "%s %d %s (response timeout: %.2f)" % (
                                 args.port, args.slaveid, str(args.conn_settings), args.response_timeout)
-    device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout)
+    device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout, instrument=SerialRPCBackendInstrument)
     if not device.is_in_bootloader():
         logger.debug("Rebooting %s to bootloader", device_str)
         try:
@@ -292,14 +292,14 @@ if __name__ == "__main__":
     user_log.setup_user_logger("wb_mcu_fw_updater", user_loglevel)
     user_log.setup_user_logger("wb_modbus", user_loglevel)
 
-    update_monitor.pause_driver()
-    atexit.register(update_monitor.resume_driver)
+    # update_monitor.pause_driver()
+    # atexit.register(update_monitor.resume_driver)
     atexit.register(update_monitor.db.dump)
 
     update_monitor.fill_release_info()
 
-    if 'port' in vars(args):
-        initial_port_settings = update_monitor.get_port_settings(args.port)
-        atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
+    # if 'port' in vars(args):
+    #     initial_port_settings = update_monitor.get_port_settings(args.port)
+    #     atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
 
     args.func(args)
