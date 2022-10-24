@@ -12,7 +12,7 @@ from wb_modbus import parse_uart_settings_str
 
 MODBUS_INSTRUMENTS = {
     "pyserial" : StopbitsTolerantInstrument,
-    "rpc" : SerialRPCBackendInstrument
+    # "rpc" : SerialRPCBackendInstrument  # is not fully supported in wb-mqtt-serial now
 }
 
 

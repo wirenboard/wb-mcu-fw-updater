@@ -3,6 +3,7 @@ wb-mcu-fw-updater (1.6.0) stable; urgency=medium
   * wb_modbus.instruments: introduce instrument with mqtt-rpc to wb-mqtt-serial as a transport
   (instead of pyserial)
   * add --instrument launchkey (choosing modbus-calls backend; pyserial is default)
+    --instrument=rpc is temporarily disabled (is not supported in wb-mqtt-serial yet)
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Sun, 23 Oct 2022 21:19:25 +0300
 
