@@ -1,1 +1,1 @@
-buildDebArchAll()
+buildDebArchAll defaultWbdevImage: 'contactless/devenv_lp'
