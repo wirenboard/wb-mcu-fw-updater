@@ -10,6 +10,12 @@ from wb_modbus.instruments import StopbitsTolerantInstrument, SerialRPCBackendIn
 from wb_modbus import parse_uart_settings_str
 
 
+MODBUS_INSTRUMENTS = {
+    "pyserial" : StopbitsTolerantInstrument,
+    "rpc" : SerialRPCBackendInstrument
+}
+
+
 def check_internet_connection():
     try:
         fw_downloader.get_request(CONFIG['ROOT_URL'])
@@ -17,11 +23,12 @@ def check_internet_connection():
         die("%s is not accessible. Check Internet connection!" % CONFIG['ROOT_URL'])
 
 
-def _update_alive_device(slaveid, port, mode, response_timeout, branch, version, force, erase_settings):
+def _update_alive_device(slaveid, port, mode, response_timeout, branch, version, force, erase_settings,
+                            instrument=StopbitsTolerantInstrument):
     check_internet_connection()
 
     device_str = "(%s %d; response_timeout: %.2fs)" % (port, slaveid, response_timeout)
-    modbus_connection = WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout, instrument=SerialRPCBackendInstrument)
+    modbus_connection = WBModbusDeviceBase(slaveid, port, response_timeout=response_timeout, instrument=instrument)
 
     is_in_bootloader = modbus_connection.is_in_bootloader()  # 9600N2
     if not is_in_bootloader:  # finding uart params
@@ -36,13 +43,13 @@ def _update_alive_device(slaveid, port, mode, response_timeout, branch, version,
         if is_in_bootloader:
             logger.info("Device %s supposed to be alive, but found in bootloader", device_str)
             logger.debug("Trying to acquire fw-signature...")
-            fw_sig = update_monitor._restore_fw_signature(slaveid, port, response_timeout)
+            fw_sig = update_monitor._restore_fw_signature(slaveid, port, response_timeout, instrument=instrument)
             if fw_sig:
                 downloaded_fw, fw_version = update_monitor._do_download(fw_sig, version, branch, mode,
                     retrieve_latest_vnum=False)  # we don't need any update-check here
                 logger.info("Will flash %s v:%s to bring %s %s alive", mode, fw_version, fw_sig, device_str)
                 update_monitor.direct_flash(downloaded_fw, modbus_connection.slaveid, modbus_connection.port,
-                    response_timeout, erase_all_settings=erase_settings, force=force)
+                    response_timeout, erase_all_settings=erase_settings, force=force, instrument=instrument)
                 if mode == "bootloader":  # we don't know fw's branch/version (only bl's ones)
                     update_monitor.recover_device_iteration(fw_sig, modbus_connection.slaveid,
                         modbus_connection.port, response_timeout, force)
@@ -70,14 +77,15 @@ def update_fw(args):
     # Could install specified fw_version from specified branch.
     version = args.specified_version or "release"
     _update_alive_device(slaveid=args.slaveid, port=args.port, mode='fw', response_timeout=args.response_timeout,
-        branch=args.branch_name, version=version, force=args.force, erase_settings=args.erase_settings)
+        branch=args.branch_name, version=version, force=args.force, erase_settings=args.erase_settings,
+        instrument=args.instrument)
 
 
 def update_bootloader(args):
     # Could install specified bl_version from specified branch.
     version = args.specified_version or "latest"  # no bl-releases.yaml yet
     _update_alive_device(slaveid=args.slaveid, port=args.port, mode='bootloader', response_timeout=args.response_timeout,
-        branch=args.branch_name, version=version, force=args.force, erase_settings=False)
+        branch=args.branch_name, version=version, force=args.force, erase_settings=False, instrument=args.instrument)
 
 
 def recover_fw(args):
@@ -89,22 +97,25 @@ def recover_fw(args):
     device_str = "%d %s" % (args.slaveid, args.port)
 
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
-        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=SerialRPCBackendInstrument, response_timeout=args.response_timeout)
+        device = WBModbusDeviceBase(args.slaveid, args.port, instrument=args.instrument, response_timeout=args.response_timeout)
         if not device.is_in_bootloader():
             die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
 
     try:
         fw_signatures_list = fw_downloader.get_fw_signatures_list()
-        args.known_signature = args.known_signature or update_monitor._restore_fw_signature(args.slaveid, args.port, response_timeout=args.response_timeout)
+        args.known_signature = args.known_signature or update_monitor._restore_fw_signature(args.slaveid, args.port,
+            response_timeout=args.response_timeout, instrument=args.instrument)
 
         if args.known_signature:
-            update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port, in_bl_response_timeout=args.response_timeout)
+            update_monitor.recover_device_iteration(args.known_signature, args.slaveid, args.port,
+                in_bl_response_timeout=args.response_timeout, instrument=args.instrument)
 
         elif update_monitor.ask_user('Try all possible fw_signatures (%s) for (%s); response_timeout: %.2f?' % (', '.join(fw_signatures_list), device_str, args.response_timeout)):
             for fw_sig in fw_signatures_list:
                 logger.info('Trying %s:', fw_sig)
                 try:
-                    update_monitor.recover_device_iteration(fw_sig, args.slaveid, args.port, in_bl_response_timeout=args.response_timeout)
+                    update_monitor.recover_device_iteration(fw_sig, args.slaveid, args.port,
+                        in_bl_response_timeout=args.response_timeout, instrument=args.instrument)
                     break
                 except fw_flasher.FlashingError:
                     continue
@@ -131,7 +142,8 @@ def update_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._update_all(force=args.force, minimal_response_timeout=args.minimal_response_timeout, allow_downgrade=args.allow_downgrade)
+        update_monitor._update_all(force=args.force, minimal_response_timeout=args.minimal_response_timeout,
+            allow_downgrade=args.allow_downgrade, instrument=args.instrument)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -142,7 +154,8 @@ def recover_all(args):
     """
     check_internet_connection()
     try:
-        update_monitor._recover_all(minimal_response_timeout=args.minimal_response_timeout, force=args.force)
+        update_monitor._recover_all(minimal_response_timeout=args.minimal_response_timeout, force=args.force,
+            instrument=args.instrument)
     except update_monitor.ConfigParsingError as e:
         die(e)
 
@@ -153,7 +166,8 @@ def flash_fw_file(args):
     """
     device_str = "%s %d %s (response timeout: %.2f)" % (
                                 args.port, args.slaveid, str(args.conn_settings), args.response_timeout)
-    device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout, instrument=SerialRPCBackendInstrument)
+    device = WBModbusDeviceBase(args.slaveid, args.port, *args.conn_settings, response_timeout=args.response_timeout,
+        instrument=args.instrument)
     if not device.is_in_bootloader():
         logger.debug("Rebooting %s to bootloader", device_str)
         try:
@@ -162,7 +176,8 @@ def flash_fw_file(args):
             die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
 
     try:
-        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.response_timeout, args.erase_all, args.erase_uart)
+        update_monitor.direct_flash(args.fname, args.slaveid, args.port, args.response_timeout, args.erase_all,
+            args.erase_uart, instrument=args.instrument)
         return
     except fw_flasher.NotInBootloaderError as e:
         logger.error("Seems, device (%s) is not in bootloader mode", device_str)
@@ -186,6 +201,9 @@ def add_common_logic_args(parser):
                                 help='Perform force device reflash, even if firmware is latest. (Default: %(default)s)')
     parser.add_argument('--debug', dest='user_loglevel', default=None, action='store_const',
                                 const=10, help='Setting the least loglevel. (Default: %(default)s)')
+    parser.add_argument("--instrument", type=str, dest="instrument", default="pyserial",
+                                metavar="<connection backend>", choices=MODBUS_INSTRUMENTS.keys(),
+                                help="Connection backend for modbus calls. (Default: %(default)s)")
 
 
 def add_modbus_connection_args(parser):
@@ -292,14 +310,18 @@ if __name__ == "__main__":
     user_log.setup_user_logger("wb_mcu_fw_updater", user_loglevel)
     user_log.setup_user_logger("wb_modbus", user_loglevel)
 
-    # update_monitor.pause_driver()
-    # atexit.register(update_monitor.resume_driver)
+    args.instrument = MODBUS_INSTRUMENTS[args.instrument]
+
+    if args.instrument == StopbitsTolerantInstrument:
+        update_monitor.pause_driver()
+        atexit.register(update_monitor.resume_driver)
+
+        if "port" in vars(args):
+            initial_port_settings = update_monitor.get_port_settings(args.port)
+            atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
+
     atexit.register(update_monitor.db.dump)
 
     update_monitor.fill_release_info()
-
-    # if 'port' in vars(args):
-    #     initial_port_settings = update_monitor.get_port_settings(args.port)
-    #     atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
 
     args.func(args)
