@@ -4,13 +4,7 @@ import time
 import termios
 import atexit
 from contextlib import contextmanager
-
-import six
-if six.PY3:
-    import paho.mqtt.client as mosquitto
-else:
-    import mosquitto
-
+import paho.mqtt.client as mosquitto
 from mqttrpc import client as rpcclient
 from . import minimalmodbus, logger
 
@@ -274,7 +268,7 @@ class RPCCommunicationError(RPCError):
     pass
 
 
-class PySerialMock(object):
+class PySerialMock():
     """
     .bindings and .minimalmodbus assume pyserial-like obj under the hood
     """
@@ -382,7 +376,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 self.mqtt_connections.update({hostport_str : client})
                 yield client
             except (rpcclient.TimeoutError, OSError) as e:
-                six.raise_from(RPCConnectionError, e)
+                raise RPCConnectionError from e
             finally:
                 atexit.register(lambda: self.close_mqtt(hostport_str))
 
@@ -413,6 +407,6 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 logger.debug("RPC Client <- %s", response)
             except rpcclient.MQTTRPCError as e:
                 reraise_err = minimalmodbus.NoResponseError if e.code == self.RPC_ERR_STATES["REQUEST_HANDLING"] else RPCCommunicationError
-                six.raise_from(reraise_err, e)
+                raise reraise_err from e
             else:
                 return minimalmodbus._hexdecode(str(response.get("response", "")))
