@@ -369,7 +369,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             yield client
         else:
             try:
-                client = mosquitto.Mosquitto(self.mqtt_client_name)
+                client = mosquitto.Client(self.mqtt_client_name)
                 logger.debug("New mqtt connection: %s", hostport_str)
                 client.connect(*self.parse_mqtt_addr(hostport_str))
                 client.loop_start()
