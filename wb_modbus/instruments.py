@@ -304,7 +304,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
     Generic minimalmodbus instrument's logic with mqtt-rpc to wb-mqtt-serial as transport
     (instead of pyserial)
     """
-    __MQTT_CONNECTIONS = {}
+    _MQTT_CONNECTIONS = {}
 
     DEFAULT_MQTT_HOST = "127.0.0.1"
     DEFAULT_MQTT_PORT_STR = "1883"
@@ -348,24 +348,28 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             self.serial,
         )
 
+    @property
+    def mqtt_connections(self):
+        return type(self)._MQTT_CONNECTIONS
+
     def parse_mqtt_addr(self, hostport_str):
         host, port = hostport_str.split(":", 1)
         return host or self.DEFAULT_MQTT_HOST, int(port or self.DEFAULT_MQTT_PORT_STR, 0)
 
     def close_mqtt(self, hostport_str):
-        client = self.__class__.__MQTT_CONNECTIONS.get(hostport_str)
+        client = self.mqtt_connections.get(hostport_str)
 
         if client:
             client.loop_stop()
             client.disconnect()
-            self.__class__.__MQTT_CONNECTIONS.pop(hostport_str)
+            self.mqtt_connections.pop(hostport_str)
             logger.debug("Mqtt: close %s", hostport_str)
         else:
             logger.warning("Mqtt connection %s not found in active ones!", hostport_str)
 
     @contextmanager
     def get_mqtt_client(self, hostport_str):
-        client = self.__class__.__MQTT_CONNECTIONS.get(hostport_str)
+        client = self.mqtt_connections.get(hostport_str)
 
         if client:
             yield client
@@ -375,7 +379,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 logger.debug("New mqtt connection: %s", hostport_str)
                 client.connect(*self.parse_mqtt_addr(hostport_str))
                 client.loop_start()
-                self.__class__.__MQTT_CONNECTIONS.update({hostport_str : client})
+                self.mqtt_connections.update({hostport_str : client})
                 yield client
             except (rpcclient.TimeoutError, OSError) as e:
                 six.raise_from(RPCConnectionError, e)
