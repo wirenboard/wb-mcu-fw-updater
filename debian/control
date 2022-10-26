@@ -9,7 +9,7 @@ X-Python-Version: >= 3.9.1
 
 Package: python3-wb-mcu-fw-updater
 Architecture: all
-Depends: python3, ${misc:Depends}, python3-serial, python3-yaml, python3-tqdm, python3-six, python3-semantic-version, python3-paho-mqtt, python3-mqttrpc (>= 1.1.2), wb-mqtt-serial (>= 2.69.4)
+Depends: python3, ${misc:Depends}, python3-serial, python3-yaml, python3-tqdm, python3-six, python3-semantic-version, python3-paho-mqtt, python3-mqttrpc (>= 1.1.2), wb-mqtt-serial (>= 2.73.0)
 Description: Wiren Board modbus devices firmware update and modbus bindings python libraries (python 3)
 
 Package: wb-mcu-fw-updater
