@@ -1,7 +1,12 @@
+import os
 import sys
 import time
 import termios
-from . import minimalmodbus
+import atexit
+from contextlib import contextmanager
+import paho.mqtt.client as mosquitto
+from mqttrpc import client as rpcclient
+from . import minimalmodbus, logger
 
 
 class PyserialBackendInstrument(minimalmodbus.Instrument):
@@ -251,3 +256,157 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         ret = super(StopbitsTolerantInstrument, self)._read_from_bus(number_of_bytes_to_read, minimum_silent_period)
         self._set_stopbits_onthefly(self._initial_stopbits)
         return ret
+
+
+class RPCError(minimalmodbus.MasterReportedException):
+    pass
+
+class RPCConnectionError(RPCError):
+    pass
+
+class RPCCommunicationError(RPCError):
+    pass
+
+
+class PySerialMock():
+    """
+    .bindings and .minimalmodbus assume pyserial-like obj under the hood
+    """
+    SERIAL_SETTINGS = {
+        "baudrate": 9600,
+        "parity": "N",
+        "stopbits": 2
+    }
+
+    def __getattr__(self, name):
+        def wrapper(*args, **kwargs):
+            logger.debug("Calling undefined %s(args: %s; kwargs: %s) on %s",
+                name, str(args), str(kwargs), self.__class__.__name__)
+            return self
+        setattr(self, name, wrapper)
+        return wrapper
+
+    def _reconfigure_port(self):
+        pass
+
+    def apply_settings(self, settings):
+        self.SERIAL_SETTINGS.update(settings)
+
+
+class SerialRPCBackendInstrument(minimalmodbus.Instrument):
+    """
+    Generic minimalmodbus instrument's logic with mqtt-rpc to wb-mqtt-serial as transport
+    (instead of pyserial)
+    """
+    _MQTT_CONNECTIONS = {}
+
+    DEFAULT_MQTT_HOST = "127.0.0.1"
+    DEFAULT_MQTT_PORT_STR = "1883"
+    RPC_ERR_STATES = {
+        "JSON_PARSE": -32700,
+        "REQUEST_HANDLING": -32000,
+        "REQUEST_TIMEOUT": -32100
+    }
+
+    def __init__(self, port, slaveaddress, **kwargs):
+        self.broker_addr = kwargs.get("broker_addr", "%s:%s" % (self.DEFAULT_MQTT_HOST, self.DEFAULT_MQTT_PORT_STR))
+        self.mqtt_client_name = "minimalmodbus-rpc-instrument_%s_%d" % (self.broker_addr, os.getpid())
+
+        # required minimalmodbus's internals
+        self.address = slaveaddress
+        self.mode = kwargs.get("mode", minimalmodbus.MODE_RTU)
+        self.precalculate_read_size = True
+        self.debug = kwargs.get("debug", False)
+        self.close_port_after_each_call = False
+        self.port = port
+
+        # respect current .minimalmodbus & .bindings design
+        self.serial = PySerialMock()
+        self.serial.port = port
+
+    def __repr__(self):
+        """Give string representation of the :class:`.Instrument` object."""
+        template = (
+            "{}.{}<id=0x{:x}, address={}, mode={}, "
+            + "precalculate_read_size={}, "
+            + "debug={}, serial={}>"
+        )
+        return template.format(
+            self.__module__,
+            self.__class__.__name__,
+            id(self),
+            self.address,
+            self.mode,
+            self.precalculate_read_size,
+            self.debug,
+            self.serial,
+        )
+
+    @property
+    def mqtt_connections(self):
+        return type(self)._MQTT_CONNECTIONS
+
+    def parse_mqtt_addr(self, hostport_str):
+        host, port = hostport_str.split(":", 1)
+        return host or self.DEFAULT_MQTT_HOST, int(port or self.DEFAULT_MQTT_PORT_STR, 0)
+
+    def close_mqtt(self, hostport_str):
+        client = self.mqtt_connections.get(hostport_str)
+
+        if client:
+            client.loop_stop()
+            client.disconnect()
+            self.mqtt_connections.pop(hostport_str)
+            logger.debug("Mqtt: close %s", hostport_str)
+        else:
+            logger.warning("Mqtt connection %s not found in active ones!", hostport_str)
+
+    @contextmanager
+    def get_mqtt_client(self, hostport_str):
+        client = self.mqtt_connections.get(hostport_str)
+
+        if client:
+            yield client
+        else:
+            try:
+                client = mosquitto.Client(self.mqtt_client_name)
+                logger.debug("New mqtt connection: %s", hostport_str)
+                client.connect(*self.parse_mqtt_addr(hostport_str))
+                client.loop_start()
+                self.mqtt_connections.update({hostport_str : client})
+                yield client
+            except (rpcclient.TimeoutError, OSError) as e:
+                raise RPCConnectionError from e
+            finally:
+                atexit.register(lambda: self.close_mqtt(hostport_str))
+
+    def _communicate(self, request, number_of_bytes_to_read):
+        minimalmodbus._check_string(request, minlength=1, description="request")
+        minimalmodbus._check_int(number_of_bytes_to_read)
+
+        min_response_timeout = 0.5  # hardcoded in wb-mqtt-serial's validation
+
+        rpc_request = {
+            "response_size": number_of_bytes_to_read,
+            "format": "HEX",
+            "msg": minimalmodbus._hexencode(request),
+            "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1E3),
+            "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
+            "baud_rate" : self.serial.SERIAL_SETTINGS["baudrate"],
+            "parity" : self.serial.SERIAL_SETTINGS["parity"],
+            "stop_bits" : self.serial.SERIAL_SETTINGS["stopbits"],
+        }
+
+        with self.get_mqtt_client(self.broker_addr) as mqtt_client:
+            rpc_call_timeout = 10
+            try:
+                rpc_client = rpcclient.TMQTTRPCClient(mqtt_client)
+                mqtt_client.on_message = rpc_client.on_mqtt_message
+                logger.debug("RPC Client -> %s (rpc timeout: %ds)", rpc_request, rpc_call_timeout)
+                response = rpc_client.call("wb-mqtt-serial", "port", "Load", rpc_request, rpc_call_timeout)
+                logger.debug("RPC Client <- %s", response)
+            except rpcclient.MQTTRPCError as e:
+                reraise_err = minimalmodbus.NoResponseError if e.code == self.RPC_ERR_STATES["REQUEST_HANDLING"] else RPCCommunicationError
+                raise reraise_err from e
+            else:
+                return minimalmodbus._hexdecode(str(response.get("response", "")))

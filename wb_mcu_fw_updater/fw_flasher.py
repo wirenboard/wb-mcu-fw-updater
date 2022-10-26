@@ -40,8 +40,10 @@ class ModbusInBlFlasher(object):
 
     MINIMAL_RESPONSE_TIMEOUT = 5.0  # should be relatively huge (for wireless devices)
 
-    def __init__(self, addr, port, response_timeout, bd=9600, parity='N', stopbits=2):
-        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=StopbitsTolerantInstrument, foregoing_noise_cancelling=True)
+    def __init__(self, addr, port, response_timeout, bd=9600, parity='N', stopbits=2,
+        instrument=StopbitsTolerantInstrument):
+        self.instrument = bindings.WBModbusDeviceBase(addr, port, bd, parity, stopbits, instrument=instrument,
+            foregoing_noise_cancelling=True)
         self._actual_response_timeout = max(self.MINIMAL_RESPONSE_TIMEOUT, response_timeout)
         self.instrument.set_response_timeout(self._actual_response_timeout)
 
