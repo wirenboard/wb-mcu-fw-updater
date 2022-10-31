@@ -397,6 +397,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
             "baud_rate" : self.serial.SERIAL_SETTINGS["baudrate"],
             "parity" : self.serial.SERIAL_SETTINGS["parity"],
+            "data_bits" : 8,
             "stop_bits" : self.serial.SERIAL_SETTINGS["stopbits"],
         }
 
