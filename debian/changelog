@@ -1,3 +1,10 @@
+wb-mcu-fw-updater (1.6.2) stable; urgency=medium
+
+  * wb_modbus.SerialRPCBackendInstrument: add required data_bits param to rpc call
+  * recommend wb-mqtt-serial with rpc-support (instead of strict depend on)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 31 Oct 2022 22:21:47 +0300
+
 wb-mcu-fw-updater (1.6.1) stable; urgency=medium
 
   * wb_modbus.StopbitsTolerantInstrument: fix incorrect stopbits setting in WB7
