@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.6.3) stable; urgency=medium
+
+  * add proper multi-arch setting in debian/control
+
+ -- Nikita Maslov <nikita.maslov@wirenboard.ru>  Tue, 15 Nov 2022 16:04:56 +0600
+
 wb-mcu-fw-updater (1.6.2) stable; urgency=medium
 
   * wb_modbus.SerialRPCBackendInstrument: add required data_bits param to rpc call

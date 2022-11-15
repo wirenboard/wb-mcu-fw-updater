@@ -3,17 +3,19 @@ Maintainer: Vladimir Romanov <v.romanov@wirenboard.ru>
 Section: python
 Priority: optional
 XS-Python-Version: >= 3.9.1
-Build-Depends: dh-python, debhelper (>= 10), python3, python3-setuptools
+Build-Depends: dh-python, debhelper (>= 10), python3-all:any, python3-setuptools
 Standards-Version: 3.9.1
 X-Python-Version: >= 3.9.1
 
 Package: python3-wb-mcu-fw-updater
 Architecture: all
-Depends: python3, ${misc:Depends}, python3-serial, python3-yaml, python3-tqdm, python3-six, python3-semantic-version, python3-paho-mqtt, python3-mqttrpc (>= 1.1.2)
+Multi-Arch: foreign
+Depends: ${python3:Depends}, ${misc:Depends}, python3-serial, python3-yaml, python3-tqdm, python3-six, python3-semantic-version, python3-paho-mqtt, python3-mqttrpc (>= 1.1.2)
 Recommends: wb-mqtt-serial (>= 2.73.0)
 Description: Wiren Board modbus devices firmware update and modbus bindings python libraries (python 3)
 
 Package: wb-mcu-fw-updater
 Architecture: all
+Multi-Arch: foreign
 Depends: ${misc:Depends}, python3-wb-mcu-fw-updater (= ${binary:Version}), wb-release-info
 Description: Wiren Board modbus devices firmware update tool (python 3)
