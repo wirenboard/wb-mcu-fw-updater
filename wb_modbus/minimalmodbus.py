@@ -1463,6 +1463,33 @@ class InvalidResponseError(MasterReportedException):
 # ################ #
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def create_payload(
+    functioncode,
+    registeraddress,
+    value,
+    number_of_decimals,
+    number_of_registers,
+    number_of_bits,
+    signed,
+    byteorder,
+    payloadformat,
+):
+    return _create_payload(
+        functioncode,
+        registeraddress,
+        value,
+        number_of_decimals,
+        number_of_registers,
+        number_of_bits,
+        signed,
+        byteorder,
+        payloadformat
+    )
+
+
 def _create_payload(
     functioncode,
     registeraddress,
@@ -1535,6 +1562,35 @@ def _create_payload(
     raise ValueError("Wrong function code: " + str(functioncode))
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def parse_payload(
+    payload,
+    functioncode,
+    registeraddress,
+    value,
+    number_of_decimals,
+    number_of_registers,
+    number_of_bits,
+    signed,
+    byteorder,
+    payloadformat,
+):
+    return _parse_payload(
+        payload,
+        functioncode,
+        registeraddress,
+        value,
+        number_of_decimals,
+        number_of_registers,
+        number_of_bits,
+        signed,
+        byteorder,
+        payloadformat,
+    )
+
+
 def _parse_payload(
     payload,
     functioncode,
@@ -1589,6 +1645,13 @@ def _parse_payload(
             )
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def embed_payload(slaveaddress, mode, functioncode, payloaddata):
+    return _embed_payload(slaveaddress, mode, functioncode, payloaddata)
+
+
 def _embed_payload(slaveaddress, mode, functioncode, payloaddata):
     """Build a request from the slaveaddress, the function code and the payload data.
 
@@ -1637,6 +1700,13 @@ def _embed_payload(slaveaddress, mode, functioncode, payloaddata):
         request = first_part + _calculate_crc_string(first_part)
 
     return request
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def extract_payload(response, slaveaddress, mode, functioncode):
+    return _extract_payload(response, slaveaddress, mode, functioncode)
 
 
 def _extract_payload(response, slaveaddress, mode, functioncode):
@@ -1906,6 +1976,13 @@ def _calculate_minimum_silent_period(baudrate):
 # ########################## #
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def num_to_onebyte_string(inputvalue):
+    return _num_to_onebyte_string(inputvalue)
+
+
 def _num_to_onebyte_string(inputvalue):
     """Convert a numerical value to a one-byte string.
 
@@ -1922,6 +1999,13 @@ def _num_to_onebyte_string(inputvalue):
     _check_int(inputvalue, minvalue=0, maxvalue=0xFF)
 
     return chr(inputvalue)
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def num_to_twobyte_string(value, number_of_decimals=0, lsb_first=False, signed=False):
+    return _num_to_twobyte_string(value, number_of_decimals, lsb_first, signed)
 
 
 def _num_to_twobyte_string(value, number_of_decimals=0, lsb_first=False, signed=False):
@@ -1993,6 +2077,13 @@ def _num_to_twobyte_string(value, number_of_decimals=0, lsb_first=False, signed=
     return outstring
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def twobyte_string_to_num(bytestring, number_of_decimals=0, signed=False):
+    return _twobyte_string_to_num(bytestring, number_of_decimals, signed)
+
+
 def _twobyte_string_to_num(bytestring, number_of_decimals=0, signed=False):
     r"""Convert a two-byte string to a numerical value, possibly scaling it.
 
@@ -2046,6 +2137,15 @@ def _twobyte_string_to_num(bytestring, number_of_decimals=0, signed=False):
     return fullregister / float(divisor)
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def long_to_bytestring(
+    value, signed=False, number_of_registers=2, byteorder=BYTEORDER_BIG
+):
+    return _long_to_bytestring(value, signed, number_of_registers, byteorder)
+
+
 def _long_to_bytestring(
     value, signed=False, number_of_registers=2, byteorder=BYTEORDER_BIG
 ):
@@ -2094,6 +2194,15 @@ def _long_to_bytestring(
     return outstring
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bytestring_to_long(
+    bytestring, signed=False, number_of_registers=2, byteorder=BYTEORDER_BIG
+):
+    return _bytestring_to_long(bytestring, signed, number_of_registers, byteorder)
+
+
 def _bytestring_to_long(
     bytestring, signed=False, number_of_registers=2, byteorder=BYTEORDER_BIG
 ):
@@ -2138,6 +2247,13 @@ def _bytestring_to_long(
         bytestring = _swap(bytestring)
 
     return _unpack(formatcode, bytestring)
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def float_to_bytestring(value, number_of_registers=2, byteorder=BYTEORDER_BIG):
+    return _float_to_bytestring(value, number_of_registers, byteorder)
 
 
 def _float_to_bytestring(value, number_of_registers=2, byteorder=BYTEORDER_BIG):
@@ -2200,6 +2316,13 @@ def _float_to_bytestring(value, number_of_registers=2, byteorder=BYTEORDER_BIG):
     return outstring
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bytestring_to_float(bytestring, number_of_registers=2, byteorder=BYTEORDER_BIG):
+    return _bytestring_to_float(bytestring, number_of_registers, byteorder)
+
+
 def _bytestring_to_float(bytestring, number_of_registers=2, byteorder=BYTEORDER_BIG):
     """Convert a four-byte string to a float.
 
@@ -2257,6 +2380,13 @@ def _bytestring_to_float(bytestring, number_of_registers=2, byteorder=BYTEORDER_
     return _unpack(formatcode, bytestring)
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def textstring_to_bytestring(inputstring, number_of_registers=16):
+    return _textstring_to_bytestring(inputstring, number_of_registers)
+
+
 def _textstring_to_bytestring(inputstring, number_of_registers=16):
     """Convert a text string to a bytestring.
 
@@ -2293,6 +2423,13 @@ def _textstring_to_bytestring(inputstring, number_of_registers=16):
     return bytestring
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bytestring_to_textstring(bytestring, number_of_registers=16):
+    return _bytestring_to_textstring(bytestring, number_of_registers)
+
+
 def _bytestring_to_textstring(bytestring, number_of_registers=16):
     """Convert a bytestring to a text string.
 
@@ -2325,6 +2462,13 @@ def _bytestring_to_textstring(bytestring, number_of_registers=16):
 
     textstring = bytestring
     return textstring
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def valuelist_to_bytestring(valuelist, number_of_registers):
+    return _valuelist_to_bytestring(valuelist, number_of_registers)
 
 
 def _valuelist_to_bytestring(valuelist, number_of_registers):
@@ -2380,6 +2524,13 @@ def _valuelist_to_bytestring(valuelist, number_of_registers):
     return bytestring
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bytestring_to_valuelist(bytestring, number_of_registers):
+    return _bytestring_to_valuelist(bytestring, number_of_registers)
+
+
 def _bytestring_to_valuelist(bytestring, number_of_registers):
     """Convert a bytestring to a list of numerical values.
 
@@ -2422,6 +2573,13 @@ def _now():
     return time.time()
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def pack(formatstring, value):
+    return _pack(formatstring, value)
+
+
 def _pack(formatstring, value):
     """Pack a value into a bytestring.
 
@@ -2458,6 +2616,13 @@ def _pack(formatstring, value):
             result, encoding="latin1"
         )  # Convert types to make it Python3 compatible
     return result
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def unpack(formatstring, packed):
+    return _unpack(formatstring, packed)
 
 
 def _unpack(formatstring, packed):
@@ -2500,6 +2665,13 @@ def _unpack(formatstring, packed):
     return value
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def swap(bytestring):
+    return _swap(bytestring)
+
+
 def _swap(bytestring):
     """Swap characters pairwise in a string.
 
@@ -2524,6 +2696,13 @@ def _swap(bytestring):
         templist[1:length:2],
     )
     return "".join(templist)
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def hexencode(bytestring, insert_spaces=False):
+    return _hexencode(bytestring, insert_spaces)
 
 
 def _hexencode(bytestring, insert_spaces=False):
@@ -2555,6 +2734,13 @@ def _hexencode(bytestring, insert_spaces=False):
     for char in bytestring:
         byte_representions.append("{0:02X}".format(ord(char)))
     return separator.join(byte_representions).strip()
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def hexdecode(hexstring):
+    return _hexdecode(hexstring)
 
 
 def _hexdecode(hexstring):
@@ -2607,6 +2793,13 @@ def _hexdecode(hexstring):
             )
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def hexlify(bytestring):
+    return _hexlify(bytestring)
+
+
 def _hexlify(bytestring):
     """Convert a byte string to a hex encoded string, with spaces for easier reading.
 
@@ -2635,6 +2828,13 @@ def _calculate_number_of_bytes_for_bits(number_of_bits):
     return result
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bit_to_bytestring(value):
+    return _bit_to_bytestring(value)
+
+
 def _bit_to_bytestring(value):
     """Create the bit pattern that is used for writing single bits.
 
@@ -2659,6 +2859,13 @@ def _bit_to_bytestring(value):
         return "\x00\x00"
     else:
         return "\xff\x00"
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bits_to_bytestring(valuelist):
+    return _bits_to_bytestring(valuelist)
 
 
 def _bits_to_bytestring(valuelist):
@@ -2694,6 +2901,13 @@ def _bits_to_bytestring(valuelist):
 
         list_position += _BITS_PER_BYTE
     return outputstring
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def bytestring_to_bits(bytestring, number_of_bits):
+    return _bytestring_to_bits(bytestring, number_of_bits)
 
 
 def _bytestring_to_bits(bytestring, number_of_bits):
@@ -3160,6 +3374,13 @@ Built with this code::
 """
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def calculate_crc_string(inputstring):
+    return _calculate_crc_string(inputstring)
+
+
 def _calculate_crc_string(inputstring):
     """Calculate CRC-16 for Modbus.
 
@@ -3236,6 +3457,13 @@ def _check_mode(mode):
         )
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def check_functioncode(functioncode, list_of_allowed_values=None):
+    return _check_functioncode(functioncode, list_of_allowed_values)
+
+
 def _check_functioncode(functioncode, list_of_allowed_values=None):
     """Check that the given functioncode is in the list_of_allowed_values.
 
@@ -3283,6 +3511,13 @@ def _check_functioncode(functioncode, list_of_allowed_values=None):
         )
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def check_slaveaddress(slaveaddress):
+    return _check_slaveaddress(slaveaddress)
+
+
 def _check_slaveaddress(slaveaddress):
     """Check that the given slaveaddress is valid.
 
@@ -3299,6 +3534,13 @@ def _check_slaveaddress(slaveaddress):
     _check_int(
         slaveaddress, SLAVEADDRESS_MIN, SLAVEADDRESS_MAX, description="slaveaddress"
     )
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def check_registeraddress(registeraddress):
+    return _check_registeraddress(registeraddress)
 
 
 def _check_registeraddress(registeraddress):
@@ -3319,6 +3561,35 @@ def _check_registeraddress(registeraddress):
         REGISTERADDRESS_MIN,
         REGISTERADDRESS_MAX,
         description="registeraddress",
+    )
+
+
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def check_response_payload(
+    payload,
+    functioncode,
+    registeraddress,
+    value,
+    number_of_decimals,
+    number_of_registers,
+    number_of_bits,
+    signed,
+    byteorder,  # Not used. For keeping same signature as _parse_payload()
+    payloadformat,  # Not used. For keeping same signature as _parse_payload()
+):
+    return _check_response_payload(
+        payload,
+        functioncode,
+        registeraddress,
+        value,
+        number_of_decimals,
+        number_of_registers,
+        number_of_bits,
+        signed,
+        byteorder,  # Not used. For keeping same signature as _parse_payload()
+        payloadformat,  # Not used. For keeping same signature as _parse_payload()
     )
 
 
@@ -3378,6 +3649,13 @@ def _check_response_payload(
             )
 
 
+"""
+WB-defined public part of internal minimalmodbus api
+"""
+def check_response_slaveerrorcode(response):
+    return _check_response_slaveerrorcode(response)
+
+
 def _check_response_slaveerrorcode(response):
     """Check if the slave indicates an error.
 
@@ -3429,6 +3707,13 @@ def _check_response_slaveerrorcode(response):
         raise error
 
 
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_response_bytecount(payload):
+    return _check_response_bytecount(payload)
+
+
 def _check_response_bytecount(payload):
     """Check that the number of bytes as given in the response is correct.
 
@@ -3467,6 +3752,13 @@ def _check_response_bytecount(payload):
         raise InvalidResponseError(errortext)
 
 
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_response_registeraddress(payload, registeraddress):
+    return _check_response_registeraddress(payload, registeraddress)
+
+
 def _check_response_registeraddress(payload, registeraddress):
     """Check that the start adress as given in the response is correct.
 
@@ -3498,6 +3790,13 @@ def _check_response_registeraddress(payload, registeraddress):
                 received_startaddress, registeraddress, payload
             )
         )
+
+
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_response_number_of_registers(payload, number_of_registers):
+    return _check_response_number_of_registers(payload, number_of_registers)
 
 
 def _check_response_number_of_registers(payload, number_of_registers):
@@ -3541,6 +3840,13 @@ def _check_response_number_of_registers(payload, number_of_registers):
         )
 
 
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_response_writedata(payload, writedata):
+    return _check_response_writedata(payload, writedata)
+
+
 def _check_response_writedata(payload, writedata):
     """Check that the write data as given in the response is correct.
 
@@ -3571,6 +3877,27 @@ def _check_response_writedata(payload, writedata):
                 received_writedata, writedata, payload
             )
         )
+
+
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_string(
+    inputstring,
+    description,
+    minlength=0,
+    maxlength=None,
+    force_ascii=False,
+    exception_type=ValueError,
+):
+    return _check_string(
+        inputstring,
+        description,
+        minlength,
+        maxlength,
+        force_ascii,
+        exception_type,
+    )
 
 
 def _check_string(
@@ -3667,6 +3994,13 @@ def _check_string(
             )
 
 
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_int(inputvalue, minvalue=None, maxvalue=None, description="inputvalue"):
+    return _check_int(inputvalue, minvalue, maxvalue, description)
+
+
 def _check_int(inputvalue, minvalue=None, maxvalue=None, description="inputvalue"):
     """Check that the given integer is valid.
 
@@ -3704,6 +4038,15 @@ def _check_int(inputvalue, minvalue=None, maxvalue=None, description="inputvalue
         )
 
     _check_numerical(inputvalue, minvalue, maxvalue, description)
+
+
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_numerical(
+    inputvalue, minvalue=None, maxvalue=None, description="inputvalue"
+):
+    return _check_numerical(inputvalue, minvalue, maxvalue, description)
 
 
 def _check_numerical(
@@ -3769,6 +4112,13 @@ def _check_numerical(
                     description, inputvalue, maxvalue
                 )
             )
+
+
+"""
+wb-defined public part of internal minimalmodbus api
+"""
+def check_bool(inputvalue, description="inputvalue"):
+    return _check_bool(inputvalue, description)
 
 
 def _check_bool(inputvalue, description="inputvalue"):

@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.7.0) stable; urgency=medium
+
+  * wb_modbus.minimalmodbus: wrap most of useful internals into public api
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 24 Nov 2022 21:33:34 +0300
+
 wb-mcu-fw-updater (1.6.2) stable; urgency=medium
 
   * wb_modbus.SerialRPCBackendInstrument: add required data_bits param to rpc call
