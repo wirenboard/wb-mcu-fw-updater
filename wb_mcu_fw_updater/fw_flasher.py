@@ -64,7 +64,7 @@ class ModbusInBlFlasher(object):
             else:
                 bytestr = str(raw_bytes, encoding=coding)
             try:
-                return minimalmodbus._bytestring_to_valuelist(bytestr, int(bs / 2))  # u16
+                return minimalmodbus.bytestring_to_valuelist(bytestr, int(bs / 2))  # u16
             except Exception as e:
                 six.raise_from(IncorrectFwError, e)
 

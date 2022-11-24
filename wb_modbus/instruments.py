@@ -27,7 +27,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         """
         slaveid, fcode = rtu_request[0], rtu_request[1]
         err_fcode = ord(fcode) | (1 << minimalmodbus._BITNUMBER_FUNCTIONCODE_ERRORINDICATION)  # error code is fcode with msb bit set
-        err_fcode = minimalmodbus._num_to_onebyte_string(err_fcode)
+        err_fcode = minimalmodbus.num_to_onebyte_string(err_fcode)
         return [slaveid + fcode, slaveid + err_fcode]
 
     def _write_to_bus(self, request):  # pulled out minimalmodbus write func
@@ -384,15 +384,15 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 atexit.register(lambda: self.close_mqtt(hostport_str))
 
     def _communicate(self, request, number_of_bytes_to_read):
-        minimalmodbus._check_string(request, minlength=1, description="request")
-        minimalmodbus._check_int(number_of_bytes_to_read)
+        minimalmodbus.check_string(request, minlength=1, description="request")
+        minimalmodbus.check_int(number_of_bytes_to_read)
 
         min_response_timeout = 0.5  # hardcoded in wb-mqtt-serial's validation
 
         rpc_request = {
             "response_size": number_of_bytes_to_read,
             "format": "HEX",
-            "msg": minimalmodbus._hexencode(request),
+            "msg": minimalmodbus.hexencode(request),
             "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1E3),
             "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
             "baud_rate" : self.serial.SERIAL_SETTINGS["baudrate"],
@@ -413,4 +413,4 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 reraise_err = minimalmodbus.NoResponseError if e.code == self.RPC_ERR_STATES["REQUEST_HANDLING"] else RPCCommunicationError
                 raise reraise_err from e
             else:
-                return minimalmodbus._hexdecode(str(response.get("response", "")))
+                return minimalmodbus.hexdecode(str(response.get("response", "")))

@@ -1,6 +1,7 @@
 wb-mcu-fw-updater (1.7.0) stable; urgency=medium
 
   * wb_modbus.minimalmodbus: wrap most of useful internals into public api
+  * migrate from private minimalmodbus api to a wb-defined public one
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 24 Nov 2022 21:33:34 +0300
 

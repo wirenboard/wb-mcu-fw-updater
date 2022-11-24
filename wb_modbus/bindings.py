@@ -62,7 +62,7 @@ def _debug_info(message):
     :param message: minimalmodbus's debug messages
     :type message: str
     """
-    minimalmodbus._check_string(message, description="string to print")
+    minimalmodbus.check_string(message, description="string to print")
     logger.debug(message)
 
 
@@ -447,7 +447,7 @@ class MinimalModbusAPIWrapper(object):
         :rtype: str
         """
         empty_chars_placeholders = ('00', 'FF', ' ')
-        ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
+        ret = minimalmodbus.hexlify(self.device.read_string(addr, regs_lenght, 3))
         for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
             ret = ret.replace(placeholder, '')  # 'A1B2C3' bytes-only string
         return str(unhexlify(ret).decode(encoding='utf-8', errors='ignore')).strip()  # TODO: "backslashreplace" when drop py2
