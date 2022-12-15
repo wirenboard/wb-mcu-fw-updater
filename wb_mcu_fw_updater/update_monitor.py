@@ -202,20 +202,25 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
         logger.exception("Error in %s", driver_config_fname)
         six.raise_from(ConfigParsingError, e)
 
-    for port in config_dict['ports']:
+    for port in config_dict.get("ports", []):
         if port.get('enabled', False) and port.get('path', False):  # updating devices only on active RS-485 ports
             port_name = port['path']
             uart_params_of_port = [int(port['baud_rate']), port['parity'], int(port['stop_bits'])]
             port_response_timeout = int(port.get('response_timeout_ms', 0)) * 1E-3
             devices_on_port = set()
-            for serial_device in port['devices']:
+            for serial_device in port.get("devices", []):
                 device_name = serial_device.get('device_type', 'Unknown')
                 slaveid = serial_device['slave_id']
                 device_response_timeout = int(serial_device.get('response_timeout_ms', 0)) * 1E-3
                 if device_name.startswith('WBIO-'):
                     logger.debug("Has found WBIO device: %s", device_name)
                     device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
-                devices_on_port.add((device_name, int(slaveid, 0), device_response_timeout))
+                try:
+                    devices_on_port.add((device_name, int(slaveid, 0), device_response_timeout))
+                except ValueError:
+                    logger.warning(
+                        'Device ("%s" %s) on %s seems not to be a WB-one; skipping', device_name, slaveid, port_name
+                        )
             if devices_on_port:
                 found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port, 'response_timeout' : port_response_timeout}})
 
