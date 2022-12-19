@@ -216,11 +216,13 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
                     logger.debug("Has found WBIO device: %s", device_name)
                     device_name, slaveid = 'WB-MIO', slaveid.split(':')[0]  # mio_slaveid:device_order
                 try:
-                    devices_on_port.add((device_name, int(slaveid, 0), device_response_timeout))
+                    parsed_slaveid = int(slaveid, 0)
                 except ValueError:
-                    logger.warning(
+                    logger.info(
                         'Device ("%s" %s) on %s seems not to be a WB-one; skipping', device_name, slaveid, port_name
                         )
+                    continue
+                devices_on_port.add((device_name, parsed_slaveid, device_response_timeout))
             if devices_on_port:
                 found_devices.update({port_name : {'devices' : list(devices_on_port), 'uart_params' : uart_params_of_port, 'response_timeout' : port_response_timeout}})
 
