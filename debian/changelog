@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.5.1-wb100) stable; urgency=medium
+
+  * update_monitor: fix Neva slaveid parsing in serial config
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 27 Dec 2022 23:06:22 +0300
+
 wb-mcu-fw-updater (1.5.1) stable; urgency=medium
 
   * wb_modbus.bindings: fix failing on decode error, when reading from modbus regs
