@@ -1,8 +1,15 @@
-wb-mcu-fw-updater (1.5.1-wb100) stable; urgency=medium
+wb-mcu-fw-updater (1.5.1-wb101) stable; urgency=medium
 
   * update_monitor: fix Neva slaveid parsing in serial config
 
  -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 27 Dec 2022 23:06:22 +0300
+
+wb-mcu-fw-updater (1.5.1-wb100) stable; urgency=medium
+
+  * update_monitor: support hex in slaveid parsing
+  * fw_downloader: add default fname, if file's content-disposition is empty
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 28 Oct 2022 10:11:27 +0300
 
 wb-mcu-fw-updater (1.5.1) stable; urgency=medium
 
