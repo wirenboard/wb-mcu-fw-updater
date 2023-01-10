@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.6.4) stable; urgency=medium
+
+  * update_monitor: add temporary hack to avoid semantic_version fails on urlquoted versions
+
+ -- Aleksandr Kazadaev <aleksandr.kazadaev@wirenboard.com>  Mon, 9 Jan 2023 15:02:22 +0300
+
 wb-mcu-fw-updater (1.6.3) stable; urgency=medium
 
   * update_monitor: fix Neva slaveid parsing in serial config
