@@ -9,8 +9,10 @@ import subprocess
 import six
 import logging
 import semantic_version
+import urllib.parse
 from io import open
 from collections import namedtuple, defaultdict
+
 
 # TODO: rework params setting to get rid of imports-order-magic
 # isort: off
@@ -261,6 +263,10 @@ def direct_flash(fw_fpath, slaveid, port, response_timeout, erase_all_settings=F
 
 
 def is_reflash_necessary(actual_version, provided_version, force_reflash=False, allow_downgrade=False, debug_info=''):
+    # dirty hack to fix urlencoded versions, to be properly resolved later
+    if '%' in provided_version:
+        provided_version = urllib.parse.unquote(provided_version)
+    # end of hack
     actual_version, provided_version = semantic_version.Version(actual_version), semantic_version.Version(provided_version)
     _do_flash = False
 
