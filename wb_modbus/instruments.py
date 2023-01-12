@@ -1,12 +1,14 @@
+import atexit
 import os
 import sys
-import time
 import termios
-import atexit
+import time
 from contextlib import contextmanager
+
 import paho.mqtt.client as mosquitto
 from mqttrpc import client as rpcclient
-from . import minimalmodbus, logger
+
+from . import logger, minimalmodbus
 
 
 class PyserialBackendInstrument(minimalmodbus.Instrument):
@@ -18,7 +20,9 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
     """
 
     def __init__(self, *args, **kwargs):
-        self.foregoing_noise_cancelling = kwargs.pop('foregoing_noise_cancelling', False)  # Some early WB7s have hardware bug, causing additional zero byte on RX after write to port
+        self.foregoing_noise_cancelling = kwargs.pop(
+            "foregoing_noise_cancelling", False
+        )  # Some early WB7s have hardware bug, causing additional zero byte on RX after write to port
         super(PyserialBackendInstrument, self).__init__(*args, **kwargs)
 
     def _get_possible_correct_response_beginnings(self, rtu_request):
@@ -26,7 +30,9 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         We assume, that correct-response-beginning is [slaveid][fcode] or [slaveid][errcode]
         """
         slaveid, fcode = rtu_request[0], rtu_request[1]
-        err_fcode = ord(fcode) | (1 << minimalmodbus._BITNUMBER_FUNCTIONCODE_ERRORINDICATION)  # error code is fcode with msb bit set
+        err_fcode = ord(fcode) | (
+            1 << minimalmodbus._BITNUMBER_FUNCTIONCODE_ERRORINDICATION
+        )  # error code is fcode with msb bit set
         err_fcode = minimalmodbus._num_to_onebyte_string(err_fcode)
         return [slaveid + fcode, slaveid + err_fcode]
 
@@ -47,7 +53,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
         return answer
 
     def _communicate(self, request, number_of_bytes_to_read):
-        """ minimalmodbus's original docstring:
+        """minimalmodbus's original docstring:
 
         Talk to the slave via a serial port.
 
@@ -111,16 +117,12 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
             self.serial.open()
 
         if self.clear_buffers_before_each_transaction:
-            self._print_debug(
-                "Clearing serial buffers for port {}".format(self.serial.port)
-            )
+            self._print_debug("Clearing serial buffers for port {}".format(self.serial.port))
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
 
         if sys.version_info[0] > 2:
-            request = bytes(
-                request, encoding="latin1"
-            )  # Convert types to make it Python3 compatible
+            request = bytes(request, encoding="latin1")  # Convert types to make it Python3 compatible
 
         # Sleep to make sure 3.5 character times have passed
         minimum_silent_period = minimalmodbus._calculate_minimum_silent_period(self.serial.baudrate)
@@ -163,9 +165,7 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
             local_echo_to_discard = self.serial.read(len(request))
             if self.debug:
                 template = "Discarding this local echo: {!r} ({} bytes)."
-                text = template.format(
-                    local_echo_to_discard, len(local_echo_to_discard)
-                )
+                text = template.format(local_echo_to_discard, len(local_echo_to_discard))
                 self._print_debug(text)
             if local_echo_to_discard != request:
                 template = (
@@ -197,7 +197,11 @@ class PyserialBackendInstrument(minimalmodbus.Instrument):
             for bs in possible_response_beginnings:
                 noise, sep, ret = answer.partition(bs)
                 if ret:  # There is something after possible response beginning
-                    self._print_debug("Foregoing noise cancelling:\n\tPlain response: {}\n\tNoise: {}; Answer: {}".format(*map(lambda x: minimalmodbus._hexlify(x), (answer, noise, sep + ret))))
+                    self._print_debug(
+                        "Foregoing noise cancelling:\n\tPlain response: {}\n\tNoise: {}; Answer: {}".format(
+                            *map(lambda x: minimalmodbus._hexlify(x), (answer, noise, sep + ret))
+                        )
+                    )
                     answer = sep + ret
                     break
 
@@ -256,7 +260,9 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         """
         Initial stopbits (to-write) are setting just after data has received
         """
-        ret = super(StopbitsTolerantInstrument, self)._read_from_bus(number_of_bytes_to_read, minimum_silent_period)
+        ret = super(StopbitsTolerantInstrument, self)._read_from_bus(
+            number_of_bytes_to_read, minimum_silent_period
+        )
         self._set_stopbits_onthefly(self._initial_stopbits)
         return ret
 
@@ -264,28 +270,33 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
 class RPCError(minimalmodbus.MasterReportedException):
     pass
 
+
 class RPCConnectionError(RPCError):
     pass
+
 
 class RPCCommunicationError(RPCError):
     pass
 
 
-class PySerialMock():
+class PySerialMock:
     """
     .bindings and .minimalmodbus assume pyserial-like obj under the hood
     """
-    SERIAL_SETTINGS = {
-        "baudrate": 9600,
-        "parity": "N",
-        "stopbits": 2
-    }
+
+    SERIAL_SETTINGS = {"baudrate": 9600, "parity": "N", "stopbits": 2}
 
     def __getattr__(self, name):
         def wrapper(*args, **kwargs):
-            logger.debug("Calling undefined %s(args: %s; kwargs: %s) on %s",
-                name, str(args), str(kwargs), self.__class__.__name__)
+            logger.debug(
+                "Calling undefined %s(args: %s; kwargs: %s) on %s",
+                name,
+                str(args),
+                str(kwargs),
+                self.__class__.__name__,
+            )
             return self
+
         setattr(self, name, wrapper)
         return wrapper
 
@@ -301,18 +312,17 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
     Generic minimalmodbus instrument's logic with mqtt-rpc to wb-mqtt-serial as transport
     (instead of pyserial)
     """
+
     _MQTT_CONNECTIONS = {}
 
     DEFAULT_MQTT_HOST = "127.0.0.1"
     DEFAULT_MQTT_PORT_STR = "1883"
-    RPC_ERR_STATES = {
-        "JSON_PARSE": -32700,
-        "REQUEST_HANDLING": -32000,
-        "REQUEST_TIMEOUT": -32100
-    }
+    RPC_ERR_STATES = {"JSON_PARSE": -32700, "REQUEST_HANDLING": -32000, "REQUEST_TIMEOUT": -32100}
 
     def __init__(self, port, slaveaddress, **kwargs):
-        self.broker_addr = kwargs.get("broker_addr", "%s:%s" % (self.DEFAULT_MQTT_HOST, self.DEFAULT_MQTT_PORT_STR))
+        self.broker_addr = kwargs.get(
+            "broker_addr", "%s:%s" % (self.DEFAULT_MQTT_HOST, self.DEFAULT_MQTT_PORT_STR)
+        )
         self.mqtt_client_name = "minimalmodbus-rpc-instrument_%s_%d" % (self.broker_addr, os.getpid())
 
         # required minimalmodbus's internals
@@ -330,9 +340,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
     def __repr__(self):
         """Give string representation of the :class:`.Instrument` object."""
         template = (
-            "{}.{}<id=0x{:x}, address={}, mode={}, "
-            + "precalculate_read_size={}, "
-            + "debug={}, serial={}>"
+            "{}.{}<id=0x{:x}, address={}, mode={}, " + "precalculate_read_size={}, " + "debug={}, serial={}>"
         )
         return template.format(
             self.__module__,
@@ -376,7 +384,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 logger.debug("New mqtt connection: %s", hostport_str)
                 client.connect(*self.parse_mqtt_addr(hostport_str))
                 client.loop_start()
-                self.mqtt_connections.update({hostport_str : client})
+                self.mqtt_connections.update({hostport_str: client})
                 yield client
             except (rpcclient.TimeoutError, OSError) as e:
                 raise RPCConnectionError from e
@@ -393,12 +401,12 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             "response_size": number_of_bytes_to_read,
             "format": "HEX",
             "msg": minimalmodbus._hexencode(request),
-            "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1E3),
+            "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1e3),
             "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
-            "baud_rate" : self.serial.SERIAL_SETTINGS["baudrate"],
-            "parity" : self.serial.SERIAL_SETTINGS["parity"],
-            "data_bits" : 8,
-            "stop_bits" : self.serial.SERIAL_SETTINGS["stopbits"],
+            "baud_rate": self.serial.SERIAL_SETTINGS["baudrate"],
+            "parity": self.serial.SERIAL_SETTINGS["parity"],
+            "data_bits": 8,
+            "stop_bits": self.serial.SERIAL_SETTINGS["stopbits"],
         }
 
         with self.get_mqtt_client(self.broker_addr) as mqtt_client:
@@ -410,7 +418,11 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 response = rpc_client.call("wb-mqtt-serial", "port", "Load", rpc_request, rpc_call_timeout)
                 logger.debug("RPC Client <- %s", response)
             except rpcclient.MQTTRPCError as e:
-                reraise_err = minimalmodbus.NoResponseError if e.code == self.RPC_ERR_STATES["REQUEST_HANDLING"] else RPCCommunicationError
+                reraise_err = (
+                    minimalmodbus.NoResponseError
+                    if e.code == self.RPC_ERR_STATES["REQUEST_HANDLING"]
+                    else RPCCommunicationError
+                )
                 raise reraise_err from e
             else:
                 return minimalmodbus._hexdecode(str(response.get("response", "")))

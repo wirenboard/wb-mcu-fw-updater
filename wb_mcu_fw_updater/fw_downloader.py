@@ -1,19 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import errno
 import os
 import sys
-import errno
+
 import six
 from six.moves import urllib
+
 from . import CONFIG, logger
 
 
 class WBRemoteStorageError(Exception):
     pass
 
+
 class RemoteFileReadingError(WBRemoteStorageError):
     pass
+
 
 class RemoteFileDownloadingError(WBRemoteStorageError):
     pass
@@ -28,7 +32,7 @@ def get_request(url_path, tries=3):  # TODO: to config?
     :return: responce's content
     :rtype: bytestring
     """
-    logger.debug('GET: %s', url_path)
+    logger.debug("GET: %s", url_path)
     for _ in range(tries):
         try:
             return urllib.request.urlopen(url_path)
@@ -38,7 +42,7 @@ def get_request(url_path, tries=3):  # TODO: to config?
         raise WBRemoteStorageError(url_path)
 
 
-def read_remote_file(url_path, coding='utf-8'):
+def read_remote_file(url_path, coding="utf-8"):
     try:
         ret = get_request(url_path)
         return str(ret.read().decode(coding)).strip()
@@ -46,13 +50,15 @@ def read_remote_file(url_path, coding='utf-8'):
         six.raise_from(RemoteFileReadingError, e)
 
 
-def get_remote_releases_info(remote_fname=urllib.parse.urljoin(CONFIG['ROOT_URL'], CONFIG['FW_RELEASES_FILE_URI'])):
+def get_remote_releases_info(
+    remote_fname=urllib.parse.urljoin(CONFIG["ROOT_URL"], CONFIG["FW_RELEASES_FILE_URI"])
+):
     return read_remote_file(remote_fname)
 
 
 def get_fw_signatures_list():
-    ret = read_remote_file(urllib.parse.urljoin(CONFIG['ROOT_URL'], CONFIG['FW_SIGNATURES_FILE_URI']))
-    return ret.split('\n') if ret else None
+    ret = read_remote_file(urllib.parse.urljoin(CONFIG["ROOT_URL"], CONFIG["FW_SIGNATURES_FILE_URI"]))
+    return ret.split("\n") if ret else None
 
 
 def download_remote_file(url_path, saving_dir=None, fname=None):
@@ -65,7 +71,7 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
     except Exception as e:
         six.raise_from(RemoteFileDownloadingError, e)
 
-    saving_dir = saving_dir or CONFIG['FW_SAVING_DIR']
+    saving_dir = saving_dir or CONFIG["FW_SAVING_DIR"]
     try:
         os.makedirs(saving_dir)  # py2 has not exist_ok param
     except OSError as e:
@@ -74,17 +80,23 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
 
     if not fname:
         logger.debug("Trying to get fname from content-disposition")
-        default_fname = ret.info().get('Content-Disposition')
-        fname = default_fname.split('filename=')[1].strip('"\'') if default_fname else "tmp%s" % CONFIG['FW_EXTENSION']
+        default_fname = ret.info().get("Content-Disposition")
+        fname = (
+            default_fname.split("filename=")[1].strip("\"'")
+            if default_fname
+            else "tmp%s" % CONFIG["FW_EXTENSION"]
+        )
         logger.debug("Got fname: %s", str(fname))
     if fname:
         file_path = os.path.join(saving_dir, fname)
         logger.debug("%s => %s", url_path, file_path)
     else:
-        raise RemoteFileDownloadingError("Could not construct fpath, where to save fw. Fname should be specified!")
+        raise RemoteFileDownloadingError(
+            "Could not construct fpath, where to save fw. Fname should be specified!"
+        )
 
     try:
-        with open(file_path, 'wb+') as fh:
+        with open(file_path, "wb+") as fh:
             fh.write(content)
             return file_path
     except Exception as e:
@@ -95,7 +107,8 @@ class RemoteFileWatcher(object):
     """
     A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
     """
-    def __init__(self, mode='fw', sort_by='by-signature', branch_name=''):
+
+    def __init__(self, mode="fw", sort_by="by-signature", branch_name=""):
         """
         Could download firmware or bootloder files from stable or specified branch.
 
@@ -107,7 +120,7 @@ class RemoteFileWatcher(object):
         :type branch_name: str, optional
         """
         self.mode = mode
-        fw_source = "unstable/%s" % branch_name if branch_name else CONFIG['DEFAULT_SOURCE']
+        fw_source = "unstable/%s" % branch_name if branch_name else CONFIG["DEFAULT_SOURCE"]
         self.parent_url_path = self._join(self.mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
     def _join(self, *args):
@@ -122,11 +135,11 @@ class RemoteFileWatcher(object):
         :return: content of text file, where latest fw version number is stored
         :rtype: str
         """
-        remote_path = self._join(self.parent_url_path % name, CONFIG['LATEST_FW_VERSION_FILE'])
-        url_path = urllib.parse.urljoin(CONFIG['ROOT_URL'], remote_path)
+        remote_path = self._join(self.parent_url_path % name, CONFIG["LATEST_FW_VERSION_FILE"])
+        url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
         return read_remote_file(url_path)
 
-    def download(self, name, version='latest'):
+    def download(self, name, version="latest"):
         """
         Downloading a firmware/bootloader file with specified version to specified fname.
 
@@ -137,10 +150,10 @@ class RemoteFileWatcher(object):
         :return: path of saved file
         :rtype: str (if succeed) or None (if not)
         """
-        fw_ver = '%s%s' % (version, CONFIG['FW_EXTENSION'])
+        fw_ver = "%s%s" % (version, CONFIG["FW_EXTENSION"])
         remote_path = self._join(self.parent_url_path % name, fw_ver)
-        url_path = urllib.parse.urljoin(CONFIG['ROOT_URL'], remote_path)
-        file_saving_dir = os.path.join(CONFIG['FW_SAVING_DIR'], self.mode)
+        url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
+        file_saving_dir = os.path.join(CONFIG["FW_SAVING_DIR"], self.mode)
 
         try:
             return download_remote_file(url_path, file_saving_dir)

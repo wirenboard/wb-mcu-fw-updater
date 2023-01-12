@@ -4,9 +4,21 @@
 import time
 from binascii import unhexlify
 from copy import deepcopy
-from itertools import product
 from functools import wraps
-from . import minimalmodbus, instruments, ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, ALLOWED_PARITIES, ALLOWED_BAUDRATES, ALLOWED_STOPBITS, DEBUG, WBMAP_MARKER, logger
+from itertools import product
+
+from . import (
+    ALLOWED_BAUDRATES,
+    ALLOWED_PARITIES,
+    ALLOWED_STOPBITS,
+    ALLOWED_UNSUCCESSFUL_TRIES,
+    CLOSE_PORT_AFTER_EACH_CALL,
+    DEBUG,
+    WBMAP_MARKER,
+    instruments,
+    logger,
+    minimalmodbus,
+)
 
 
 class TooOldDeviceError(minimalmodbus.ModbusException):
@@ -14,28 +26,34 @@ class TooOldDeviceError(minimalmodbus.ModbusException):
     Some Wiren Board devices do not support in-filed firmware upudate, because they haven't bootloader.
     """
 
+
 class UARTSettingsNotFoundError(Exception):
     pass
+
 
 def apply_serial_settings(f):
     """
     A decorator, applying actual settings to serial port before communication
     """
+
     @wraps(f)
     def wrapper(self, *args, **kwargs):
         self._set_port_settings_raw(self.settings)
         return f(self, *args, **kwargs)
+
     return wrapper
+
 
 def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
     """
     A decorator, applying settings to serial port and handling accidential connection errors on bus.
     """
     errtypes = (minimalmodbus.ModbusException, ValueError)
+
     def real_decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            tries = kwargs.pop('retries', retries)
+            tries = kwargs.pop("retries", retries)
             thrown_exc = None
             f_args = [repr(a) for a in args]
             f_kwargs = ["%s=%s" % (k, repr(v)) for k, v in kwargs.items()]
@@ -47,11 +65,13 @@ def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
                     thrown_exc = e
                     logger.debug("f = %s not succeed (try %d/%d)", f_signature, i + 1, tries)
             else:
-                if thrown_exc: #python3 wants exception to be defined already
+                if thrown_exc:  # python3 wants exception to be defined already
                     raise thrown_exc
                 else:
-                    raise RuntimeError('Decorator has not returned! Something goes wrong!')
+                    raise RuntimeError("Decorator has not returned! Something goes wrong!")
+
         return wrapper
+
     return real_decorator
 
 
@@ -69,15 +89,17 @@ def _debug_info(message):
 def close_all_modbus_ports():
     for serial_instance in minimalmodbus._serialports.values():
         if serial_instance.is_open:
-            logger.debug('Closing serial instance: %s' % str(serial_instance))
+            logger.debug("Closing serial instance: %s" % str(serial_instance))
             serial_instance.close()
         else:
-            logger.debug('Serial instance %s has already closed' % serial_instance)
+            logger.debug("Serial instance %s has already closed" % serial_instance)
 
 
 def _validate_param(param, sequence):
     if param not in sequence:
-        raise RuntimeError('Unsupported param %s! Try one of: %s' % (str(param), ', '.join(map(str, sequence))))
+        raise RuntimeError(
+            "Unsupported param %s! Try one of: %s" % (str(param), ", ".join(map(str, sequence)))
+        )
 
 
 class MinimalModbusAPIWrapper(object):
@@ -86,9 +108,25 @@ class MinimalModbusAPIWrapper(object):
     Allows changing serial connection settings on-the-fly;
     Redirects minimalmodbus's debug messages to logging.
     """
-    def __init__(self, addr, port, baudrate, parity, stopbits, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
+
+    def __init__(
+        self,
+        addr,
+        port,
+        baudrate,
+        parity,
+        stopbits,
+        instrument=instruments.PyserialBackendInstrument,
+        foregoing_noise_cancelling=False,
+    ):
         minimalmodbus._print_out = _debug_info
-        self.device = instrument(port, addr, debug=DEBUG, close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL, foregoing_noise_cancelling=foregoing_noise_cancelling)
+        self.device = instrument(
+            port,
+            addr,
+            debug=DEBUG,
+            close_port_after_each_call=CLOSE_PORT_AFTER_EACH_CALL,
+            foregoing_noise_cancelling=foregoing_noise_cancelling,
+        )
         self.slaveid = addr
         self.port = port
         self.set_port_settings(baudrate, parity, stopbits)
@@ -121,13 +159,11 @@ class MinimalModbusAPIWrapper(object):
         :param stopbits: serial port stopbits
         :type stopbits: int
         """
-        for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
+        for param, allowed_row in zip(
+            [baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]
+        ):
             _validate_param(param, allowed_row)
-        settings = {
-            'baudrate' : int(baudrate),
-            'parity' : parity,
-            'stopbits' : int(stopbits)
-        }
+        settings = {"baudrate": int(baudrate), "parity": parity, "stopbits": int(stopbits)}
         self._set_port_settings_raw(settings)
         logger.debug("Set %s to %s", str(self.settings), self.port)
 
@@ -446,11 +482,13 @@ class MinimalModbusAPIWrapper(object):
         :return: a string with cut trailing null-bytes
         :rtype: str
         """
-        empty_chars_placeholders = ('00', 'FF', ' ')
+        empty_chars_placeholders = ("00", "FF", " ")
         ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
         for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
-            ret = ret.replace(placeholder, '')  # 'A1B2C3' bytes-only string
-        return str(unhexlify(ret).decode(encoding='utf-8', errors='ignore')).strip()  # TODO: "backslashreplace" when drop py2
+            ret = ret.replace(placeholder, "")  # 'A1B2C3' bytes-only string
+        return str(
+            unhexlify(ret).decode(encoding="utf-8", errors="ignore")
+        ).strip()  # TODO: "backslashreplace" when drop py2
 
 
 def auto_find_uart_settings(method_to_decorate):
@@ -461,6 +499,7 @@ def auto_find_uart_settings(method_to_decorate):
     :param method_to_decorate: a method, containing any operation with minimalmodbus's instrument
     :type method_to_decorate: func
     """
+
     @wraps(method_to_decorate)
     def wrapper(self, *args, **kwargs):
         allowed_parities = ALLOWED_PARITIES.keys()
@@ -469,9 +508,12 @@ def auto_find_uart_settings(method_to_decorate):
                 return method_to_decorate(self, *args, **kwargs)
             except IOError:
                 self.set_port_settings(*settings)
-                logger.debug('Trying serial port settings: %s' % str(settings))
+                logger.debug("Trying serial port settings: %s" % str(settings))
         else:
-            raise UARTSettingsNotFoundError('All serial port settings were not successful! Check device slaveid/power!')
+            raise UARTSettingsNotFoundError(
+                "All serial port settings were not successful! Check device slaveid/power!"
+            )
+
     return wrapper
 
 
@@ -479,20 +521,21 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     """
     Common modbus bindings for all WirenBoard devices.
     """
+
     COMMON_REGS_MAP = {
-        'uptime' : 104,
-        'baudrate' : 110,
-        'parity' : 111,
-        'stopbits' : 112,
-        'reboot' : 120,
-        'v_in' : 121,
-        'slaveid' : 128,
-        'reboot_to_bootloader' : 129,
-        'device_signature' : 200,
-        'fw_signature' : 290,
-        'fw_version' : 250,
-        'serial_number' : 270,
-        'bootloader_version' : 330
+        "uptime": 104,
+        "baudrate": 110,
+        "parity": 111,
+        "stopbits": 112,
+        "reboot": 120,
+        "v_in": 121,
+        "slaveid": 128,
+        "reboot_to_bootloader": 129,
+        "device_signature": 200,
+        "fw_signature": 290,
+        "fw_version": 250,
+        "serial_number": 270,
+        "bootloader_version": 330,
     }
 
     FIRMWARE_VERSION_LENGTH = 16  # 250-265 u16 regs
@@ -502,8 +545,26 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT = 1.0  # Bl needs some time to perform info-block magic
 
-    def __init__(self, addr, port, baudrate=9600, parity='N', stopbits=2, response_timeout=0.2, instrument=instruments.PyserialBackendInstrument, foregoing_noise_cancelling=False):
-        super(WBModbusDeviceBase, self).__init__(addr=addr, port=port, baudrate=baudrate, parity=parity, stopbits=stopbits, instrument=instrument, foregoing_noise_cancelling=foregoing_noise_cancelling)
+    def __init__(
+        self,
+        addr,
+        port,
+        baudrate=9600,
+        parity="N",
+        stopbits=2,
+        response_timeout=0.2,
+        instrument=instruments.PyserialBackendInstrument,
+        foregoing_noise_cancelling=False,
+    ):
+        super(WBModbusDeviceBase, self).__init__(
+            addr=addr,
+            port=port,
+            baudrate=baudrate,
+            parity=parity,
+            stopbits=stopbits,
+            instrument=instrument,
+            foregoing_noise_cancelling=foregoing_noise_cancelling,
+        )
         self.set_response_timeout(response_timeout)
         self.instrument = instrument
 
@@ -532,11 +593,13 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                 self._set_port_settings_raw(initial_uart_settings)
                 return actual_uart_settings
             except IOError:
-                logger.debug('Trying serial port settings: %s' % str(settings))
+                logger.debug("Trying serial port settings: %s" % str(settings))
                 self.set_port_settings(*settings)
                 continue
         else:
-            raise UARTSettingsNotFoundError('All serial port settings were not successful! Check device slaveid/power!')
+            raise UARTSettingsNotFoundError(
+                "All serial port settings were not successful! Check device slaveid/power!"
+            )
 
     def get_serial_number(self):
         """
@@ -547,20 +610,20 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         device_signature = str(self.get_device_signature())
         if WBMAP_MARKER.match(device_signature):
-            logger.debug('Will calculate SN as WB-MAP*')
+            logger.debug("Will calculate SN as WB-MAP*")
             return self._get_serial_number_map()
         else:
-            return self.read_u32_big_endian(self.COMMON_REGS_MAP['serial_number'])
+            return self.read_u32_big_endian(self.COMMON_REGS_MAP["serial_number"])
 
     def _get_serial_number_map(self):
-        int_values = self.read_u16_inputs(self.COMMON_REGS_MAP['serial_number'], 2)
-        return int_values[0]*65536  + int_values[1] - 0xFE000000
+        int_values = self.read_u16_inputs(self.COMMON_REGS_MAP["serial_number"], 2)
+        return int_values[0] * 65536 + int_values[1] - 0xFE000000
 
     def get_fw_version(self):
-        return self.read_string(self.COMMON_REGS_MAP['fw_version'], self.FIRMWARE_VERSION_LENGTH)
+        return self.read_string(self.COMMON_REGS_MAP["fw_version"], self.FIRMWARE_VERSION_LENGTH)
 
     def get_slave_addr(self):
-        return self.read_u16(self.COMMON_REGS_MAP['slaveid'])
+        return self.read_u16(self.COMMON_REGS_MAP["slaveid"])
 
     def set_slave_addr(self, addr):
         """
@@ -574,15 +637,23 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :type addr: int
         """
         to_write = int(addr)
-        reg = self.COMMON_REGS_MAP['slaveid']
+        reg = self.COMMON_REGS_MAP["slaveid"]
         try:
             self.write_u16(reg, to_write)
         except minimalmodbus.ModbusException:
             pass
-        baudrate, parity, stopbits = self.settings['baudrate'], self.settings['parity'], self.settings['stopbits']
-        checking_device = MinimalModbusAPIWrapper(to_write, self.port, baudrate, parity, stopbits, self.instrument)
-        checking_device.read_u16(self.COMMON_REGS_MAP['slaveid']) #Raises minimalmodbus.ModbusException, if <to_write> was not written
-        self.device = checking_device.device #Updating current instrument
+        baudrate, parity, stopbits = (
+            self.settings["baudrate"],
+            self.settings["parity"],
+            self.settings["stopbits"],
+        )
+        checking_device = MinimalModbusAPIWrapper(
+            to_write, self.port, baudrate, parity, stopbits, self.instrument
+        )
+        checking_device.read_u16(
+            self.COMMON_REGS_MAP["slaveid"]
+        )  # Raises minimalmodbus.ModbusException, if <to_write> was not written
+        self.device = checking_device.device  # Updating current instrument
         self.slaveid = to_write
 
     def set_baudrate(self, bd):
@@ -594,10 +665,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         _validate_param(bd, ALLOWED_BAUDRATES)
         to_write = int(bd / 100)
-        self.write_u16(self.COMMON_REGS_MAP['baudrate'], to_write)
-        serial_settings = {
-            'baudrate' : bd
-        }
+        self.write_u16(self.COMMON_REGS_MAP["baudrate"], to_write)
+        serial_settings = {"baudrate": bd}
         self._set_port_settings_raw(serial_settings)
 
     def set_parity(self, parity):
@@ -609,10 +678,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         _validate_param(parity, ALLOWED_PARITIES)
         to_write = ALLOWED_PARITIES[parity]
-        self.write_u16(self.COMMON_REGS_MAP['parity'], to_write)
-        serial_settings = {
-            'parity' : parity
-        }
+        self.write_u16(self.COMMON_REGS_MAP["parity"], to_write)
+        serial_settings = {"parity": parity}
         self._set_port_settings_raw(serial_settings)
 
     def set_stopbits(self, stopbits):
@@ -623,10 +690,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :type stopbits: int
         """
         _validate_param(stopbits, ALLOWED_STOPBITS)
-        self.write_u16(self.COMMON_REGS_MAP['stopbits'], stopbits)
-        serial_settings = {
-            'stopbits' : stopbits
-        }
+        self.write_u16(self.COMMON_REGS_MAP["stopbits"], stopbits)
+        serial_settings = {"stopbits": stopbits}
         self._set_port_settings_raw(serial_settings)
 
     def get_device_signature(self):
@@ -636,7 +701,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: device signature string
         :rtype: str
         """
-        return self.read_string(self.COMMON_REGS_MAP['device_signature'], self.DEVICE_SIGNATURE_LENGTH)
+        return self.read_string(self.COMMON_REGS_MAP["device_signature"], self.DEVICE_SIGNATURE_LENGTH)
 
     def get_fw_signature(self):
         """
@@ -646,13 +711,15 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :rtype: str
         """
         try:
-            return self.read_string(self.COMMON_REGS_MAP['fw_signature'], self.FIRMWARE_SIGNATURE_LENGTH)
+            return self.read_string(self.COMMON_REGS_MAP["fw_signature"], self.FIRMWARE_SIGNATURE_LENGTH)
         except minimalmodbus.IllegalRequestError:
             raise TooOldDeviceError("Device is too old and haven't fw_signature in regs!")
 
     def get_bootloader_version(self):
         try:
-            return self.read_string(self.COMMON_REGS_MAP['bootloader_version'], self.BOOTLOADER_VERSION_LENGTH - 1)  # The last char is STM type
+            return self.read_string(
+                self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH - 1
+            )  # The last char is STM type
         except minimalmodbus.IllegalRequestError:
             raise TooOldDeviceError("Device is too old and haven't bootloader version in regs!")
 
@@ -663,7 +730,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: uptime seconds
         :rtype: int
         """
-        reg = self.COMMON_REGS_MAP['uptime']
+        reg = self.COMMON_REGS_MAP["uptime"]
         return self.read_u32_big_endian(reg)
 
     def get_v_in(self):
@@ -673,8 +740,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: voltage (V)
         :rtype: float
         """
-        multiplier = 1E-3 #value is stored in mV
-        ret = self.read_u16(self.COMMON_REGS_MAP['v_in'])
+        multiplier = 1e-3  # value is stored in mV
+        ret = self.read_u16(self.COMMON_REGS_MAP["v_in"])
         return ret * multiplier
 
     def soft_reboot(self, bootloader_timeout=3):
@@ -688,13 +755,13 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         to_write = 1
         uptime_before = self.get_uptime()
         try:
-            self.device.write_register(self.COMMON_REGS_MAP['reboot'], to_write, 0, 6, False)
+            self.device.write_register(self.COMMON_REGS_MAP["reboot"], to_write, 0, 6, False)
         except minimalmodbus.ModbusException:
-            pass #Device has rebooted and doesn't send responce (Fixed in latest FWs)
+            pass  # Device has rebooted and doesn't send responce (Fixed in latest FWs)
         time.sleep(bootloader_timeout)
         uptime_after = self.get_uptime()
         if uptime_after > uptime_before:
-            raise RuntimeError('Device has not rebooted!')
+            raise RuntimeError("Device has not rebooted!")
 
     def reboot_to_bootloader(self):
         """
@@ -702,18 +769,18 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
         :raises RuntimeError: device has not stuck in bootloader
         """
-        self.get_slave_addr() #To ensure, device has connection
+        self.get_slave_addr()  # To ensure, device has connection
         try:
-            self.write_u16(self.COMMON_REGS_MAP['reboot_to_bootloader'], 1)
+            self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
         except minimalmodbus.ModbusException:
-            pass #Device has rebooted and doesn't send responce (Fixed in latest FWs)
+            pass  # Device has rebooted and doesn't send responce (Fixed in latest FWs)
         finally:
-            time.sleep(0.5) #Delay before going to bootloader
+            time.sleep(0.5)  # Delay before going to bootloader
         try:
             self.get_slave_addr()
-            raise TooOldDeviceError('Device has not rebooted to bootloader!')
+            raise TooOldDeviceError("Device has not rebooted to bootloader!")
         except minimalmodbus.ModbusException:
-            pass #Device is in bootloader mode and doesn't responce
+            pass  # Device is in bootloader mode and doesn't responce
 
     def _has_bootloader_answered(self, baudrate=9600):
         """
@@ -728,8 +795,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         initial_port_settings = deepcopy(self.settings)
         initial_response_timeout = self.device.serial.timeout
 
-        bootloader_uart_params = [baudrate, 'N', 2]
-        logger.debug('Setting params %s to port %s' % ('-'.join(map(str, bootloader_uart_params)), self.port))
+        bootloader_uart_params = [baudrate, "N", 2]
+        logger.debug("Setting params %s to port %s" % ("-".join(map(str, bootloader_uart_params)), self.port))
         self.set_port_settings(*bootloader_uart_params)
         self.set_response_timeout(initial_response_timeout + self.BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT)
 
@@ -740,7 +807,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.ModbusException:
             return False
         finally:
-            logger.debug('Setting params to port %s back' % self.port)
+            logger.debug("Setting params to port %s back" % self.port)
             self._set_port_settings_raw(initial_port_settings)
             self.set_response_timeout(initial_response_timeout)
 
@@ -764,7 +831,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         bd, parity and stopbits regs are mapped consistently (110, 111, 112)
         Writing all settings per one message
         """
-        self.device.write_registers(self.COMMON_REGS_MAP['baudrate'], [int(baudrate / 100), parity, stopbits])
+        self.device.write_registers(self.COMMON_REGS_MAP["baudrate"], [int(baudrate / 100), parity, stopbits])
 
     def write_uart_settings(self, baudrate, parity, stopbits):
         """
@@ -777,12 +844,10 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :param stopbits: serial port stopbits
         :type stopbits: int
         """
-        for param, allowed_row in zip([baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]):
+        for param, allowed_row in zip(
+            [baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]
+        ):
             _validate_param(param, allowed_row)
         self._write_port_settings(baudrate, ALLOWED_PARITIES[parity], stopbits)
-        new_port_settings = {
-            'baudrate' : baudrate,
-            'parity' : parity,
-            'stopbits' : stopbits
-        }
+        new_port_settings = {"baudrate": baudrate, "parity": parity, "stopbits": stopbits}
         self._set_port_settings_raw(new_port_settings)
