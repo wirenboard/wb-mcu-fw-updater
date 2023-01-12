@@ -1,34 +1,35 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-import os
 import logging
+import os
+import sys
+
 from . import CONFIG
 
-
 ANSI_COLORS = {
-    "GREY" : "\x1b[38;2m",
-    "GREEN" : "\x1b[32;10m",
-    "YELLOW" : "\x1b[33;10m",
-    "RED" : "\x1b[31;10m",
-    "RED_BOLD" : "\x1b[31;1m",
-    "RESET" : "\x1b[0m"
+    "GREY": "\x1b[38;2m",
+    "GREEN": "\x1b[32;10m",
+    "YELLOW": "\x1b[33;10m",
+    "RED": "\x1b[31;10m",
+    "RED_BOLD": "\x1b[31;1m",
+    "RESET": "\x1b[0m",
 }
 
 
 def colorize(msg, color):
     if not isinstance(msg, str):
-        raise RuntimeError('Only string could be colored!')
+        raise RuntimeError("Only string could be colored!")
     if color not in ANSI_COLORS.keys():
-        raise RuntimeError('Unsupported color %s. Try one of %s' % (color, ', '.join(ANSI_COLORS.keys())))
-    return ANSI_COLORS[color] + msg + ANSI_COLORS['RESET']
+        raise RuntimeError("Unsupported color %s. Try one of %s" % (color, ", ".join(ANSI_COLORS.keys())))
+    return ANSI_COLORS[color] + msg + ANSI_COLORS["RESET"]
 
 
 class HidingTracebackFilter(logging.Filter):
     """
     A dummy filter, hiding record's exception traceback, if was not hidden already.
     """
+
     def __init__(self, hide_tb=False):
         self.hide_tb = hide_tb
 
@@ -64,13 +65,13 @@ class ColoredFormatter(logging.Formatter):
     RED_BOLD = "\x1b[31;1m"
     RESET_COLORS = "\x1b[0m"
 
-    FMT = CONFIG['USERLOG_MESSAGE_FMT']
+    FMT = CONFIG["USERLOG_MESSAGE_FMT"]
 
     FORMATS = {
-        logging.DEBUG : colorize(FMT, 'GREY'),
-        logging.WARNING : colorize(FMT, 'YELLOW'),
-        logging.ERROR : colorize(FMT, 'RED'),
-        logging.CRITICAL : colorize(FMT, 'RED_BOLD')
+        logging.DEBUG: colorize(FMT, "GREY"),
+        logging.WARNING: colorize(FMT, "YELLOW"),
+        logging.ERROR: colorize(FMT, "RED"),
+        logging.CRITICAL: colorize(FMT, "RED_BOLD"),
     }
 
     def format(self, record):
@@ -116,9 +117,15 @@ def setup_syslog_logger(name):
     Writing logging messages to syslog socket.
     Default syslog socket is platform-dependent and could be absent in some development environments.
     """
-    _default_syslog_sock = '/var/run/syslog' if 'darwin' in sys.platform else '/dev/log'  # For all linux systems
+    _default_syslog_sock = (
+        "/var/run/syslog" if "darwin" in sys.platform else "/dev/log"
+    )  # For all linux systems
     if os.path.exists(_default_syslog_sock):
-        syslog_handler = logging.handlers.SysLogHandler(address=_default_syslog_sock, facility='user')
-        syslog_handler.setFormatter(logging.Formatter(fmt=CONFIG['SYSLOG_MESSAGE_FMT'], datefmt=CONFIG['LOG_DATETIME_FMT']))
-        syslog_handler.setLevel(CONFIG['SYSLOG_LOGLEVEL'])
-        logging.getLogger(name).handlers.insert(0, syslog_handler)  # Each message should be formatted by syslog's handler at first
+        syslog_handler = logging.handlers.SysLogHandler(address=_default_syslog_sock, facility="user")
+        syslog_handler.setFormatter(
+            logging.Formatter(fmt=CONFIG["SYSLOG_MESSAGE_FMT"], datefmt=CONFIG["LOG_DATETIME_FMT"])
+        )
+        syslog_handler.setLevel(CONFIG["SYSLOG_LOGLEVEL"])
+        logging.getLogger(name).handlers.insert(
+            0, syslog_handler
+        )  # Each message should be formatted by syslog's handler at first

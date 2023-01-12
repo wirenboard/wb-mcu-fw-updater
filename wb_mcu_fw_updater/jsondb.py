@@ -1,5 +1,6 @@
 import json
 import os
+
 from . import CONFIG, logger
 
 
@@ -9,10 +10,11 @@ class FixedLengthList(list):
 
     A JsonDB's default inner container.
     """
-    MAXLEN = CONFIG['MAX_DB_RECORDS']
+
+    MAXLEN = CONFIG["MAX_DB_RECORDS"]
 
     def __init__(self, *args, **kwargs):
-        super(FixedLengthList,self).__init__(*args, **kwargs)
+        super(FixedLengthList, self).__init__(*args, **kwargs)
         self._keep_length()
 
     def _keep_length(self):
@@ -36,9 +38,10 @@ class JsonDB(object):
     """
     Storing information about device's fw_signature.
     """
-    _SLAVEID = 'slaveid'
-    _PORT = 'port'
-    _FW_SIGNATURE = 'fw_signature'
+
+    _SLAVEID = "slaveid"
+    _PORT = "port"
+    _FW_SIGNATURE = "fw_signature"
 
     def __init__(self, db_fname):
         self.db_fname = os.path.expanduser(db_fname)
@@ -46,10 +49,10 @@ class JsonDB(object):
 
     def load(self, db_fname):
         if os.path.exists(db_fname):
-            logger.debug('Loading db from file: %s', db_fname)
-            self.container = FixedLengthList(json.load(open(db_fname, 'r')))
+            logger.debug("Loading db from file: %s", db_fname)
+            self.container = FixedLengthList(json.load(open(db_fname, "r")))
         else:
-            logger.debug('File %s not found! Initiallizing empty db', db_fname)
+            logger.debug("File %s not found! Initiallizing empty db", db_fname)
             self.container = FixedLengthList()
 
     def dump(self):
@@ -70,12 +73,8 @@ class JsonDB(object):
         existing_device_index = self._find(slaveid, port, sequence=self.container)
         if existing_device_index is not None:  # Could be zero
             removed_device = self.container.pop(existing_device_index)
-            logger.debug('Removing device: %s', str(removed_device))
-        device = {
-            self._SLAVEID : slaveid,
-            self._PORT : port,
-            self._FW_SIGNATURE : fw_signature
-        }
+            logger.debug("Removing device: %s", str(removed_device))
+        device = {self._SLAVEID: slaveid, self._PORT: port, self._FW_SIGNATURE: fw_signature}
         self.container.append(device)
 
     def get_fw_signature(self, slaveid, port):
