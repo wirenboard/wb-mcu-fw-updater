@@ -5,6 +5,7 @@ import os
 
 import six
 from tqdm import tqdm
+
 from wb_modbus import bindings, minimalmodbus
 from wb_modbus.instruments import StopbitsTolerantInstrument
 
