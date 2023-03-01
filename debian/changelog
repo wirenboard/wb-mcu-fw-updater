@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.7.0) stable; urgency=medium
+
+  * Support connection to Mosquitto through unix socket
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Tue, 28 Feb 2023 16:44:00 +0400
+
 wb-mcu-fw-updater (1.6.6) stable; urgency=medium
 
   * Fix formatting

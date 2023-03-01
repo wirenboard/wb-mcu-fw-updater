@@ -1,12 +1,11 @@
 import atexit
-import os
 import sys
 import termios
 import time
 from contextlib import contextmanager
 
-import paho.mqtt.client as mosquitto
 from mqttrpc import client as rpcclient
+from wb_common.mqtt_client import DEFAULT_BROKER_URL, MQTTClient
 
 from . import logger, minimalmodbus
 
@@ -315,15 +314,11 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
 
     _MQTT_CONNECTIONS = {}
 
-    DEFAULT_MQTT_HOST = "127.0.0.1"
-    DEFAULT_MQTT_PORT_STR = "1883"
     RPC_ERR_STATES = {"JSON_PARSE": -32700, "REQUEST_HANDLING": -32000, "REQUEST_TIMEOUT": -32100}
 
     def __init__(self, port, slaveaddress, **kwargs):
-        self.broker_addr = kwargs.get(
-            "broker_addr", "%s:%s" % (self.DEFAULT_MQTT_HOST, self.DEFAULT_MQTT_PORT_STR)
-        )
-        self.mqtt_client_name = "minimalmodbus-rpc-instrument_%s_%d" % (self.broker_addr, os.getpid())
+        self.broker_url = kwargs.get("broker", DEFAULT_BROKER_URL)
+        self.mqtt_client_name = "minimalmodbus-rpc-instrument"
 
         # required minimalmodbus's internals
         self.address = slaveaddress
@@ -357,39 +352,33 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
     def mqtt_connections(self):
         return type(self)._MQTT_CONNECTIONS
 
-    def parse_mqtt_addr(self, hostport_str):
-        host, port = hostport_str.split(":", 1)
-        return host or self.DEFAULT_MQTT_HOST, int(port or self.DEFAULT_MQTT_PORT_STR, 0)
-
-    def close_mqtt(self, hostport_str):
-        client = self.mqtt_connections.get(hostport_str)
+    def close_mqtt(self, broker_url):
+        client = self.mqtt_connections.get(broker_url)
 
         if client:
-            client.loop_stop()
             client.disconnect()
-            self.mqtt_connections.pop(hostport_str)
-            logger.debug("Mqtt: close %s", hostport_str)
+            self.mqtt_connections.pop(broker_url)
+            logger.debug("Mqtt: close %s", broker_url)
         else:
-            logger.warning("Mqtt connection %s not found in active ones!", hostport_str)
+            logger.warning("Mqtt connection %s not found in active ones!", broker_url)
 
     @contextmanager
-    def get_mqtt_client(self, hostport_str):
-        client = self.mqtt_connections.get(hostport_str)
+    def get_mqtt_client(self, broker_url):
+        client = self.mqtt_connections.get(broker_url)
 
         if client:
             yield client
         else:
             try:
-                client = mosquitto.Client(self.mqtt_client_name)
-                logger.debug("New mqtt connection: %s", hostport_str)
-                client.connect(*self.parse_mqtt_addr(hostport_str))
-                client.loop_start()
-                self.mqtt_connections.update({hostport_str: client})
+                client = MQTTClient(self.mqtt_client_name, broker_url)
+                logger.debug("New mqtt connection: %s", broker_url)
+                client.connect()
+                self.mqtt_connections.update({broker_url: client})
                 yield client
             except (rpcclient.TimeoutError, OSError) as e:
                 raise RPCConnectionError from e
             finally:
-                atexit.register(lambda: self.close_mqtt(hostport_str))
+                atexit.register(lambda: self.close_mqtt(broker_url))
 
     def _communicate(self, request, number_of_bytes_to_read):
         minimalmodbus._check_string(request, minlength=1, description="request")
@@ -409,7 +398,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             "stop_bits": self.serial.SERIAL_SETTINGS["stopbits"],
         }
 
-        with self.get_mqtt_client(self.broker_addr) as mqtt_client:
+        with self.get_mqtt_client(self.broker_url) as mqtt_client:
             rpc_call_timeout = 10
             try:
                 rpc_client = rpcclient.TMQTTRPCClient(mqtt_client)
