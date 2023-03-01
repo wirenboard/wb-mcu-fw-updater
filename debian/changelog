@@ -1,6 +1,7 @@
 wb-mcu-fw-updater (1.7.0) stable; urgency=medium
 
   * Support connection to Mosquitto through unix socket
+  * Use mqtt client wrapper from wb-common
 
  -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Tue, 28 Feb 2023 16:44:00 +0400
 
