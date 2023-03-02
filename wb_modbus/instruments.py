@@ -356,7 +356,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
         client = self.mqtt_connections.get(broker_url)
 
         if client:
-            client.disconnect()
+            client.stop()
             self.mqtt_connections.pop(broker_url)
             logger.debug("Mqtt: close %s", broker_url)
         else:
@@ -372,7 +372,7 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             try:
                 client = MQTTClient(self.mqtt_client_name, broker_url)
                 logger.debug("New mqtt connection: %s", broker_url)
-                client.connect()
+                client.start()
                 self.mqtt_connections.update({broker_url: client})
                 yield client
             except (rpcclient.TimeoutError, OSError) as e:
