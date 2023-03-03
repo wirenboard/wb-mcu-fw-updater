@@ -782,7 +782,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.ModbusException:
             pass  # Device is in bootloader mode and doesn't responce
 
-    def _has_bootloader_answered(self, baudrate=9600):
+    def _has_bootloader_answered(self, baudrate=9600, _probe_func=None):
         """
         Sending a dummy-payload to bootloader and looking into minimalmodbus's errors.
         Wiren Board modbus devices, while in bootloader, could answer to a dummy-payload via modbus error 04 (Slave Device Failure).
@@ -792,6 +792,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: has device raised modbus error 04 or not
         :rtype: bool
         """
+        _probe_func = _probe_func or self.write_u16_regs
+
         initial_port_settings = deepcopy(self.settings)
         initial_response_timeout = self.device.serial.timeout
 
@@ -801,7 +803,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self.set_response_timeout(initial_response_timeout + self.BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT)
 
         try:
-            self.write_u16_regs(0x1000, [0] * 16)  # A dummy payload
+            _probe_func(0x1000, [0] * 16)  # A dummy payload
         except minimalmodbus.SlaveReportedException:  # Err 04
             return True
         except minimalmodbus.ModbusException:
@@ -811,7 +813,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             self._set_port_settings_raw(initial_port_settings)
             self.set_response_timeout(initial_response_timeout)
 
-    def is_in_bootloader(self, baudrate=9600):
+    def is_in_bootloader(self, baudrate=9600, _probe_func=None):
         """
         If slaveid has got => device is in normal working mode.
         If slaveid has not got and bootloader has answered (raised modbus error 04) => device is in bootloader.
@@ -820,8 +822,10 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: is device in bootloader or not
         :rtype: bool
         """
+        _probe_func = _probe_func or self.get_slave_addr
+
         try:
-            self.get_slave_addr()
+            _probe_func()
             return False  # Device is powered on and sending correct reply
         except minimalmodbus.ModbusException:
             return self._has_bootloader_answered(baudrate)  # Is device in bootloader or disconnected
