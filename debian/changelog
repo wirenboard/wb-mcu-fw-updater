@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.7.1) stable; urgency=medium
+
+  * wb_modbus: add "_probe_func" param around internal magic "is_in_bootloader" methods
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 03 Mar 2023 13:35:11 +0300
+
 wb-mcu-fw-updater (1.7.0) stable; urgency=medium
 
   * Support connection to Mosquitto through unix socket
