@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.8.0) stable; urgency=medium
+
+  * Check (and pause) all port users
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 16 May 2023 10:21:34 +0300
+
 wb-mcu-fw-updater (1.7.1) stable; urgency=medium
 
   * wb_modbus: add "_probe_func" param around internal magic "is_in_bootloader" methods

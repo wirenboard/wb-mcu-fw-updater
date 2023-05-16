@@ -503,8 +503,12 @@ if __name__ == "__main__":
     args.instrument = MODBUS_INSTRUMENTS[args.instrument]
 
     if args.instrument == StopbitsTolerantInstrument:
-        update_monitor.pause_driver()
-        atexit.register(update_monitor.resume_driver)
+        ports = [args.port, ] if "port" in vars(args) else update_monitor.get_ports_on_driver(
+            CONFIG["SERIAL_DRIVER_CONFIG_FNAME"])
+
+        # mind atexit order!!
+        update_monitor.stop_clients(args.force, *ports)
+        atexit.register(lambda: update_monitor.resume_clients(*ports))
 
         if "port" in vars(args):
             initial_port_settings = update_monitor.get_port_settings(args.port)
