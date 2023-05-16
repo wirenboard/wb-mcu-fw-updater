@@ -242,9 +242,7 @@ def get_ports_on_driver(driver_config_fname):
         raise ConfigParsingError from e
 
     for port in config_dict.get("ports", []):
-        if port.get("enabled", False) and port.get(
-            "path", False
-        ):
+        if port.get("enabled", False) and port.get("path", False):
             ports.append(port["path"])
     return ports
 
@@ -897,12 +895,17 @@ def _send_signal(signal, *ports):
 
 
 def stop_clients(force, *ports):
-    default_clients = set(["/usr/bin/wb-mqtt-serial",])
+    default_clients = set(
+        [
+            "/usr/bin/wb-mqtt-serial",
+        ]
+    )
     actual_clients = set(_get_clients(*ports))
     if actual_clients.difference(default_clients):
         if not ask_user(
             "%s used by %s; Will be paused and resumed after finish"
-                % (", ".join(ports), ", ".join(actual_clients)), force
+            % (", ".join(ports), ", ".join(actual_clients)),
+            force,
         ):
             die("Stop %s manually!" % " ".join(actual_clients))
     if actual_clients:
