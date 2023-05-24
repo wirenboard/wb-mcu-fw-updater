@@ -22,7 +22,7 @@ import wb_modbus  # Params should be set before any wb_modbus usage!
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG["ALLOWED_UNSUCCESSFUL_MODBUS_TRIES"]
 wb_modbus.DEBUG = CONFIG["MODBUS_DEBUG"]
 from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str, instruments
-from . import fw_flasher, fw_downloader, user_log, jsondb, releases
+from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die
 
 # isort: on
 
@@ -231,6 +231,20 @@ def get_correct_modbus_connection(
 
     check_device_is_a_wb_one(modbus_connection)
     return modbus_connection
+
+
+def get_ports_on_driver(driver_config_fname):
+    ports = []
+    try:
+        config_dict = json.load(open(driver_config_fname, "r", encoding="utf-8"))
+    except (ValueError, IOError) as e:
+        logger.exception("Error in %s", driver_config_fname)
+        raise ConfigParsingError from e
+
+    for port in config_dict.get("ports", []):
+        if port.get("enabled", False) and port.get("path", False):
+            ports.append(port["path"])
+    return ports
 
 
 def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
@@ -847,25 +861,59 @@ def _recover_all(minimal_response_timeout, force=False, instrument=instruments.S
     )
 
 
-def _send_signal_to_driver(signal):
+def _get_clients(*ports):
+    ports = " ".join(ports)
+    cmd_str = "fuser %s" % ports
+    logger.debug("Will run: %s", cmd_str)
+    try:
+        pids = str(subprocess.check_output(cmd_str, shell=True, stderr=subprocess.DEVNULL), encoding="utf-8")
+    except subprocess.CalledProcessError:
+        logger.debug("No clients for %s found", ports)
+        return []
+    pids = [pid.strip() for pid in pids.split()]
+    pids = " ".join(set(pids))
+    logger.debug("Clients of %s: %s", ports, pids)
+    cmd_str = "ps -o cmd= %s" % pids
+    logger.debug("Will run: %s", cmd_str)
+    try:
+        procs = str(subprocess.check_output(cmd_str, shell=True, stderr=subprocess.DEVNULL), encoding="utf-8")
+        return [proc.strip() for proc in procs.split("\n") if proc.strip()]
+    except subprocess.CalledProcessError:
+        logger.debug("No pid from %s is alive now", pids)
+        return []
+
+
+def _send_signal(signal, *ports):
     """
-    Use pausing/resuming of process, found by name (instead of killing/starting)
+    Use pausing/resuming of processes, accessing port
     to handle cases, like <wb-mqtt-serial -c config.conf>
-
-    :type signal: str
     """
-    if CONFIG["SERIAL_DRIVER_PROCESS_NAME"]:
-        cmd_str = "killall %s %s" % (signal, CONFIG["SERIAL_DRIVER_PROCESS_NAME"])
-        logger.debug("Will run: %s", cmd_str)
-        subprocess.call(cmd_str, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ports = " ".join(ports)
+    cmd_str = "fuser -k %s %s" % (signal, ports)
+    logger.debug("Will run: %s", cmd_str)
+    subprocess.call(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def pause_driver():
-    _send_signal_to_driver("-STOP")
+def stop_clients(force, *ports):
+    default_clients = set(
+        [
+            "/usr/bin/wb-mqtt-serial",
+        ]
+    )
+    actual_clients = set(_get_clients(*ports))
+    if actual_clients.difference(default_clients):
+        if not ask_user(
+            "%s used by %s; Will be paused and resumed after finish"
+            % (", ".join(ports), ", ".join(actual_clients)),
+            force,
+        ):
+            die("Stop %s manually!" % " ".join(actual_clients))
+    if actual_clients:
+        _send_signal("-STOP", *ports)
 
 
-def resume_driver():
-    _send_signal_to_driver("-CONT")
+def resume_clients(*ports):
+    _send_signal("-CONT", *ports)
 
 
 def get_port_settings(port_fname):
