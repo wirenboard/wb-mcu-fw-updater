@@ -312,12 +312,13 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
     (instead of pyserial)
     """
 
+    _MQTT_BROKER_URL = DEFAULT_BROKER_URL
     _MQTT_CONNECTIONS = {}
 
     RPC_ERR_STATES = {"JSON_PARSE": -32700, "REQUEST_HANDLING": -32000, "REQUEST_TIMEOUT": -32100}
 
     def __init__(self, port, slaveaddress, **kwargs):
-        self.broker_url = kwargs.get("broker", DEFAULT_BROKER_URL)
+        self.broker_url = kwargs.get("broker", self._MQTT_BROKER_URL)
         self.mqtt_client_name = "minimalmodbus-rpc-instrument"
 
         # required minimalmodbus's internals

@@ -4,6 +4,8 @@
 import argparse
 import atexit
 
+from wb_common.mqtt_client import DEFAULT_BROKER_URL
+
 from wb_mcu_fw_updater import (
     CONFIG,
     die,
@@ -308,6 +310,14 @@ def add_common_logic_args(parser):
         choices=MODBUS_INSTRUMENTS.keys(),
         help="Connection backend for modbus calls. (Default: %(default)s)",
     )
+    parser.add_argument(
+        "--broker",
+        type=str,
+        dest="broker",
+        default=DEFAULT_BROKER_URL,
+        metavar="<broker>",
+        help="MQTT broker url. (Default: %(default)s)",
+    )
 
 
 def add_modbus_connection_args(parser):
@@ -518,6 +528,8 @@ if __name__ == "__main__":
         if "port" in vars(args):
             initial_port_settings = update_monitor.get_port_settings(args.port)
             atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
+    elif args.instrument == SerialRPCBackendInstrument:
+        SerialRPCBackendInstrument._MQTT_BROKER_URL = args.broker
 
     atexit.register(update_monitor.db.dump)
 

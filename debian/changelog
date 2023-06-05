@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.8.1) stable; urgency=medium
+
+  * Add cli argument to specify MQTT connection URL
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Thu, 01 Jun 2023 19:14:00 +0400
+
 wb-mcu-fw-updater (1.8.0) stable; urgency=medium
 
   * Check (and pause) all port users
