@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.8.2) stable; urgency=medium
+
+  * Fix PKG-INFO
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Mon, 24 Jul 2023 12:10:00 +0400
+
 wb-mcu-fw-updater (1.8.1) stable; urgency=medium
 
   * Add cli argument to specify MQTT connection URL
