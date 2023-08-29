@@ -1,4 +1,5 @@
 import atexit
+import ipaddress
 import sys
 import termios
 import time
@@ -421,3 +422,21 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 raise reraise_err from e
             else:
                 return minimalmodbus._hexdecode(str(response.get("response", "")))
+
+
+class TCPRPCBackendInstrument(SerialRPCBackendInstrument):
+    def __init__(self, ip_addr_port, slaveaddress, **kwargs):
+        ip, _, port = ip_addr_port.partition(":")
+        try:
+            self.ip = ipaddress.ip_address(ip).exploded
+            self.tcp_port = int(port)
+        except Exception as e:
+            raise RPCConnectionError('Format should be "valid_ip_addr:port"') from e
+
+        super(TCPRPCBackendInstrument, self).__init__(port=None, slaveaddress=slaveaddress, **kwargs)
+
+    def get_transport_params(self):
+        return {
+            "ip": self.ip,
+            "port": self.tcp_port,
+        }
