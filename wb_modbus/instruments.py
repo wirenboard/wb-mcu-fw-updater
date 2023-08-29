@@ -381,6 +381,15 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             finally:
                 atexit.register(lambda: self.close_mqtt(broker_url))
 
+    def get_transport_params(self):
+        return {
+            "path": self.serial.port,
+            "baud_rate": self.serial.SERIAL_SETTINGS["baudrate"],
+            "parity": self.serial.SERIAL_SETTINGS["parity"],
+            "data_bits": 8,
+            "stop_bits": self.serial.SERIAL_SETTINGS["stopbits"],
+        }
+
     def _communicate(self, request, number_of_bytes_to_read):
         minimalmodbus._check_string(request, minlength=1, description="request")
         minimalmodbus._check_int(number_of_bytes_to_read)
@@ -392,12 +401,8 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             "format": "HEX",
             "msg": minimalmodbus._hexencode(request),
             "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1e3),
-            "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
-            "baud_rate": self.serial.SERIAL_SETTINGS["baudrate"],
-            "parity": self.serial.SERIAL_SETTINGS["parity"],
-            "data_bits": 8,
-            "stop_bits": self.serial.SERIAL_SETTINGS["stopbits"],
         }
+        rpc_request.update(self.get_transport_params())
 
         with self.get_mqtt_client(self.broker_url) as mqtt_client:
             rpc_call_timeout = 10
