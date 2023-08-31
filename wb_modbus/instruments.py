@@ -430,10 +430,10 @@ class TCPRPCBackendInstrument(SerialRPCBackendInstrument):
         try:
             self.ip = ipaddress.ip_address(ip).exploded
             self.tcp_port = int(port)
-        except Exception as e:
+        except ValueError as e:
             raise RPCConnectionError('Format should be "valid_ip_addr:port"') from e
 
-        super(TCPRPCBackendInstrument, self).__init__(port=None, slaveaddress=slaveaddress, **kwargs)
+        super().__init__(port=None, slaveaddress=slaveaddress, **kwargs)
 
     def get_transport_params(self):
         return {
