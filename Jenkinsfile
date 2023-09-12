@@ -1,1 +1,2 @@
-buildDebArchAll defaultRunPythonChecks: true
+buildDebArchAll defaultRunPythonChecks: true,
+                repos: ['release', 'devTools']
