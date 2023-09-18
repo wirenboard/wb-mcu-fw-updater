@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.8.3) stable; urgency=medium
+
+  * wb_modbus: add TCPRPCBackendInstrument (via wb-mqtt-serial's rpc)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 29 Aug 2023 17:21:39 +0300
+
 wb-mcu-fw-updater (1.8.2) stable; urgency=medium
 
   * Fix PKG-INFO

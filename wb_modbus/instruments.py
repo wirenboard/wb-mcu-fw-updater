@@ -1,4 +1,5 @@
 import atexit
+import ipaddress
 import sys
 import termios
 import time
@@ -381,6 +382,15 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             finally:
                 atexit.register(lambda: self.close_mqtt(broker_url))
 
+    def get_transport_params(self):
+        return {
+            "path": self.serial.port,
+            "baud_rate": self.serial.SERIAL_SETTINGS["baudrate"],
+            "parity": self.serial.SERIAL_SETTINGS["parity"],
+            "data_bits": 8,
+            "stop_bits": self.serial.SERIAL_SETTINGS["stopbits"],
+        }
+
     def _communicate(self, request, number_of_bytes_to_read):
         minimalmodbus._check_string(request, minlength=1, description="request")
         minimalmodbus._check_int(number_of_bytes_to_read)
@@ -392,12 +402,8 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
             "format": "HEX",
             "msg": minimalmodbus._hexencode(request),
             "response_timeout": round(max(self.serial.timeout, min_response_timeout) * 1e3),
-            "path": self.serial.port,  # TODO: support modbus tcp in minimalmodbus
-            "baud_rate": self.serial.SERIAL_SETTINGS["baudrate"],
-            "parity": self.serial.SERIAL_SETTINGS["parity"],
-            "data_bits": 8,
-            "stop_bits": self.serial.SERIAL_SETTINGS["stopbits"],
         }
+        rpc_request.update(self.get_transport_params())
 
         with self.get_mqtt_client(self.broker_url) as mqtt_client:
             rpc_call_timeout = 10
@@ -416,3 +422,21 @@ class SerialRPCBackendInstrument(minimalmodbus.Instrument):
                 raise reraise_err from e
             else:
                 return minimalmodbus._hexdecode(str(response.get("response", "")))
+
+
+class TCPRPCBackendInstrument(SerialRPCBackendInstrument):
+    def __init__(self, ip_addr_port, slaveaddress, **kwargs):
+        ip, _, port = ip_addr_port.partition(":")
+        try:
+            self.ip = ipaddress.ip_address(ip).exploded
+            self.tcp_port = int(port)
+        except ValueError as e:
+            raise RPCConnectionError('Format should be "valid_ip_addr:port"') from e
+
+        super().__init__(port=None, slaveaddress=slaveaddress, **kwargs)
+
+    def get_transport_params(self):
+        return {
+            "ip": self.ip,
+            "port": self.tcp_port,
+        }
