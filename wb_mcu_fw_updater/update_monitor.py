@@ -254,7 +254,7 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     :return: {<port_name> : {'devices' : [devices_on_port], 'uart_params' : [uart_params_of_port]}}
     :rtype: dict
     """
-    found_devices = defaultdict({})
+    found_devices = defaultdict(dict)
 
     try:
         config_dict = json.load(open(driver_config_fname, "r", encoding="utf-8"))
@@ -599,18 +599,18 @@ def probe_all_devices(
         device_name,
         device_slaveid,
         device_response_timeout,
-        uart_params="9600N2",
+        uart_params=None,
         instrument=instrument,
     ):
         actual_response_timeout = max(
             minimal_response_timeout, port_response_timeout, device_response_timeout
         )
         logger.info(
-            "Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)...",
+            "Probing %s (port: %s, slaveid: %d, %s response_timeout: %.2f)...",
             device_name,
             port,
             device_slaveid,
-            str(uart_params),
+            f"uart_params: {str(uart_params)}," if uart_params else "",
             actual_response_timeout,
         )
         device_info = DeviceInfo(
@@ -618,7 +618,7 @@ def probe_all_devices(
             modbus_connection=bindings.WBModbusDeviceBase(
                 device_slaveid,
                 port,
-                *parse_uart_settings_str(uart_params),
+                *parse_uart_settings_str(uart_params or "9600N2"),
                 response_timeout=actual_response_timeout,
                 instrument=instrument,
             ),
@@ -627,7 +627,11 @@ def probe_all_devices(
             device_info = DeviceInfo(
                 name=device_name,
                 modbus_connection=get_correct_modbus_connection(
-                    device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
+                    device_slaveid,
+                    port,
+                    actual_response_timeout,
+                    uart_params or "9600N2",
+                    instrument=instrument,
                 ),
             )
         except ForeignDeviceError:
@@ -820,7 +824,7 @@ def _update_all(
 
     if probing_result["unsupported_tcp"]:
         print_status(
-            logging.ERROR,
+            logging.WARNING,
             status="Update is unsupported via TCP:",
             devices_list=probing_result["unsupported_tcp"],
             additional_info="Change uart params to 9600N2",
