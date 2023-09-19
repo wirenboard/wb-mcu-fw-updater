@@ -3,6 +3,7 @@
 
 import argparse
 import atexit
+import ipaddress
 
 from wb_common.mqtt_client import DEFAULT_BROKER_URL
 
@@ -17,7 +18,11 @@ from wb_mcu_fw_updater import (
 )
 from wb_modbus import parse_uart_settings_str
 from wb_modbus.bindings import TooOldDeviceError, WBModbusDeviceBase
-from wb_modbus.instruments import SerialRPCBackendInstrument, StopbitsTolerantInstrument
+from wb_modbus.instruments import (
+    SerialRPCBackendInstrument,
+    StopbitsTolerantInstrument,
+    TCPRPCBackendInstrument,
+)
 from wb_modbus.minimalmodbus import ModbusException
 
 MODBUS_INSTRUMENTS = {"pyserial": StopbitsTolerantInstrument, "rpc": SerialRPCBackendInstrument}
@@ -28,6 +33,22 @@ def check_internet_connection():
         fw_downloader.get_request(CONFIG["ROOT_URL"])
     except fw_downloader.WBRemoteStorageError as e:
         die("%s is not accessible. Check Internet connection!" % CONFIG["ROOT_URL"])
+
+
+def get_compatible_instrument(port, instrument):
+    def is_port_tcp():
+        ipaddr = str(port).split(":", maxsplit=1)
+        try:
+            _ = ipaddress.ip_address(ipaddr).exploded
+            return True
+        except ValueError:
+            return False
+
+    if is_port_tcp():
+        if issubclass(instrument, SerialRPCBackendInstrument):
+            return TCPRPCBackendInstrument
+        die("Unsupported instrument for TCP-mode! Choose rpc-one")
+    return instrument
 
 
 def _update_alive_device(
@@ -42,6 +63,8 @@ def _update_alive_device(
     instrument=StopbitsTolerantInstrument,
 ):
     check_internet_connection()
+
+    instrument = get_compatible_instrument(port, instrument)
 
     device_str = "(%s %d; response_timeout: %.2fs)" % (port, slaveid, response_timeout)
     modbus_connection = WBModbusDeviceBase(
@@ -143,9 +166,11 @@ def recover_fw(args):
 
     device_str = "%d %s" % (args.slaveid, args.port)
 
+    instrument = get_compatible_instrument(args.port, args.instrument)
+
     if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
         device = WBModbusDeviceBase(
-            args.slaveid, args.port, instrument=args.instrument, response_timeout=args.response_timeout
+            args.slaveid, args.port, instrument=instrument, response_timeout=args.response_timeout
         )
         if not device.is_in_bootloader():
             die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
@@ -153,7 +178,7 @@ def recover_fw(args):
     try:
         fw_signatures_list = fw_downloader.get_fw_signatures_list()
         args.known_signature = args.known_signature or update_monitor._restore_fw_signature(
-            args.slaveid, args.port, response_timeout=args.response_timeout, instrument=args.instrument
+            args.slaveid, args.port, response_timeout=args.response_timeout, instrument=instrument
         )
 
         if args.known_signature:
@@ -162,7 +187,7 @@ def recover_fw(args):
                 args.slaveid,
                 args.port,
                 in_bl_response_timeout=args.response_timeout,
-                instrument=args.instrument,
+                instrument=instrument,
             )
 
         elif update_monitor.ask_user(
@@ -177,7 +202,7 @@ def recover_fw(args):
                         args.slaveid,
                         args.port,
                         in_bl_response_timeout=args.response_timeout,
-                        instrument=args.instrument,
+                        instrument=instrument,
                     )
                     break
                 except fw_flasher.FlashingError:
@@ -197,7 +222,7 @@ def recover_fw(args):
         update_monitor.NoReleasedFwError,
         update_monitor.UserCancelledError,
     ) as e:
-        logger.error("Recovering (%d %s) was not successful" % (args.slaveid, args.port))
+        logger.error("Recovering (%d %s) was not successful", args.slaveid, args.port)
         die(e)
 
 
@@ -236,6 +261,8 @@ def flash_fw_file(args):
     """
     Directly flashing a fw-file (passed as arg) (args are almost compatible to wb-mcu-fw-flasher)
     """
+    instrument = get_compatible_instrument(args.port, args.instrument)
+
     device_str = "%s %d %s (response timeout: %.2f)" % (
         args.port,
         args.slaveid,
@@ -247,7 +274,7 @@ def flash_fw_file(args):
         args.port,
         *args.conn_settings,
         response_timeout=args.response_timeout,
-        instrument=args.instrument,
+        instrument=instrument,
     )
     if not device.is_in_bootloader():
         logger.debug("Rebooting %s to bootloader", device_str)
@@ -264,7 +291,7 @@ def flash_fw_file(args):
             args.response_timeout,
             args.erase_all,
             args.erase_uart,
-            instrument=args.instrument,
+            instrument=instrument,
         )
         return
     except fw_flasher.NotInBootloaderError as e:

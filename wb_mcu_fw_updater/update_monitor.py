@@ -761,7 +761,7 @@ def _update_all(
             device_info.modbus_connection.slaveid,
             device_info.modbus_connection.port,
             device_info.modbus_connection.response_timeout,
-            instrument=instrument,
+            instrument=device_info.modbus_connection.instrument,
         )
         logger.info("Found in bootloader: %s; fw_signature: %s", str(device_info), str(fw_signature))
         if not fw_signature:
@@ -773,7 +773,7 @@ def _update_all(
                 device_info.modbus_connection.port,
                 in_bl_response_timeout=device_info.modbus_connection.response_timeout,
                 force=force,
-                instrument=instrument,
+                instrument=device_info.modbus_connection.instrument,
             )
         except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
             logger.exception(e)
@@ -870,7 +870,7 @@ def _recover_all(minimal_response_timeout, force=False, instrument=instruments.S
             device_info.modbus_connection.slaveid,
             device_info.modbus_connection.port,
             device_info.modbus_connection.response_timeout,
-            instrument=instrument,
+            instrument=device_info.modbus_connection.instrument,
         )
         if fw_signature is None:
             logger.info("%s %s", user_log.colorize("Unknown fw_signature:", "RED"), str(device_info))
@@ -889,7 +889,7 @@ def _recover_all(minimal_response_timeout, force=False, instrument=instruments.S
                     device_info.modbus_connection.port,
                     in_bl_response_timeout=device_info.modbus_connection.response_timeout,
                     force=force,
-                    instrument=instrument,
+                    instrument=device_info.modbus_connection.instrument,
                 )
             except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
                 logger.exception(e)
