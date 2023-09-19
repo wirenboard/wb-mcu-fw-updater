@@ -332,7 +332,7 @@ def add_common_logic_args(parser):
         "--instrument",
         type=str,
         dest="instrument",
-        default="pyserial",
+        default="rpc",
         metavar="<connection backend>",
         choices=MODBUS_INSTRUMENTS.keys(),
         help="Connection backend for modbus calls. (Default: %(default)s)",

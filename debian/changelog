@@ -1,3 +1,10 @@
+wb-mcu-fw-updater (1.9.0) stable; urgency=medium
+
+  * Add update via TCP over WB-MGE gateway (only 9600N2 supported)
+  * Using rpc to wb-mqtt-serial as default modbus instrument
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 20 Sep 2023 00:11:13 +0300
+
 wb-mcu-fw-updater (1.8.3) stable; urgency=medium
 
   * wb_modbus: add TCPRPCBackendInstrument (via wb-mqtt-serial's rpc)
