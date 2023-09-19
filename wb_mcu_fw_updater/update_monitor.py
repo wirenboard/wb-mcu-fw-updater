@@ -254,7 +254,7 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     :return: {<port_name> : {'devices' : [devices_on_port], 'uart_params' : [uart_params_of_port]}}
     :rtype: dict
     """
-    found_devices = {}
+    found_devices = defaultdict({})
 
     try:
         config_dict = json.load(open(driver_config_fname, "r", encoding="utf-8"))
@@ -263,11 +263,7 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
         six.raise_from(ConfigParsingError, e)
 
     for port in config_dict.get("ports", []):
-        if port.get("enabled", False) and port.get(
-            "path", False
-        ):  # updating devices only on active RS-485 ports
-            port_name = port["path"]
-            uart_params_of_port = [int(port["baud_rate"]), port["parity"], int(port["stop_bits"])]
+        if port.get("enabled", False):  # updating devices only on active ports
             port_response_timeout = int(port.get("response_timeout_ms", 0)) * 1e-3
             devices_on_port = set()
             for serial_device in port.get("devices", []):
@@ -288,16 +284,37 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
                     )
                     continue
                 devices_on_port.add((device_name, parsed_slaveid, device_response_timeout))
+
             if devices_on_port:
-                found_devices.update(
-                    {
-                        port_name: {
-                            "devices": list(devices_on_port),
-                            "uart_params": uart_params_of_port,
-                            "response_timeout": port_response_timeout,
+                if port.get("path", None):  # port is serial
+                    port_name = port["path"]
+                    found_devices["serial"].update(
+                        {
+                            port_name: {
+                                "devices": list(devices_on_port),
+                                "uart_params": [
+                                    int(port["baud_rate"]),
+                                    port["parity"],
+                                    int(port["stop_bits"]),
+                                ],
+                                "response_timeout": port_response_timeout,
+                            }
                         }
-                    }
-                )
+                    )
+                elif port.get("address", None) and port.get("port", None):  # port is tcp
+                    port_name = f"{port['address']}:{port['port']}"
+                    found_devices["tcp"].update(
+                        {
+                            port_name: {
+                                "devices": list(devices_on_port),
+                                "uart_params": None,
+                                "response_timeout": port_response_timeout,
+                            }
+                        }
+                    )
+                else:
+                    logger.warning("Unknown port entry in config! Will skip parsing: %s", str(port))
+                    continue
 
     if not found_devices:
         logger.error("No devices has found in %s", driver_config_fname)
@@ -574,67 +591,106 @@ def probe_all_devices(
         disconnected - a dummy-record in config
         too_old_to_update - old wb devices, haven't bootloader
         foreign_devices - non-wb devices, defined in config
+        unsupported_tcp - devices on tcp port with uart params, different from 9600N2
     """
+
+    def probe_device(
+        port,
+        device_name,
+        device_slaveid,
+        device_response_timeout,
+        uart_params="9600N2",
+        instrument=instrument,
+    ):
+        actual_response_timeout = max(
+            minimal_response_timeout, port_response_timeout, device_response_timeout
+        )
+        logger.info(
+            "Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)...",
+            device_name,
+            port,
+            device_slaveid,
+            str(uart_params),
+            actual_response_timeout,
+        )
+        device_info = DeviceInfo(
+            name=device_name,
+            modbus_connection=bindings.WBModbusDeviceBase(
+                device_slaveid,
+                port,
+                *parse_uart_settings_str(uart_params),
+                response_timeout=actual_response_timeout,
+                instrument=instrument,
+            ),
+        )
+        try:
+            device_info = DeviceInfo(
+                name=device_name,
+                modbus_connection=get_correct_modbus_connection(
+                    device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
+                ),
+            )
+        except ForeignDeviceError:
+            return device_info, "foreign"
+        except minimalmodbus.NoResponseError:
+            bootloader_connection = bindings.WBModbusDeviceBase(
+                device_slaveid, port, response_timeout=actual_response_timeout, instrument=instrument
+            )
+            if bootloader_connection.is_in_bootloader():
+                return DeviceInfo(name=device_name, modbus_connection=bootloader_connection), "in_bootloader"
+            return device_info, "disconnected"
+
+        try:
+            mb_connection = device_info.modbus_connection
+            db.save(
+                mb_connection.slaveid, mb_connection.port, mb_connection.get_fw_signature()
+            )  # old devices haven't fw_signatures
+            return device_info, "alive"
+        except bindings.TooOldDeviceError:
+            logger.error("%s is too old and does not support firmware updates!", str(device_info))
+            return device_info, "too_old_to_update"
+
+    parsed_devices = get_devices_on_driver(driver_config_fname)
+    logger.info("Will probe all devices on enabled serial/tcp ports of %s:", driver_config_fname)
     result = defaultdict(list)
 
-    logger.info("Will probe all devices on enabled serial ports of %s:", driver_config_fname)
-    for port, port_params in get_devices_on_driver(driver_config_fname).items():
+    # Probe all devices on serial ports
+    for port, port_params in parsed_devices.get("serial", {}).items():
         uart_params = "".join(map(str, port_params["uart_params"]))  # 9600N2
         port_response_timeout = port_params["response_timeout"]
         devices_on_port = port_params["devices"]
         for device_name, device_slaveid, device_response_timeout in devices_on_port:
-            actual_response_timeout = max(
-                minimal_response_timeout, port_response_timeout, device_response_timeout
+            device_info, status = probe_device(
+                port, device_name, device_slaveid, device_response_timeout, uart_params
             )
-            logger.info(
-                "Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)...",
-                device_name,
-                port,
-                device_slaveid,
-                uart_params,
-                actual_response_timeout,
-            )
-            device_info = DeviceInfo(
-                name=device_name,
-                modbus_connection=bindings.WBModbusDeviceBase(
-                    device_slaveid,
-                    port,
-                    *parse_uart_settings_str(uart_params),
-                    response_timeout=actual_response_timeout,
-                    instrument=instrument,
-                ),
-            )
-            try:
-                device_info = DeviceInfo(
-                    name=device_name,
-                    modbus_connection=get_correct_modbus_connection(
-                        device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
-                    ),
-                )
-            except ForeignDeviceError as e:
-                result["foreign"].append(device_info)
-                continue
-            except minimalmodbus.NoResponseError as e:
-                bootloader_connection = bindings.WBModbusDeviceBase(
-                    device_slaveid, port, response_timeout=actual_response_timeout, instrument=instrument
-                )
-                if bootloader_connection.is_in_bootloader():
-                    result["in_bootloader"].append(
-                        DeviceInfo(name=device_name, modbus_connection=bootloader_connection)
-                    )
-                else:
-                    result["disconnected"].append(device_info)
-                continue
+            result[status].append(device_info)
 
-            try:
-                mb_connection = device_info.modbus_connection
-                db.save(
-                    mb_connection.slaveid, mb_connection.port, mb_connection.get_fw_signature()
-                )  # old devices haven't fw_signatures
-                result["alive"].append(device_info)
-            except bindings.TooOldDeviceError:
-                logger.error("%s is too old and does not support firmware updates!", str(device_info))
-                result["too_old_to_update"].append(device_info)
+    # Probe all devices on tcp ports
+    if issubclass(instrument, instruments.PyserialBackendInstrument):
+        logger.warning(
+            "Skipping tcp-ports probing because of unsupported instrument (pyserial). Choose rpc-instrument instead!"
+        )
+        return result
+    for port, port_params in parsed_devices.get("tcp", {}).items():
+        port_response_timeout = port_params["response_timeout"]
+        devices_on_port = port_params["devices"]
+        for device_name, device_slaveid, device_response_timeout in devices_on_port:
+            device_info, status = probe_device(
+                port,
+                device_name,
+                device_slaveid,
+                device_response_timeout,
+                instrument=instruments.TCPRPCBackendInstrument,
+            )
+            if (status == "alive") and (
+                device_info.modbus_connection.read_u16_holdings(110, 3) != [96, 0, 2]
+            ):
+                logger.error(
+                    "%s cannot be updated via TCP because of uart params. Only 9600N2 is supported!",
+                    str(device_info),
+                )
+                status = "unsupported_tcp"
+            result[status].append(device_info)
 
     return result
 
@@ -762,8 +818,16 @@ def _update_all(
             logging.ERROR, status="Too old for any updates:", devices_list=probing_result["too_old_to_update"]
         )
 
+    if probing_result["unsupported_tcp"]:
+        print_status(
+            logging.ERROR,
+            status="Update is unsupported via TCP:",
+            devices_list=probing_result["unsupported_tcp"],
+            additional_info="Change uart params to 9600N2",
+        )
+
     logger.info(
-        "%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s too old for any updates.",
+        "%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s unsupported for updates.",
         user_log.colorize(str(len(cmd_status["ok"])), "GREEN" if cmd_status["ok"] else "RED"),
         user_log.colorize(str(len(cmd_status["skipped"])), "YELLOW" if cmd_status["skipped"] else "GREEN"),
         user_log.colorize(
@@ -773,8 +837,8 @@ def _update_all(
             str(len(probing_result["disconnected"])), "RED" if probing_result["disconnected"] else "GREEN"
         ),
         user_log.colorize(
-            str(len(probing_result["too_old_to_update"])),
-            "RED" if probing_result["too_old_to_update"] else "GREEN",
+            str(len(probing_result["too_old_to_update"]) + len(probing_result["unsupported_tcp"])),
+            "RED" if probing_result["too_old_to_update"] or probing_result["unsupported_tcp"] else "GREEN",
         ),
     )
 
