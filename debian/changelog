@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.8.4) stable; urgency=medium
+
+  * Print fw version if updating from branch
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 02 Oct 2023 10:15:31 +0300
+
 wb-mcu-fw-updater (1.8.3) stable; urgency=medium
 
   * wb_modbus: add TCPRPCBackendInstrument (via wb-mqtt-serial's rpc)
