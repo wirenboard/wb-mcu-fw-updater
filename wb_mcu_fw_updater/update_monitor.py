@@ -442,7 +442,12 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     Retrieves "latest" version number (from latest.txt on s3); returns ("downloaded_fpath", "version_number")
     """
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch)
-    mode_name = "firmware" if mode == "fw" else "bootloader"
+    if mode == "fw":
+        mode_name = "firmware"
+    else:
+        mode_name = "bootloader"
+        # TODO: put unstable_bl version to latest.txt on ci; then remove "retrieve_latest_vnum" logic (task 51352)
+        retrieve_latest_vnum = False
 
     downloaded_fw = None
 
@@ -461,9 +466,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     else:
         logger.debug("%s version has specified manually: %s", mode_name, version)
 
-    if (
-        version == "latest" and retrieve_latest_vnum
-    ):  # TODO: put unstable_bl version to latest.txt on ci; then remove (task 51352)
+    if version == "latest" and retrieve_latest_vnum:
         logger.debug("Retrieving latest %s version number for %s", mode_name, fw_sig)
         version = downloader.get_latest_version_number(fw_sig)  # to guess, is reflash needed or not
 
@@ -527,9 +530,15 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             % (fw_signature, branch_name, specified_fw_version),
             force_yes=force,
         ):
-            downloaded_fw, _ = _do_download(
-                fw_signature, specified_fw_version, branch_name, mode, retrieve_latest_vnum=False
-            )  # TODO: fix latest.txt for bl branches on ci (task 51352)
+            downloaded_fw, remote_version = _do_download(
+                fw_signature, specified_fw_version, branch_name, mode
+            )
+            logger.info(
+                "%s %s -> %s",
+                user_log.colorize("Confirmed update:", "GREEN"),
+                modbus_connection.get_fw_version(),
+                remote_version,
+            )
             _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
             return
         else:
