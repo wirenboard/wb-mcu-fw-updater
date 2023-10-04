@@ -446,8 +446,6 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
         mode_name = "firmware"
     else:
         mode_name = "bootloader"
-        # TODO: put unstable_bl version to latest.txt on ci; then remove "retrieve_latest_vnum" logic (task 51352)
-        retrieve_latest_vnum = False
 
     downloaded_fw = None
 
@@ -457,6 +455,9 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
         ):  # default fw_version now is 'release'; will flash latest, if branch has specified
             version = "latest"
             downloaded_fw = downloader.download(fw_sig, version)
+        if mode_name == "bootloader":
+            retrieve_latest_vnum = False
+            # TODO: put unstable_bl version to latest.txt on ci; then remove "retrieve_latest_vnum" logic (task 51352)
 
     if version == "release":  # triggered updating from releases
         version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO)
