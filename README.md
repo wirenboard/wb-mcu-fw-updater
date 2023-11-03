@@ -18,18 +18,6 @@ A command-line tool, updating WirenBoard modbus devices to latest firmwares. Ver
 `dpkg-buildpackage -rfakeroot -us -uc`
 
 ## Installation:
-1. Add Wiren Board repo, if doesn't exist.
-2. Update list of packages:
+The tool is included in the standard software package with the Wiren Board controller and is not supported on other platforms.
 
-    `apt update`
-3. Install wb-mcu-fw-updater
-
-    #### from Wiren Board repo:
-
-    `apt install wb-mcu-fw-updater`
-
-    #### From deb package:
-
-    `apt install ./<path to python3-lib .deb>`
-
-    `apt install ./<path to wb-mcu-fw-updater .deb>`
+Alternatively, for Linux and Windows OS, use the [wb-mcu-fw-flasher](https://wirenboard.com/wiki/Wb-mcu-fw-flasher).
