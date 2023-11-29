@@ -63,7 +63,7 @@ def force(retries=ALLOWED_UNSUCCESSFUL_TRIES):
                     return f(*args, **kwargs)
                 except errtypes as e:
                     thrown_exc = e
-                    logger.debug("f = %s not succeed (try %d/%d)", f_signature, i + 1, tries)
+                    logger.debug("f = %s not succeed (try %d/%d): %s", f_signature, i + 1, tries, e)
             else:
                 if thrown_exc:  # python3 wants exception to be defined already
                     raise thrown_exc
@@ -531,6 +531,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         "v_in": 121,
         "slaveid": 128,
         "reboot_to_bootloader": 129,
+        "reboot_to_bootloader_preserve_port_settings": 131,
         "device_signature": 200,
         "fw_signature": 290,
         "fw_version": 250,
@@ -763,26 +764,40 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         if uptime_after > uptime_before:
             raise RuntimeError("Device has not rebooted!")
 
+    def _jump_to_bootloader(self):
+        if (
+            self.device.serial.baudrate != 9600
+            or self.device.serial.parity != "N"
+            or self.device.serial.stopbits != 2
+        ):
+            try:
+                self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader_preserve_port_settings"], 1)
+                logger.debug("Bootloader uses port settings set in firmware")
+                return
+            except minimalmodbus.ModbusException as ex:
+                logger.debug("Switching to bootloader with same port settings failed: %s", ex)
+                logger.info("Device's bootloader supports only 9600-N-2 port setting")
+        try:
+            self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
+        except minimalmodbus.ModbusException:
+            pass  # Device has rebooted and doesn't send response (Fixed in latest FWs)
+
     def reboot_to_bootloader(self):
         """
-        Rebooting device into bootloader via modbus reg. After writing the reg, device stucks in bootloader for 2 minutes.
+        Rebooting device into bootloader via modbus reg. After writing the reg, device stuck in bootloader for 2 minutes.
 
         :raises RuntimeError: device has not stuck in bootloader
         """
         self.get_slave_addr()  # To ensure, device has connection
-        try:
-            self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
-        except minimalmodbus.ModbusException:
-            pass  # Device has rebooted and doesn't send responce (Fixed in latest FWs)
-        finally:
-            time.sleep(0.5)  # Delay before going to bootloader
+        self._jump_to_bootloader()
+        time.sleep(0.5)  # Delay before going to bootloader
         try:
             self.get_slave_addr()
             raise TooOldDeviceError("Device has not rebooted to bootloader!")
         except minimalmodbus.ModbusException:
-            pass  # Device is in bootloader mode and doesn't responce
+            pass  # Device is in bootloader mode and doesn't respond
 
-    def _has_bootloader_answered(self, baudrate=9600, _probe_func=None):
+    def probe_bootloader(self, _probe_func=None):
         """
         Sending a dummy-payload to bootloader and looking into minimalmodbus's errors.
         Wiren Board modbus devices, while in bootloader, could answer to a dummy-payload via modbus error 04 (Slave Device Failure).
@@ -794,26 +809,34 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         """
         _probe_func = _probe_func or self.write_u16_regs
 
-        initial_port_settings = deepcopy(self.settings)
         initial_response_timeout = self.device.serial.timeout
 
-        bootloader_uart_params = [baudrate, "N", 2]
-        logger.debug("Setting params %s to port %s" % ("-".join(map(str, bootloader_uart_params)), self.port))
-        self.set_port_settings(*bootloader_uart_params)
         self.set_response_timeout(initial_response_timeout + self.BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT)
 
         try:
             _probe_func(0x1000, [0] * 16)  # A dummy payload
         except minimalmodbus.SlaveReportedException:  # Err 04
+            pass
+        finally:
+            self.set_response_timeout(initial_response_timeout)
+
+    def _has_bootloader_answered(self, _probe_func=None):
+        """
+        Sending a dummy-payload to bootloader and looking into minimalmodbus's errors.
+        Wiren Board modbus devices, while in bootloader, could answer to a dummy-payload via modbus error 04 (Slave Device Failure).
+
+        Devices, are not in bootloader, could raise error 04 too => combine with check, device is not answering to usual commands!
+
+        :return: has device raised modbus error 04 or not
+        :rtype: bool
+        """
+        try:
+            self.probe_bootloader(_probe_func)
             return True
         except minimalmodbus.ModbusException:
             return False
-        finally:
-            logger.debug("Setting params to port %s back" % self.port)
-            self._set_port_settings_raw(initial_port_settings)
-            self.set_response_timeout(initial_response_timeout)
 
-    def is_in_bootloader(self, baudrate=9600, _probe_func=None):
+    def is_in_bootloader(self, _probe_func=None):
         """
         If slaveid has got => device is in normal working mode.
         If slaveid has not got and bootloader has answered (raised modbus error 04) => device is in bootloader.
@@ -828,7 +851,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             _probe_func()
             return False  # Device is powered on and sending correct reply
         except minimalmodbus.ModbusException:
-            return self._has_bootloader_answered(baudrate)  # Is device in bootloader or disconnected
+            return self._has_bootloader_answered()  # Is device in bootloader or disconnected
 
     def _write_port_settings(self, baudrate, parity, stopbits):
         """

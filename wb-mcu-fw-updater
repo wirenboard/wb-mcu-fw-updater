@@ -18,7 +18,7 @@ from wb_mcu_fw_updater import (
 from wb_modbus import parse_uart_settings_str
 from wb_modbus.bindings import TooOldDeviceError, WBModbusDeviceBase
 from wb_modbus.instruments import SerialRPCBackendInstrument, StopbitsTolerantInstrument
-from wb_modbus.minimalmodbus import ModbusException
+from wb_modbus.minimalmodbus import ModbusException, NoResponseError
 
 MODBUS_INSTRUMENTS = {"pyserial": StopbitsTolerantInstrument, "rpc": SerialRPCBackendInstrument}
 
@@ -48,12 +48,18 @@ def _update_alive_device(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
 
-    is_in_bootloader = modbus_connection.is_in_bootloader()  # 9600N2
-    if not is_in_bootloader:  # finding uart params
+    is_in_bootloader = False
+    try:
+        conn_settings = update_monitor.find_connection_params(slaveid, port, response_timeout, instrument)
+        modbus_connection._set_port_settings_raw(conn_settings)
+    except NoResponseError:
         try:
-            conn_settings = update_monitor.find_connection_params(slaveid, port, response_timeout)
+            conn_settings = update_monitor.find_bootloader_connection_params(
+                slaveid, port, response_timeout, instrument
+            )
             modbus_connection._set_port_settings_raw(conn_settings)
-        except ModbusException as e:
+            is_in_bootloader = True
+        except NoResponseError as e:
             logger.error("Can't connect to %s, check physical connection or address/port", device_str)
             die(e)
 
@@ -61,27 +67,17 @@ def _update_alive_device(
         if is_in_bootloader:
             logger.info("Device %s supposed to be alive, but found in bootloader", device_str)
             logger.debug("Trying to acquire fw-signature...")
-            fw_sig = update_monitor._restore_fw_signature(
-                slaveid, port, response_timeout, instrument=instrument
-            )
+            fw_sig = update_monitor._restore_fw_signature(modbus_connection)
             if fw_sig:
                 downloaded_fw, fw_version = update_monitor._do_download(
                     fw_sig, version, branch, mode, retrieve_latest_vnum=False
                 )  # we don't need any update-check here
                 logger.info("Will flash %s v:%s to bring %s %s alive", mode, fw_version, fw_sig, device_str)
                 update_monitor.direct_flash(
-                    downloaded_fw,
-                    modbus_connection.slaveid,
-                    modbus_connection.port,
-                    response_timeout,
-                    erase_all_settings=erase_settings,
-                    force=force,
-                    instrument=instrument,
+                    downloaded_fw, modbus_connection, erase_all_settings=erase_settings, force=force
                 )
                 if mode == "bootloader":  # we don't know fw's branch/version (only bl's ones)
-                    update_monitor.recover_device_iteration(
-                        fw_sig, modbus_connection.slaveid, modbus_connection.port, response_timeout, force
-                    )
+                    update_monitor.recover_device_iteration(fw_sig, modbus_connection, force)
             else:
                 logger.error("Could not find fw-signature for %s", device_str)
                 logger.error('Try to launch "recover" mode with --fw-sig provided manually')
@@ -143,27 +139,23 @@ def recover_fw(args):
 
     device_str = "%d %s" % (args.slaveid, args.port)
 
-    if args.slaveid != 0:  # A broadcast-connected device does not answer to in-bootloader-probing cmd
-        device = WBModbusDeviceBase(
-            args.slaveid, args.port, instrument=args.instrument, response_timeout=args.response_timeout
+    device = WBModbusDeviceBase(
+        args.slaveid, args.port, instrument=args.instrument, response_timeout=args.response_timeout
+    )
+    try:
+        conn_settings = update_monitor.find_bootloader_connection_params(
+            args.slaveid, args.port, args.response_timeout, args.instrument
         )
-        if not device.is_in_bootloader():
-            die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
+        device._set_port_settings_raw(conn_settings)
+    except NoResponseError:
+        die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
 
     try:
         fw_signatures_list = fw_downloader.get_fw_signatures_list()
-        args.known_signature = args.known_signature or update_monitor._restore_fw_signature(
-            args.slaveid, args.port, response_timeout=args.response_timeout, instrument=args.instrument
-        )
+        args.known_signature = args.known_signature or update_monitor._restore_fw_signature(device)
 
         if args.known_signature:
-            update_monitor.recover_device_iteration(
-                args.known_signature,
-                args.slaveid,
-                args.port,
-                in_bl_response_timeout=args.response_timeout,
-                instrument=args.instrument,
-            )
+            update_monitor.recover_device_iteration(args.known_signature, device)
 
         elif update_monitor.ask_user(
             "Try all possible fw_signatures (%s) for (%s); response_timeout: %.2f?"
@@ -172,13 +164,7 @@ def recover_fw(args):
             for fw_sig in fw_signatures_list:
                 logger.info("Trying %s:", fw_sig)
                 try:
-                    update_monitor.recover_device_iteration(
-                        fw_sig,
-                        args.slaveid,
-                        args.port,
-                        in_bl_response_timeout=args.response_timeout,
-                        instrument=args.instrument,
-                    )
+                    update_monitor.recover_device_iteration(fw_sig, device)
                     break
                 except fw_flasher.FlashingError:
                     continue
@@ -257,15 +243,7 @@ def flash_fw_file(args):
             die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
 
     try:
-        update_monitor.direct_flash(
-            args.fname,
-            args.slaveid,
-            args.port,
-            args.response_timeout,
-            args.erase_all,
-            args.erase_uart,
-            instrument=args.instrument,
-        )
+        update_monitor.direct_flash(args.fname, device, args.erase_all, args.erase_uart)
         return
     except fw_flasher.NotInBootloaderError as e:
         logger.error("Seems, device (%s) is not in bootloader mode", device_str)
