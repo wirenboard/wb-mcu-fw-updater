@@ -16,7 +16,7 @@ import yaml
 
 # TODO: rework params setting to get rid of imports-order-magic
 # isort: off
-from . import CONFIG, logger
+from . import CONFIG, MODE_FW, MODE_BOOTLOADER, logger
 import wb_modbus  # Params should be set before any wb_modbus usage!
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG["ALLOWED_UNSUCCESSFUL_MODBUS_TRIES"]
@@ -136,7 +136,7 @@ def download_fw_fallback(fw_signature, release_info, ask_for_latest=True, force=
         (may cause unstable behaviour; proceed at your own risk)?""",
             force_yes=force,
         ):
-            downloaded_fw = fw_downloader.RemoteFileWatcher("fw", branch_name="").download(
+            downloaded_fw = fw_downloader.RemoteFileWatcher(MODE_FW, branch_name="").download(
                 fw_signature, "latest"
             )
         else:
@@ -432,7 +432,7 @@ def is_reflash_necessary(
 def is_bootloader_latest(mb_connection):
     fw_sig = mb_connection.get_fw_signature()
     local_version = mb_connection.get_bootloader_version()
-    remote_version = fw_downloader.RemoteFileWatcher(mode="bootloader").get_latest_version_number(fw_sig)
+    remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
     return semantic_version.Version(local_version) == semantic_version.Version(remote_version)
 
 
@@ -449,7 +449,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     Retrieves "latest" version number (from latest.txt on s3); returns ("downloaded_fpath", "version_number")
     """
     downloader = fw_downloader.RemoteFileWatcher(mode=mode, branch_name=branch)
-    if mode == "fw":
+    if mode == MODE_FW:
         mode_name = "firmware"
     else:
         mode_name = "bootloader"
@@ -502,7 +502,7 @@ def _do_flash(modbus_connection, fw_fpath, mode, erase_settings, force=False):
         instrument=instrument,
     )
 
-    if mode == "bootloader":
+    if mode == MODE_BOOTLOADER:
         logger.info(
             'Bootloader was successfully flashed. Will flash released firmware for "%s"', fw_signature
         )
@@ -557,7 +557,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     """
     device_fw_version = (
         modbus_connection.get_bootloader_version()
-        if mode == "bootloader"
+        if mode == MODE_BOOTLOADER
         else modbus_connection.get_fw_version()
     )
     downloaded_fw, specified_fw_version = _do_download(fw_signature, specified_fw_version, branch_name, mode)
@@ -572,7 +572,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     ):
         _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
 
-    if mode != "bootloader" and not is_bootloader_latest(modbus_connection):
+    if mode == MODE_FW and not is_bootloader_latest(modbus_connection):
         logger.warning("Bootloader update for %s is available. Run `wb-mcu-fw-updater update-bl -a %d %s`", device_str, modbus_connection.slaveid, modbus_connection.port)
 
 
@@ -687,7 +687,7 @@ def _update_all(
             continue
         if latest_remote_version == "latest":  # Could be written in release
             latest_remote_version = fw_downloader.RemoteFileWatcher(
-                mode="fw", branch_name=""
+                mode=MODE_FW, branch_name=""
             ).get_latest_version_number(
                 fw_signature
             )  # to guess, is reflash needed or not
@@ -712,7 +712,7 @@ def _update_all(
             six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint)
         )
         try:
-            _do_flash(device_info.modbus_connection, downloaded_file, "fw", False, force=force)
+            _do_flash(device_info.modbus_connection, downloaded_file, MODE_FW, False, force=force)
         except fw_flasher.FlashingError as e:
             logger.exception(e)
             probing_result["in_bootloader"].append(device_info)

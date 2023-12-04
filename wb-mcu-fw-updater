@@ -8,6 +8,8 @@ from wb_common.mqtt_client import DEFAULT_BROKER_URL
 
 from wb_mcu_fw_updater import (
     CONFIG,
+    MODE_FW,
+    MODE_BOOTLOADER,
     die,
     fw_downloader,
     fw_flasher,
@@ -78,7 +80,7 @@ def _update_alive_device(
                     force=force,
                     instrument=instrument,
                 )
-                if mode == "bootloader":  # we don't know fw's branch/version (only bl's ones)
+                if mode == MODE_BOOTLOADER:  # we don't know fw's branch/version (only bl's ones)
                     update_monitor.recover_device_iteration(
                         fw_sig, modbus_connection.slaveid, modbus_connection.port, response_timeout, force
                     )
@@ -109,7 +111,7 @@ def update_fw(args):
     _update_alive_device(
         slaveid=args.slaveid,
         port=args.port,
-        mode="fw",
+        mode=MODE_FW,
         response_timeout=args.response_timeout,
         branch=args.branch_name,
         version=version,
@@ -125,7 +127,7 @@ def update_bootloader(args):
     _update_alive_device(
         slaveid=args.slaveid,
         port=args.port,
-        mode="bootloader",
+        mode=MODE_BOOTLOADER,
         response_timeout=args.response_timeout,
         branch=args.branch_name,
         version=version,
