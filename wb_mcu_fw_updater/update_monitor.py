@@ -429,6 +429,13 @@ def is_reflash_necessary(
         return _do_flash
 
 
+def is_bootloader_latest(mb_connection):
+    fw_sig = mb_connection.get_fw_signature()
+    local_version = mb_connection.get_bootloader_version()
+    remote_version = fw_downloader.RemoteFileWatcher(mode="bootloader").get_latest_version_number(fw_sig)
+    return semantic_version.Version(local_version) == semantic_version.Version(remote_version)
+
+
 def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     """
     Generic .wbfw downloading logic: ("release" is a default val for version)
@@ -565,6 +572,9 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     ):
         _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
 
+    if mode != "bootloader" and not is_bootloader_latest(modbus_connection):
+        logger.warning("Bootloader update for %s is available. Run `wb-mcu-fw-updater update-bl -a %d %s`", device_str, modbus_connection.slaveid, modbus_connection.port)
+
 
 class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
     __slots__ = ()
@@ -669,6 +679,8 @@ def _update_all(
             latest_remote_version, released_fw_endpoint = get_released_fw(
                 fw_signature, RELEASE_INFO
             )  # auto-updating only from releases
+            if not is_bootloader_latest(device_info.modbus_connection):
+                cmd_status["bl_update_available"].append(device_info)
         except NoReleasedFwError as e:
             logger.error(e)
             cmd_status["no_fw_release"].append(device_info)
@@ -749,6 +761,14 @@ def _update_all(
             status="Not supported in current %s release:" % RELEASE_INFO.get("RELEASE_NAME", ""),
             devices_list=cmd_status["no_fw_release"],
             additional_info="You may try to switch to newer release",
+        )
+
+    if cmd_status["bl_update_available"]:
+        print_status(
+            logging.WARNING,
+            status="Bootloader update available:",
+            devices_list=cmd_status["bl_update_available"],
+            additional_info="Try 'wb-mcu-fw-updater update-bl -a <addr> <port>' for each device",
         )
 
     if probing_result["disconnected"]:
