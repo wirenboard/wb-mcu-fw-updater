@@ -16,7 +16,7 @@ import yaml
 
 # TODO: rework params setting to get rid of imports-order-magic
 # isort: off
-from . import CONFIG, MODE_FW, MODE_BOOTLOADER, logger
+from . import CONFIG, MODE_BOOTLOADER, MODE_FW, logger
 import wb_modbus  # Params should be set before any wb_modbus usage!
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG["ALLOWED_UNSUCCESSFUL_MODBUS_TRIES"]
@@ -573,7 +573,12 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
 
     if mode == MODE_FW and not is_bootloader_latest(modbus_connection):
-        logger.warning("Bootloader update for %s is available. Run `wb-mcu-fw-updater update-bl -a %d %s`", device_str, modbus_connection.slaveid, modbus_connection.port)
+        logger.warning(
+            "Bootloader update for %s is available. Run `wb-mcu-fw-updater update-bl -a %d %s`",
+            device_str,
+            modbus_connection.slaveid,
+            modbus_connection.port,
+        )
 
 
 class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
@@ -793,9 +798,13 @@ def _update_all(
         )
 
     logger.info(
-        "%s upgraded, %s skipped upgrade, %s stuck in bootloader, %s disconnected and %s too old for any updates.",
+        "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, %s disconnected and %s too old for any updates.",
         user_log.colorize(str(len(cmd_status["ok"])), "GREEN" if cmd_status["ok"] else "RED"),
         user_log.colorize(str(len(cmd_status["skipped"])), "YELLOW" if cmd_status["skipped"] else "GREEN"),
+        user_log.colorize(
+            str(len(cmd_status["bl_update_available"])),
+            "YELLOW" if cmd_status["bl_update_available"] else "GREEN",
+        ),
         user_log.colorize(
             str(len(probing_result["in_bootloader"])), "RED" if probing_result["in_bootloader"] else "GREEN"
         ),

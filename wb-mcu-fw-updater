@@ -8,8 +8,8 @@ from wb_common.mqtt_client import DEFAULT_BROKER_URL
 
 from wb_mcu_fw_updater import (
     CONFIG,
-    MODE_FW,
     MODE_BOOTLOADER,
+    MODE_FW,
     die,
     fw_downloader,
     fw_flasher,
