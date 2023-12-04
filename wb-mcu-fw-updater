@@ -30,6 +30,15 @@ def check_internet_connection():
         die("%s is not accessible. Check Internet connection!" % CONFIG["ROOT_URL"])
 
 
+def find_connection_params(slaveid, port, response_timeout, instrument):
+    try:
+        return False, update_monitor.find_connection_params(slaveid, port, response_timeout, instrument)
+    except NoResponseError:
+        return True, update_monitor.find_bootloader_connection_params(
+            slaveid, port, response_timeout, instrument
+        )
+
+
 def _update_alive_device(
     slaveid,
     port,
@@ -48,20 +57,12 @@ def _update_alive_device(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
 
-    is_in_bootloader = False
     try:
-        conn_settings = update_monitor.find_connection_params(slaveid, port, response_timeout, instrument)
+        is_in_bootloader, conn_settings = find_connection_params(slaveid, port, response_timeout, instrument)
         modbus_connection._set_port_settings_raw(conn_settings)
-    except NoResponseError:
-        try:
-            conn_settings = update_monitor.find_bootloader_connection_params(
-                slaveid, port, response_timeout, instrument
-            )
-            modbus_connection._set_port_settings_raw(conn_settings)
-            is_in_bootloader = True
-        except NoResponseError as e:
-            logger.error("Can't connect to %s, check physical connection or address/port", device_str)
-            die(e)
+    except NoResponseError as e:
+        logger.error("Can't connect to %s, check physical connection or address/port", device_str)
+        die(e)
 
     try:
         if is_in_bootloader:
