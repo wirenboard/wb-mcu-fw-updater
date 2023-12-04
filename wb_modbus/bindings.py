@@ -784,7 +784,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     def reboot_to_bootloader(self):
         """
-        Rebooting device into bootloader via modbus reg. After writing the reg, device stuck in bootloader for 2 minutes.
+        Rebooting device into bootloader via modbus reg. After writing the reg, device is stuck in bootloader for 2 minutes.
 
         :raises RuntimeError: device has not stuck in bootloader
         """
