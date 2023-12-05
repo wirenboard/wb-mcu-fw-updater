@@ -8,7 +8,7 @@ import sys
 import six
 from six.moves import urllib
 
-from . import CONFIG, logger
+from . import CONFIG, MODE_FW, logger
 
 
 class WBRemoteStorageError(Exception):
@@ -108,7 +108,7 @@ class RemoteFileWatcher(object):
     A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
     """
 
-    def __init__(self, mode="fw", sort_by="by-signature", branch_name=""):
+    def __init__(self, mode=MODE_FW, sort_by="by-signature", branch_name=""):
         """
         Could download firmware or bootloder files from stable or specified branch.
 

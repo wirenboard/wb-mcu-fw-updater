@@ -36,6 +36,10 @@ CONFIG = {
 }
 
 
+MODE_FW = "fw"
+MODE_BOOTLOADER = "bootloader"
+
+
 def die(err=None, exitcode=1):
     """
     Exits gracefully, writing colored <err_message> to stderr via logging.

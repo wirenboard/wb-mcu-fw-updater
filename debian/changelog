@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.8.6) stable; urgency=medium
+
+  * update-fw / update-all: add bootloader update check
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 04 Dec 2023 13:22:28 +0300
+
 wb-mcu-fw-updater (1.8.5) stable; urgency=medium
 
   * Fix versions comparing when updating bootloader from master
