@@ -804,8 +804,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
         Devices, are not in bootloader, could raise error 04 too => combine with check, device is not answering to usual commands!
 
-        :return: has device raised modbus error 04 or not
-        :rtype: bool
+        :raises minimalmodbus.ModbusException: device is not in bootloader
         """
         _probe_func = _probe_func or self.write_u16_regs
 
