@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.9.0) stable; urgency=medium
+
+  * Use port settings configured in firmware for updating, if bootloader supports it
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.com>  Thu, 07 Dec 2023 09:46:16 +0500
+
 wb-mcu-fw-updater (1.8.6) stable; urgency=medium
 
   * update-fw / update-all: add bootloader update check
