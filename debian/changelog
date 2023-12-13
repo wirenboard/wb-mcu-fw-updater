@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.9.1) stable; urgency=medium
+
+  * Fix fallback to 9600N2 bootloader port settings
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.com>  Wed, 13 Dec 2023 09:26:49 +0500
+
 wb-mcu-fw-updater (1.9.0) stable; urgency=medium
 
   * Use port settings configured in firmware for updating, if bootloader supports it

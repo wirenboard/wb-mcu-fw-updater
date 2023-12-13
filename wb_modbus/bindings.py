@@ -780,6 +780,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                 )
         try:
             self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
+            settings = {"baudrate": 9600, "parity": "N", "stopbits": 2}
+            self._set_port_settings_raw(settings)
         except minimalmodbus.ModbusException:
             pass  # Device has rebooted and doesn't send response (Fixed in latest FWs)
 
