@@ -574,7 +574,9 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         allow_downgrade=True,
         debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
     ):
+        initial_port_settings = modbus_connection.settings
         _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
+        modbus_connection._set_port_settings_raw(initial_port_settings)
 
     if mode == MODE_FW and not is_bootloader_latest(modbus_connection):
         logger.warning(

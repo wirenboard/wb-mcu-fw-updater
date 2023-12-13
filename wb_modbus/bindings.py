@@ -773,7 +773,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             try:
                 self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader_preserve_port_settings"], 1)
                 logger.debug("Bootloader uses port settings set in firmware")
-                return
+                return self.settings
             except minimalmodbus.ModbusException as ex:
                 logger.debug(
                     "Switching to bootloader with same port settings failed: %s. Try to use 9600N2", ex
@@ -782,6 +782,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
         except minimalmodbus.ModbusException:
             pass  # Device has rebooted and doesn't send response (Fixed in latest FWs)
+        return {"baudrate": 9600, "parity": "N", "stopbits": 2}
 
     def reboot_to_bootloader(self):
         """
@@ -790,7 +791,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :raises RuntimeError: device has not stuck in bootloader
         """
         self.get_slave_addr()  # To ensure, device has connection
-        self._jump_to_bootloader()
+        self._set_port_settings_raw(self._jump_to_bootloader())
         time.sleep(0.5)  # Delay before going to bootloader
         try:
             self.get_slave_addr()
