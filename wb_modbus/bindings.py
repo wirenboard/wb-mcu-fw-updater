@@ -789,10 +789,10 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                     logger.debug("Bootloader uses port settings set in firmware")
                     return self.settings
                 except minimalmodbus.IllegalRequestError:
-                    logger.debug("Switching to bootloader with same port settings failed. Try to use 9600N2")
                     break
-                except minimalmodbus.ModbusException as ex:
-                    logger.debug("Switching to bootloader with same port settings failed: %s", ex)
+                except (minimalmodbus.ModbusException, ValueError):
+                    pass
+            logger.debug("Switching to bootloader with same port settings failed. Try to use 9600N2")
         try:
             self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
         except minimalmodbus.ModbusException:
