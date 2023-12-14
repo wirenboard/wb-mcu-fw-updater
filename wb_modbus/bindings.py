@@ -788,6 +788,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
                     )
                     logger.debug("Bootloader uses port settings set in firmware")
                     return self.settings
+                # IllegalRequestError means, that current firmware or bootloader do not support
+                # updating using settings other than 9600N2. So stop reties
                 except minimalmodbus.IllegalRequestError:
                     break
                 except (minimalmodbus.ModbusException, ValueError):
