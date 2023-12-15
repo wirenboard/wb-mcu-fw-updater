@@ -258,6 +258,17 @@ class MinimalModbusAPIWrapper(object):
         :param value: value, to write into register (only positive)
         :type value: int
         """
+        self.write_once_u16(addr, value)
+
+    def write_once_u16(self, addr, value):
+        """
+        Writing single holding register (stores unsigned int16).
+
+        :param addr: address of register
+        :type addr: int
+        :param value: value, to write into register (only positive)
+        :type value: int
+        """
         self.device.write_register(addr, value, 0, 6, signed=False)
 
     @apply_serial_settings
@@ -770,14 +781,20 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             or self.device.serial.parity != "N"
             or self.device.serial.stopbits != 2
         ):
-            try:
-                self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader_preserve_port_settings"], 1)
-                logger.debug("Bootloader uses port settings set in firmware")
-                return self.settings
-            except minimalmodbus.ModbusException as ex:
-                logger.debug(
-                    "Switching to bootloader with same port settings failed: %s. Try to use 9600N2", ex
-                )
+            for _ in range(ALLOWED_UNSUCCESSFUL_TRIES):
+                try:
+                    self.write_once_u16(
+                        self.COMMON_REGS_MAP["reboot_to_bootloader_preserve_port_settings"], 1
+                    )
+                    logger.debug("Bootloader uses port settings set in firmware")
+                    return self.settings
+                # IllegalRequestError means, that current firmware or bootloader do not support
+                # updating using settings other than 9600N2. So stop reties
+                except minimalmodbus.IllegalRequestError:
+                    break
+                except (minimalmodbus.ModbusException, ValueError):
+                    pass
+            logger.debug("Switching to bootloader with same port settings failed. Try to use 9600N2")
         try:
             self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
         except minimalmodbus.ModbusException:
