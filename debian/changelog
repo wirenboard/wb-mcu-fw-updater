@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.0) stable; urgency=medium
+
+  * check if user data (ir commands for example) may be erased during update
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 09 Jan 2023 13:43:21 +0300
+
 wb-mcu-fw-updater (1.9.2) stable; urgency=medium
 
   * Speed up bootloader baud rate detection
