@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.9.3) stable; urgency=medium
+
+  * add slaveid 247 to allowed ones
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 11 Jan 2024 12:25:12 +0300
+
 wb-mcu-fw-updater (1.9.2) stable; urgency=medium
 
   * Speed up bootloader baud rate detection
