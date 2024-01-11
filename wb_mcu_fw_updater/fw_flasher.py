@@ -30,7 +30,7 @@ class BootloaderCmdError(FlashingError):
 
 class ParsedWBFW:
     INFO_BLOCK_LENGTH_U16_REGS = 16
-    DATA_BLOCK_LENGTH_U16_regs = 68
+    DATA_BLOCK_LENGTH_U16_REGS = 68
 
     def __init__(self, wbfw_fpath):
         self.fpath = wbfw_fpath
@@ -57,7 +57,7 @@ class ParsedWBFW:
         """
         bs = int(os.path.getsize(fw_fpath))
         if bs % 2:
-            raise IncorrectFwError("Fw file should be even-bytes long!\nGot %s (%db)" % (fw_fpath, bs))
+            raise IncorrectFwError(f"Fw file should be even-bytes long! Got {fw_fpath} ({bs}b)")
 
         u16_regs = []
         with open(fw_fpath, "rb") as fp:
@@ -77,8 +77,8 @@ class ParsedWBFW:
                 f"Info block size should be {self.INFO_BLOCK_LENGTH_U16_REGS} regs! Got {len(self._info_values)} instead\nRaw regs: {self._info_values}"
             )
         self._data_chunks = [
-            data_values[i : i + self.DATA_BLOCK_LENGTH_U16_regs]
-            for i in range(0, len(data_values), self.DATA_BLOCK_LENGTH_U16_regs)
+            data_values[i : i + self.DATA_BLOCK_LENGTH_U16_REGS]
+            for i in range(0, len(data_values), self.DATA_BLOCK_LENGTH_U16_REGS)
         ]
 
 
@@ -183,7 +183,7 @@ class ModbusInBlFlasher(object):
             available_chunks_fs = self.instrument.read_u16(self.GET_FREE_SPACE_FLASHFS_REG)
             logger.debug("Device (%s) has available space of %d chunks", device_str, available_chunks_fs)
         except minimalmodbus.ModbusException:
-            logger.exception(f"Treating device ({device_str}) as erasing user data!")
+            logger.exception("Treating device (%s) as erasing user data!", device_str)
             return False
         return available_chunks_fs > len(parsed_wbfw.data_chunks)
 
