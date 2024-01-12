@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.0) stable; urgency=medium
+
+  * update-fw / update-all: suggest to update bootloader if running from interactive shell
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 12 Jan 2024 21:12:10 +0300
+
 wb-mcu-fw-updater (1.9.2) stable; urgency=medium
 
   * Speed up bootloader baud rate detection

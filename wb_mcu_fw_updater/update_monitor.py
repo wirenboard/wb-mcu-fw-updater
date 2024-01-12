@@ -505,7 +505,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
 
 
 def is_interactive_shell():
-    return os.getenv("WBGSM_INTERACTIVE") == "1"  # TODO: maybe rename env var?
+    return os.getenv("WBGSM_INTERACTIVE", "").strip() != ""  # TODO: maybe rename env var?
 
 
 def is_bl_update_required(modbus_connection, force=False):
