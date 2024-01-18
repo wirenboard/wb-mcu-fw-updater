@@ -272,7 +272,7 @@ def add_common_logic_args(parser):
         action="store_true",
         dest="force",
         default=False,
-        help="Perform force device reflash, even if firmware is latest. (Default: %(default)s)",
+        help='Answer "Yes" to all questions. (Default: %(default)s)',
     )
     parser.add_argument(
         "--debug",
