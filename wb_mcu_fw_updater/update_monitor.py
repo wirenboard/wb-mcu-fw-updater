@@ -3,6 +3,7 @@
 
 import json
 import logging
+import os
 import subprocess
 import sys
 import termios
@@ -383,7 +384,8 @@ def direct_flash(
         flasher.reset_eeprom()
 
     parsed_wbfw = fw_flasher.ParsedWBFW(fw_fpath)
-    if not flasher.is_userdata_preserved(parsed_wbfw):
+    # skip annoying question on bootloader update
+    if (len(parsed_wbfw.data_chunks) > 64) and (not flasher.is_userdata_preserved(parsed_wbfw)):
         _ensure("User data (such as ir commands) will be erased. Are you sure? (do a backup if not!)")
     flasher.flash_in_bl(parsed_wbfw)
 
@@ -506,15 +508,37 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     return downloaded_fw, version
 
 
+def is_interactive_shell():
+    return os.getenv("WBGSM_INTERACTIVE", "").strip() != ""  # TODO: maybe rename env var?
+
+
+def is_bl_update_required(modbus_connection, force=False):
+    if is_bootloader_latest(modbus_connection):
+        return False
+    suggestion_str = (
+        f"Bootloader update for {modbus_connection.get_fw_signature()} "
+        f"{modbus_connection.port}:{modbus_connection.slaveid} is available! "
+        "(bootloader updates are highly recommended to install)"
+    )
+    if is_interactive_shell():
+        return ask_user(suggestion_str + " Do a bootloader update?", force)
+    logger.warning(suggestion_str)
+    return False
+
+
 def _do_flash(modbus_connection, fw_fpath, mode, erase_settings, force=False):
     fw_signature = modbus_connection.get_fw_signature()
-    logger.debug(
-        'Flashing approved for "%s" (%s : %d)',
-        fw_signature,
-        modbus_connection.port,
-        modbus_connection.slaveid,
-    )
+    device_str = f"{fw_signature} {modbus_connection.port}:{modbus_connection.slaveid}"
+    logger.debug("Flashing approved for %s", device_str)
+    bl_to_flash = None
+    if mode == MODE_FW:
+        if is_bl_update_required(modbus_connection, force):
+            bl_to_flash = fw_downloader.RemoteFileWatcher(MODE_BOOTLOADER).download(fw_signature, "latest")
+
     modbus_connection.reboot_to_bootloader()
+    if bl_to_flash:
+        logger.debug("Performing bootloader update for %s", device_str)
+        direct_flash(bl_to_flash, modbus_connection, force=force)
     direct_flash(fw_fpath, modbus_connection, erase_settings, force=force)
 
     if mode == MODE_BOOTLOADER:
@@ -580,14 +604,6 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         initial_port_settings = modbus_connection.settings
         _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
         modbus_connection._set_port_settings_raw(initial_port_settings)
-
-    if mode == MODE_FW and not is_bootloader_latest(modbus_connection):
-        logger.warning(
-            "Bootloader update for %s is available. Run `wb-mcu-fw-updater update-bl -a %d %s`",
-            device_str,
-            modbus_connection.slaveid,
-            modbus_connection.port,
-        )
 
 
 class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
@@ -699,8 +715,6 @@ def _update_all(
             latest_remote_version, released_fw_endpoint = get_released_fw(
                 fw_signature, RELEASE_INFO
             )  # auto-updating only from releases
-            if not is_bootloader_latest(device_info.modbus_connection):
-                cmd_status["bl_update_available"].append(device_info)
         except NoReleasedFwError as e:
             logger.error(e)
             cmd_status["no_fw_release"].append(device_info)
@@ -733,6 +747,8 @@ def _update_all(
         )
         try:
             _do_flash(device_info.modbus_connection, downloaded_file, MODE_FW, False, force=force)
+            if not is_bootloader_latest(device_info.modbus_connection):
+                cmd_status["bl_update_available"].append(device_info)
         except fw_flasher.FlashingError as e:
             logger.exception(e)
             probing_result["in_bootloader"].append(device_info)
@@ -751,6 +767,8 @@ def _update_all(
             continue  # remain as in-bootloader
         try:
             recover_device_iteration(fw_signature, device_info.modbus_connection, force)
+            if not is_bootloader_latest(device_info.modbus_connection):
+                cmd_status["bl_update_available"].append(device_info)
         except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
             logger.exception(e)
         else:

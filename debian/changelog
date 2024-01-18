@@ -1,8 +1,20 @@
-wb-mcu-fw-updater (1.10.0) stable; urgency=medium
+wb-mcu-fw-updater (1.10.1) stable; urgency=medium
 
   * check if user data (ir commands for example) may be erased during update
 
- -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 09 Jan 2023 13:43:21 +0300
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 18 Jan 2023 14:02:13 +0300
+
+wb-mcu-fw-updater (1.10.0) stable; urgency=medium
+
+  * update-fw / update-all: suggest to update bootloader if running from interactive shell
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 18 Jan 2024 13:09:10 +0300
+
+wb-mcu-fw-updater (1.9.3) stable; urgency=medium
+
+  * add slaveid 247 to allowed ones
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 11 Jan 2024 12:25:12 +0300
 
 wb-mcu-fw-updater (1.9.2) stable; urgency=medium
 
