@@ -318,7 +318,7 @@ def add_modbus_connection_args(parser):
         dest="slaveid",
         metavar="<slaveid>",
         required=True,
-        choices=range(1, 247),
+        choices=range(1, 248),
         help="Slave address of the device.",
     )
     parser.add_argument("port", type=str, metavar="<port>", help="Serial port, device connected to.")
