@@ -711,8 +711,6 @@ def _update_all(
             latest_remote_version, released_fw_endpoint = get_released_fw(
                 fw_signature, RELEASE_INFO
             )  # auto-updating only from releases
-            if not is_bootloader_latest(device_info.modbus_connection):
-                cmd_status["bl_update_available"].append(device_info)
         except NoReleasedFwError as e:
             logger.error(e)
             cmd_status["no_fw_release"].append(device_info)
@@ -745,6 +743,8 @@ def _update_all(
         )
         try:
             _do_flash(device_info.modbus_connection, downloaded_file, MODE_FW, False, force=force)
+            if not is_bootloader_latest(device_info.modbus_connection):
+                cmd_status["bl_update_available"].append(device_info)
         except fw_flasher.FlashingError as e:
             logger.exception(e)
             probing_result["in_bootloader"].append(device_info)
@@ -763,6 +763,8 @@ def _update_all(
             continue  # remain as in-bootloader
         try:
             recover_device_iteration(fw_signature, device_info.modbus_connection, force)
+            if not is_bootloader_latest(device_info.modbus_connection):
+                cmd_status["bl_update_available"].append(device_info)
         except (fw_flasher.FlashingError, fw_downloader.WBRemoteStorageError) as e:
             logger.exception(e)
         else:
