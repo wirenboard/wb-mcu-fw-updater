@@ -54,6 +54,9 @@ class ConfigParsingError(Exception):
     pass
 
 
+DownloadedWBFW = namedtuple("DownloadedWBFW", "mode fpath version")
+
+
 def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
     """
     Asking user before potentionally dangerous action.
@@ -501,7 +504,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
         version = downloader.get_latest_version_number(fw_sig)  # to guess, is reflash needed or not
 
     downloaded_fw = downloaded_fw or downloader.download(fw_sig, version)
-    return downloaded_fw, version
+    return DownloadedWBFW(mode=mode, fpath=downloaded_fw, version=version)
 
 
 def is_interactive_shell():
@@ -525,22 +528,28 @@ def is_bl_update_required(modbus_connection, force=False):
     return False
 
 
-def _do_flash(modbus_connection, fw_fpath, mode, erase_settings, force=False):
+def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings, force=False):
     fw_signature = modbus_connection.get_fw_signature()
     device_str = f"{fw_signature} {modbus_connection.port}:{modbus_connection.slaveid}"
     logger.debug("Flashing approved for %s", device_str)
     bl_to_flash = None
-    if mode == MODE_FW:
+    if downloaded_wbfw.mode == MODE_FW:
         if is_bl_update_required(modbus_connection, force):
             bl_to_flash = fw_downloader.RemoteFileWatcher(MODE_BOOTLOADER).download(fw_signature, "latest")
+    elif downloaded_wbfw.mode == MODE_BOOTLOADER:
+        actual_bl_version = modbus_connection.get_bootloader_version()
+        if semantic_version.Version(downloaded_wbfw.version) < semantic_version.Version(actual_bl_version):
+            raise UpdateDeviceError(
+                f"Bootloader downgrade (v{actual_bl_version} -> v{downloaded_wbfw.version}) is not allowed!"
+            )
 
     modbus_connection.reboot_to_bootloader()
     if bl_to_flash:
         logger.debug("Performing bootloader update for %s", device_str)
         direct_flash(bl_to_flash, modbus_connection)
-    direct_flash(fw_fpath, modbus_connection, erase_settings, force=force)
+    direct_flash(downloaded_wbfw.fpath, modbus_connection, erase_settings, force=force)
 
-    if mode == MODE_BOOTLOADER:
+    if downloaded_wbfw.mode == MODE_BOOTLOADER:
         logger.info(
             'Bootloader was successfully flashed. Will flash released firmware for "%s"', fw_signature
         )
@@ -568,16 +577,14 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             % (fw_signature, branch_name, specified_fw_version),
             force_yes=force,
         ):
-            downloaded_fw, remote_version = _do_download(
-                fw_signature, specified_fw_version, branch_name, mode
-            )
+            downloaded_wbfw = _do_download(fw_signature, specified_fw_version, branch_name, mode)
             logger.info(
                 "%s %s -> %s",
                 user_log.colorize("Confirmed update:", "GREEN"),
                 modbus_connection.get_fw_version(),
-                remote_version,
+                downloaded_wbfw.version,
             )
-            _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
+            _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
             return
         else:
             raise UserCancelledError("Flashing %s has rejected" % fw_signature)
@@ -590,18 +597,18 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         if mode == MODE_BOOTLOADER
         else modbus_connection.get_fw_version()
     )
-    downloaded_fw, specified_fw_version = _do_download(fw_signature, specified_fw_version, branch_name, mode)
+    downloaded_wbfw = _do_download(fw_signature, specified_fw_version, branch_name, mode)
 
     logger.info("%s %s:", mode, device_str)
     if is_reflash_necessary(
         actual_version=device_fw_version,
-        provided_version=specified_fw_version,
+        provided_version=downloaded_wbfw.version,
         force_reflash=force,
         allow_downgrade=True,
         debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
     ):
         initial_port_settings = modbus_connection.settings
-        _do_flash(modbus_connection, downloaded_fw, mode, erase_settings, force=force)
+        _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
         modbus_connection._set_port_settings_raw(initial_port_settings)
 
 
@@ -733,19 +740,23 @@ def _update_all(
             allow_downgrade=allow_downgrade,
             debug_info="(%s)" % str(device_info),
         ):
-            cmd_status["to_perform"].append([device_info, released_fw_endpoint])
+            downloaded_wbfw = DownloadedWBFW(
+                mode=MODE_FW,
+                fpath=fw_downloader.download_remote_file(
+                    urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint)
+                ),
+                version=latest_remote_version,
+            )
+            cmd_status["to_perform"].append([device_info, downloaded_wbfw])
         else:
             cmd_status["skipped"].append(device_info)
 
-    for device_info, released_fw_endpoint in cmd_status[
+    for device_info, downloaded_wbfw in cmd_status[
         "to_perform"
     ]:  # Devices, were alive and supported fw_updates
         logger.info("Flashing firmware to %s", str(device_info))
-        downloaded_file = fw_downloader.download_remote_file(
-            six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint)
-        )
         try:
-            _do_flash(device_info.modbus_connection, downloaded_file, MODE_FW, False, force=force)
+            _do_flash(device_info.modbus_connection, downloaded_wbfw, False, force=force)
             if not is_bootloader_latest(device_info.modbus_connection):
                 cmd_status["bl_update_available"].append(device_info)
         except fw_flasher.FlashingError as e:
