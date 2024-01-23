@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.1) stable; urgency=medium
+
+  * Bootloader downgrade is not allowed
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 23 Jan 2024 16:02:21 +0300
+
 wb-mcu-fw-updater (1.10.0) stable; urgency=medium
 
   * update-fw / update-all: suggest to update bootloader if running from interactive shell
