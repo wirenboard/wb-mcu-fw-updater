@@ -509,10 +509,13 @@ def is_interactive_shell():
 
 
 def is_bl_update_required(modbus_connection, force=False):
-    if is_bootloader_latest(modbus_connection):
+    fw_sig = modbus_connection.get_fw_signature()
+    local_version = modbus_connection.get_bootloader_version()
+    remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
+    if semantic_version.Version(local_version) == semantic_version.Version(remote_version):
         return False
     suggestion_str = (
-        f"Bootloader update for {modbus_connection.get_fw_signature()} "
+        f"Bootloader update (v{local_version} -> v{remote_version}) for {fw_sig} "
         f"{modbus_connection.port}:{modbus_connection.slaveid} is available! "
         "(bootloader updates are highly recommended to install)"
     )
