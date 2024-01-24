@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.2) stable; urgency=medium
+
+  * Bootloader downgrade is not allowed
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 24 Jan 2024 14:02:21 +0300
+
 wb-mcu-fw-updater (1.10.1) stable; urgency=medium
 
   * check if user data (ir commands for example) may be erased during update
