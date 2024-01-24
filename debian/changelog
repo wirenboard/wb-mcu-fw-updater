@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.1) stable; urgency=medium
+
+  * check if user data (ir commands for example) may be erased during update
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 18 Jan 2023 14:02:13 +0300
+
 wb-mcu-fw-updater (1.10.0) stable; urgency=medium
 
   * update-fw / update-all: suggest to update bootloader if running from interactive shell

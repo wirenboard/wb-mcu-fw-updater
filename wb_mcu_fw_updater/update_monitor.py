@@ -363,7 +363,7 @@ def direct_flash(
             return True
         else:
             raise UserCancelledError(
-                "Reset of Device's settings was requested, but rejected after. Device is in bootloder now; wait 120s, untill it starts."
+                f"Rejected by user. Device ({device.slaveid}, {device.port}) is in bootloder now; wait 120s, untill it starts."
             )
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
@@ -383,7 +383,11 @@ def direct_flash(
     if erase_all_settings and _ensure(default_msg + " (it will erase ALL device's settings)"):
         flasher.reset_eeprom()
 
-    flasher.flash_in_bl(fw_fpath)
+    parsed_wbfw = fw_flasher.ParsedWBFW(fw_fpath)
+    # skip annoying question on bootloader update
+    if (len(parsed_wbfw.data_chunks) > 64) and (not flasher.is_userdata_preserved(parsed_wbfw)):
+        _ensure("User data (such as ir commands) will be erased. Are you sure? (do a backup if not!)")
+    flasher.flash_in_bl(parsed_wbfw)
 
 
 def is_reflash_necessary(
@@ -534,7 +538,7 @@ def _do_flash(modbus_connection, fw_fpath, mode, erase_settings, force=False):
     modbus_connection.reboot_to_bootloader()
     if bl_to_flash:
         logger.debug("Performing bootloader update for %s", device_str)
-        direct_flash(bl_to_flash, modbus_connection)
+        direct_flash(bl_to_flash, modbus_connection, force=force)
     direct_flash(fw_fpath, modbus_connection, erase_settings, force=force)
 
     if mode == MODE_BOOTLOADER:
