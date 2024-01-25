@@ -547,6 +547,7 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
                 f"Bootloader downgrade (v{actual_bl_version} -> v{downloaded_wbfw.version}) is not allowed!"
             )
 
+    initial_port_settings = modbus_connection.settings
     modbus_connection.reboot_to_bootloader()
     if bl_to_flash:
         logger.debug("Performing bootloader update for %s", device_str)
@@ -559,6 +560,7 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
         )
         downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO, force=force)
         direct_flash(downloaded_fw, modbus_connection, erase_settings, force=force)
+    modbus_connection._set_port_settings_raw(initial_port_settings)
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
@@ -611,9 +613,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         allow_downgrade=True,
         debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
     ):
-        initial_port_settings = modbus_connection.settings
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
-        modbus_connection._set_port_settings_raw(initial_port_settings)
 
 
 class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
