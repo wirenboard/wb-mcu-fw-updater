@@ -552,6 +552,7 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
     )
 
     initial_port_settings = modbus_connection.settings
+    initial_response_timeout = modbus_connection.response_timeout
     modbus_connection.reboot_to_bootloader()
     if bl_to_flash:
         logger.debug("Performing bootloader update for %s", device_str)
@@ -579,6 +580,7 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
             do_check_userdata_saving=do_check_userdata_saving,
         )
     modbus_connection._set_port_settings_raw(initial_port_settings)
+    modbus_connection.set_response_timeout(initial_response_timeout)
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
