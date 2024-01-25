@@ -75,7 +75,13 @@ def _update_alive_device(
                 downloaded_wbfw = update_monitor._do_download(
                     fw_sig, version, branch, mode, retrieve_latest_vnum=False
                 )  # we don't need any update-check here
-                logger.info("Will flash %s v:%s to bring %s %s alive", mode, downloaded_wbfw.version, fw_sig, device_str)
+                logger.info(
+                    "Will flash %s v%s to bring %s %s alive",
+                    mode,
+                    downloaded_wbfw.version,
+                    fw_sig,
+                    device_str,
+                )
                 update_monitor.direct_flash(
                     downloaded_wbfw.fpath, modbus_connection, erase_all_settings=erase_settings, force=force
                 )
