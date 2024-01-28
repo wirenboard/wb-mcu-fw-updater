@@ -354,6 +354,7 @@ def direct_flash(
     erase_all_settings=False,
     erase_uart_only=False,
     force=False,
+    do_check_userdata_saving=False,
 ):
     """
     Performing operations in bootloader (device is already into):
@@ -387,8 +388,7 @@ def direct_flash(
         flasher.reset_eeprom()
 
     parsed_wbfw = fw_flasher.ParsedWBFW(fw_fpath)
-    # skip annoying question on bootloader update
-    if (len(parsed_wbfw.data_chunks) > 64) and (not flasher.is_userdata_preserved(parsed_wbfw)):
+    if do_check_userdata_saving and (not flasher.is_userdata_preserved(parsed_wbfw)):
         _ensure("User data (such as ir commands) will be erased. Are you sure? (do a backup if not!)")
     flasher.flash_in_bl(parsed_wbfw)
 
@@ -537,28 +537,50 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
     device_str = f"{fw_signature} {modbus_connection.port}:{modbus_connection.slaveid}"
     logger.debug("Flashing approved for %s", device_str)
     bl_to_flash = None
+    actual_bl_version = modbus_connection.get_bootloader_version()
     if downloaded_wbfw.mode == MODE_FW:
         if is_bl_update_required(modbus_connection, force):
             bl_to_flash = fw_downloader.RemoteFileWatcher(MODE_BOOTLOADER).download(fw_signature, "latest")
     elif downloaded_wbfw.mode == MODE_BOOTLOADER:
-        actual_bl_version = modbus_connection.get_bootloader_version()
         if semantic_version.Version(downloaded_wbfw.version) < semantic_version.Version(actual_bl_version):
             raise UpdateDeviceError(
                 f"Bootloader downgrade (v{actual_bl_version} -> v{downloaded_wbfw.version}) is not allowed!"
             )
 
+    do_check_userdata_saving = semantic_version.Version(actual_bl_version) >= semantic_version.Version(
+        "1.2.0"
+    )
+
+    initial_port_settings = modbus_connection.settings
+    initial_response_timeout = modbus_connection.response_timeout
     modbus_connection.reboot_to_bootloader()
     if bl_to_flash:
         logger.debug("Performing bootloader update for %s", device_str)
-        direct_flash(bl_to_flash, modbus_connection, force=force)
-    direct_flash(downloaded_wbfw.fpath, modbus_connection, erase_settings, force=force)
+        direct_flash(
+            bl_to_flash, modbus_connection, force=force, do_check_userdata_saving=False
+        )  # bl is relatively small in chunk-size
+    direct_flash(
+        downloaded_wbfw.fpath,
+        modbus_connection,
+        erase_settings,
+        force=force,
+        do_check_userdata_saving=do_check_userdata_saving,
+    )
 
     if downloaded_wbfw.mode == MODE_BOOTLOADER:
         logger.info(
             'Bootloader was successfully flashed. Will flash released firmware for "%s"', fw_signature
         )
         downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO, force=force)
-        direct_flash(downloaded_fw, modbus_connection, erase_settings, force=force)
+        direct_flash(
+            downloaded_fw,
+            modbus_connection,
+            erase_settings,
+            force=force,
+            do_check_userdata_saving=do_check_userdata_saving,
+        )
+    modbus_connection._set_port_settings_raw(initial_port_settings)
+    modbus_connection.set_response_timeout(initial_response_timeout)
 
 
 def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
@@ -611,9 +633,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         allow_downgrade=True,
         debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
     ):
-        initial_port_settings = modbus_connection.settings
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
-        modbus_connection._set_port_settings_raw(initial_port_settings)
 
 
 class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):

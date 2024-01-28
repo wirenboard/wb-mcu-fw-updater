@@ -180,9 +180,7 @@ class ModbusInBlFlasher(object):
         """
         device_str = f"{self.instrument.slaveid}, {self.instrument.port}"
         try:
-            available_chunks_fs = self.instrument.device.read_register(
-                self.GET_FREE_SPACE_FLASHFS_REG, 0, 3, signed=False
-            )
+            available_chunks_fs = self.instrument.read_u16(self.GET_FREE_SPACE_FLASHFS_REG)
             logger.debug("Device (%s) has available space of %d chunks", device_str, available_chunks_fs)
         except minimalmodbus.ModbusException:
             logger.error("Device (%s) has too old bootloader to save user data!", device_str)

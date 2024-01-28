@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.3) stable; urgency=medium
+
+  * Fix bootloader updating issues on custom uart params
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 25 Jan 2024 15:32:51 +0300
+
 wb-mcu-fw-updater (1.10.2) stable; urgency=medium
 
   * Bootloader downgrade is not allowed

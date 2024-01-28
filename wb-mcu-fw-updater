@@ -72,12 +72,18 @@ def _update_alive_device(
             logger.debug("Trying to acquire fw-signature...")
             fw_sig = update_monitor._restore_fw_signature(modbus_connection)
             if fw_sig:
-                downloaded_fw, fw_version = update_monitor._do_download(
+                downloaded_wbfw = update_monitor._do_download(
                     fw_sig, version, branch, mode, retrieve_latest_vnum=False
                 )  # we don't need any update-check here
-                logger.info("Will flash %s v:%s to bring %s %s alive", mode, fw_version, fw_sig, device_str)
+                logger.info(
+                    "Will flash %s v%s to bring %s %s alive",
+                    mode,
+                    downloaded_wbfw.version,
+                    fw_sig,
+                    device_str,
+                )
                 update_monitor.direct_flash(
-                    downloaded_fw, modbus_connection, erase_all_settings=erase_settings, force=force
+                    downloaded_wbfw.fpath, modbus_connection, erase_all_settings=erase_settings, force=force
                 )
                 if mode == MODE_BOOTLOADER:  # we don't know fw's branch/version (only bl's ones)
                     update_monitor.recover_device_iteration(fw_sig, modbus_connection, force)
