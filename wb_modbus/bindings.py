@@ -736,7 +736,6 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             return version[:len(version)-1]
         except minimalmodbus.IllegalRequestError:
             pass
-            #raise TooOldDeviceError("Device is too old and haven't bootloader version in regs!")
 
         # Try to read reduced version string for compatibility with old devices
         try:
