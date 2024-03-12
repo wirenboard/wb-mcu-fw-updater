@@ -7,18 +7,9 @@ from copy import deepcopy
 from functools import wraps
 from itertools import product
 
-from . import (
-    ALLOWED_BAUDRATES,
-    ALLOWED_PARITIES,
-    ALLOWED_STOPBITS,
-    ALLOWED_UNSUCCESSFUL_TRIES,
-    CLOSE_PORT_AFTER_EACH_CALL,
-    DEBUG,
-    WBMAP_MARKER,
-    instruments,
-    logger,
-    minimalmodbus,
-)
+from . import (ALLOWED_BAUDRATES, ALLOWED_PARITIES, ALLOWED_STOPBITS,
+               ALLOWED_UNSUCCESSFUL_TRIES, CLOSE_PORT_AFTER_EACH_CALL, DEBUG,
+               WBMAP_MARKER, instruments, logger, minimalmodbus)
 
 
 class TooOldDeviceError(minimalmodbus.ModbusException):

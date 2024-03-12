@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.4) stable; urgency=medium
+
+  * Formatting, no functional changes
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Tue, 12 Mar 2024 12:54:59 +0300
+
 wb-mcu-fw-updater (1.10.3) stable; urgency=medium
 
   * Fix bootloader updating issues on custom uart params
