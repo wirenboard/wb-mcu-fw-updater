@@ -728,10 +728,20 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             raise TooOldDeviceError("Device is too old and haven't fw_signature in regs!")
 
     def get_bootloader_version(self):
+        # Try to read full-length version string. The last char is STM type or dev bootloader sign
+        try:
+            version = self.read_string(
+                self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH
+            )
+            return version[:-1]
+        except minimalmodbus.IllegalRequestError:
+            pass
+
+        # Try to read reduced version string for compatibility with old devices (available only in fw)
         try:
             return self.read_string(
                 self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH - 1
-            )  # The last char is STM type
+            )
         except minimalmodbus.IllegalRequestError:
             raise TooOldDeviceError("Device is too old and haven't bootloader version in regs!")
 
