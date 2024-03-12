@@ -733,7 +733,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             version = self.read_string(
                 self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH
             )
-            return version[:len(version)-1]
+            return version[: len(version) - 1]
         except minimalmodbus.IllegalRequestError:
             pass
 
