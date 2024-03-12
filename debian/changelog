@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.5) stable; urgency=medium
+
+  * lib: perform_bootloader_cmd is public method
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 12 Mar 2024 13:12:11 +0300
+
 wb-mcu-fw-updater (1.10.4) stable; urgency=medium
 
   * Fix getting bootloader virsion if device in bootloader

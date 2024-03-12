@@ -157,7 +157,7 @@ class ModbusInBlFlasher(object):
                 "Flashing has failed at last frame (device remains in bootloader). Check device's connection!"
             )
 
-    def _perform_bootloader_cmd(self, reg):
+    def perform_bootloader_cmd(self, reg):
         try:
             self.instrument.write_u16(reg, 1)
         except minimalmodbus.IllegalRequestError as e:
@@ -167,11 +167,11 @@ class ModbusInBlFlasher(object):
 
     def reset_uart(self):
         logger.debug("Resetting uart params")
-        self._perform_bootloader_cmd(self.UART_SETTINGS_RESET_REG)
+        self.perform_bootloader_cmd(self.UART_SETTINGS_RESET_REG)
 
     def reset_eeprom(self):
         logger.debug("Resetting all device's settings")
-        self._perform_bootloader_cmd(self.EEPROM_ERASE_REG)
+        self.perform_bootloader_cmd(self.EEPROM_ERASE_REG)
 
     def is_userdata_preserved(self, parsed_wbfw: ParsedWBFW):
         """
