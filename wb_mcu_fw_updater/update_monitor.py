@@ -937,9 +937,11 @@ def _recover_all(minimal_response_timeout, force=False, instrument=instruments.S
         "%s recovered, %s was already working, %s not recovered and %s not answered to recover cmd.",
         user_log.colorize(
             str(len(cmd_status["ok"])),
-            "GREEN"
-            if (cmd_status["ok"] or (not cmd_status["to_perform"] and not cmd_status["skipped"]))
-            else "RED",
+            (
+                "GREEN"
+                if (cmd_status["ok"] or (not cmd_status["to_perform"] and not cmd_status["skipped"]))
+                else "RED"
+            ),
         ),
         user_log.colorize(str(len(probing_result["alive"])), "GREEN") if probing_result["alive"] else "0",
         user_log.colorize(str(len(cmd_status["skipped"])), "RED" if cmd_status["skipped"] else "GREEN"),
