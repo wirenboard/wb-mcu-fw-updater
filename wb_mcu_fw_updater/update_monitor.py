@@ -516,6 +516,9 @@ def is_interactive_shell():
 
 
 def is_bl_update_required(modbus_connection, force=False):
+    # TODO: some users faced bl-update problems (from v1.3 to 1.4) => temporarily disable auto-update bootloaders
+    return False
+
     fw_sig = modbus_connection.get_fw_signature()
     local_version = modbus_connection.get_bootloader_version()
     remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
