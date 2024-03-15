@@ -1,3 +1,10 @@
+wb-mcu-fw-updater (1.10.7) stable; urgency=medium
+
+  * Temporarily disable auto-update bootloader during fw update
+  (some users faced bl-update problems especially from v1.3 to 1.4)
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Fri, 15 Mar 2024 14:54:21 +0300
+
 wb-mcu-fw-updater (1.10.6) stable; urgency=medium
 
   * add requirements.txt and pyproject.toml from codestyle repo
