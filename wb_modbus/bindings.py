@@ -21,7 +21,6 @@ from . import (
     minimalmodbus,
 )
 
-
 SerialSettings = namedtuple("SerialSettings", "baudrate parity stopbits")
 
 
