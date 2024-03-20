@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import enum
 import json
 import logging
 import os
@@ -55,6 +56,9 @@ class ConfigParsingError(Exception):
 
 
 DownloadedWBFW = namedtuple("DownloadedWBFW", "mode fpath version")
+
+
+SkipUpdateReason = enum.Enum(value="SkipUpdateReason", names=("is_actual", "gone_ahead"))
 
 
 def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
@@ -379,7 +383,7 @@ def direct_flash(
                 device.COMMON_REGS_MAP["bootloader_version"], device.BOOTLOADER_VERSION_LENGTH, 3
             )
         except minimalmodbus.ModbusException:
-            logger.warning("Temporarily trying 9600N2 in bootloader")
+            logger.warning("Temporarily trying 9600N2 in bootloader (because of some old bootloaders issues)")
             in_bl_settings = bindings.SerialSettings(9600, "N", 2)
 
     flasher = fw_flasher.ModbusInBlFlasher(
@@ -414,6 +418,7 @@ def is_reflash_necessary(
         provided_version
     )
     _do_flash = False
+    _skip_reason = None
 
     if actual_version == provided_version:
         if force_reflash:
@@ -426,8 +431,9 @@ def is_reflash_necessary(
             )
             _do_flash = True
         else:
-            logger.info("Update skipped: %s -> %s %s", actual_version, provided_version, debug_info)
+            logger.info("Is actual: %s -> %s %s", actual_version, provided_version, debug_info)
             _do_flash = False
+            _skip_reason = SkipUpdateReason.is_actual
     elif provided_version > actual_version:
         logger.info(
             "%s %s -> %s %s",
@@ -454,18 +460,21 @@ def is_reflash_necessary(
             provided_version,
             debug_info,
         )
-        logger.info("You can launch with '--allow-downgrade arg'")
         _do_flash = False
+        _skip_reason = SkipUpdateReason.gone_ahead
 
     if _do_flash and (actual_version.major != provided_version.major):
-        return ask_user(
-            """Major version has changed (v%s -> v%s);
+        return (
+            ask_user(
+                """Major version has changed (v%s -> v%s);
         Backward compatibility will be broken. Are you sure?"""
-            % (str(actual_version.major), str(provided_version.major)),
-            force_yes=force_reflash,
+                % (str(actual_version.major), str(provided_version.major)),
+                force_yes=force_reflash,
+            ),
+            _skip_reason,
         )
     else:
-        return _do_flash
+        return _do_flash, _skip_reason
 
 
 def is_bootloader_latest(mb_connection):
@@ -636,13 +645,14 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     downloaded_wbfw = _do_download(fw_signature, specified_fw_version, branch_name, mode)
 
     logger.info("%s %s:", mode, device_str)
-    if is_reflash_necessary(
+    do_reflash, _ = is_reflash_necessary(
         actual_version=device_fw_version,
         provided_version=downloaded_wbfw.version,
         force_reflash=force,
         allow_downgrade=True,
         debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
-    ):
+    )
+    if do_reflash:
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
 
 
@@ -763,13 +773,14 @@ def _update_all(
             )  # to guess, is reflash needed or not
         local_device_version = device_info.modbus_connection.get_fw_version()
 
-        if is_reflash_necessary(
+        do_reflash, skip_reason = is_reflash_necessary(
             actual_version=local_device_version,
             provided_version=latest_remote_version,
             force_reflash=force,
             allow_downgrade=allow_downgrade,
             debug_info="(%s)" % str(device_info),
-        ):
+        )
+        if do_reflash:
             downloaded_wbfw = DownloadedWBFW(
                 mode=MODE_FW,
                 fpath=fw_downloader.download_remote_file(
@@ -779,7 +790,8 @@ def _update_all(
             )
             cmd_status["to_perform"].append([device_info, downloaded_wbfw])
         else:
-            cmd_status["skipped"].append(device_info)
+            if skip_reason == SkipUpdateReason.gone_ahead:
+                cmd_status["skipped"].append(device_info)
 
     for device_info, downloaded_wbfw in cmd_status[
         "to_perform"
@@ -815,12 +827,12 @@ def _update_all(
             cmd_status["ok"].append(device_info)
             probing_result["in_bootloader"].remove(device_info)
 
-    if cmd_status["skipped"]:  # TODO: maybe split by reasons?
+    if cmd_status["skipped"]:
         print_status(
             logging.WARNING,
-            status="Not updated:",
+            status="Not updated (fw version gone ahead of release %s):" % RELEASE_INFO.get("SUITE", ""),
             devices_list=cmd_status["skipped"],
-            additional_info='You may try to run with "--force" or "--allow-downgrade" arg',
+            additional_info='You may try to run with "--allow-downgrade" arg',
         )
 
     if cmd_status["no_fw_release"]:
