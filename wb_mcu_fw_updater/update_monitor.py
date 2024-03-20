@@ -372,12 +372,23 @@ def direct_flash(
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
+    in_bl_settings = {"baudrate": device.settings["baudrate"], "parity": device.settings["parity"]}
+    if in_bl_settings["baudrate"] != 9600 or in_bl_settings["parity"] != "N":
+        try:
+            device.device.read_registers(
+                device.COMMON_REGS_MAP["bootloader_version"], device.BOOTLOADER_VERSION_LENGTH, 3
+            )
+            in_bl_settings = {"baudrate": device.settings["baudrate"], "parity": device.settings["parity"]}
+        except minimalmodbus.ModbusException:
+            logger.warning("Temporarily trying 9600N2 in bootloader")
+            in_bl_settings = {"baudrate": 9600, "parity": "N"}
+
     flasher = fw_flasher.ModbusInBlFlasher(
         device.slaveid,
         device.port,
         device.response_timeout,
-        device.settings["baudrate"],
-        device.settings["parity"],
+        in_bl_settings["baudrate"],
+        in_bl_settings["parity"],
         device.settings["stopbits"],
         device.instrument,
     )
