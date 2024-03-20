@@ -166,11 +166,11 @@ def find_connection_params(
         response_timeout,
     )
     try:
-        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
     except bindings.UARTSettingsNotFoundError as e:
         six.raise_from(minimalmodbus.NoResponseError, e)
-    logger.info("Has found serial port settings: %s", str(uart_settings_dict))
-    return uart_settings_dict
+    logger.info("Has found serial port settings: %s", str(uart_settings))
+    return uart_settings
 
 
 def find_bootloader_connection_params(
@@ -186,18 +186,18 @@ def find_bootloader_connection_params(
         response_timeout,
     )
     try:
-        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.probe_bootloader)
+        uart_settings = modbus_connection.find_uart_settings(modbus_connection.probe_bootloader)
     except bindings.UARTSettingsNotFoundError as e:
         six.raise_from(minimalmodbus.NoResponseError, e)
 
     initial_uart_settings = deepcopy(modbus_connection.settings)
-    modbus_connection._set_port_settings_raw(uart_settings_dict)
+    modbus_connection._set_port_settings_raw(uart_settings)
     try:
         modbus_connection.get_slave_addr()
     except minimalmodbus.ModbusException:
         # Device is in bootloader mode and doesn't respond
-        logger.info("Has found bootloader port settings: %s", str(uart_settings_dict))
-        return uart_settings_dict
+        logger.info("Has found bootloader port settings: %s", str(uart_settings))
+        return uart_settings
     finally:
         modbus_connection._set_port_settings_raw(initial_uart_settings)
 
@@ -372,24 +372,23 @@ def direct_flash(
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
-    in_bl_settings = {"baudrate": device.settings["baudrate"], "parity": device.settings["parity"]}
-    if in_bl_settings["baudrate"] != 9600 or in_bl_settings["parity"] != "N":
+    in_bl_settings = device.get_port_settings()
+    if in_bl_settings != bindings.SerialSettings(9600, "N", 2):
         try:
             device.device.read_registers(
                 device.COMMON_REGS_MAP["bootloader_version"], device.BOOTLOADER_VERSION_LENGTH, 3
             )
-            in_bl_settings = {"baudrate": device.settings["baudrate"], "parity": device.settings["parity"]}
         except minimalmodbus.ModbusException:
             logger.warning("Temporarily trying 9600N2 in bootloader")
-            in_bl_settings = {"baudrate": 9600, "parity": "N"}
+            in_bl_settings = bindings.SerialSettings(9600, "N", 2)
 
     flasher = fw_flasher.ModbusInBlFlasher(
         device.slaveid,
         device.port,
         device.response_timeout,
-        in_bl_settings["baudrate"],
-        in_bl_settings["parity"],
-        device.settings["stopbits"],
+        in_bl_settings.baudrate,
+        in_bl_settings.parity,
+        device.settings.stopbits,
         device.instrument,
     )
 
@@ -714,11 +713,7 @@ def probe_all_devices(
                     result["in_bootloader"].append(device_info)
                     continue
                 # could be old bootloader with fixed 9600N2 config
-                if (
-                    device_info.modbus_connection.settings["baudrate"] != 9600
-                    or device_info.modbus_connection.settings["parity"] != "N"
-                    or device_info.modbus_connection.settings["stopbits"] != 2
-                ):
+                if device_info.modbus_connection.get_port_settings() != bindings.SerialSettings(9600, "N", 2):
                     device_info.modbus_connection.set_port_settings(9600, "N", 2)
                     if device_info.modbus_connection.is_in_bootloader():
                         result["in_bootloader"].append(device_info)
