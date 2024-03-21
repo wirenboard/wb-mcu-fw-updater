@@ -392,7 +392,7 @@ def direct_flash(
         device.response_timeout,
         in_bl_settings.baudrate,
         in_bl_settings.parity,
-        device.settings.stopbits,
+        in_bl_settings.stopbits,
         device.instrument,
     )
 
