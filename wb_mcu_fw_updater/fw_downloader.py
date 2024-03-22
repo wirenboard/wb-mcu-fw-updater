@@ -4,6 +4,7 @@
 import errno
 import os
 import sys
+from functools import lru_cache
 
 import six
 from six.moves import urllib
@@ -23,6 +24,7 @@ class RemoteFileDownloadingError(WBRemoteStorageError):
     pass
 
 
+@lru_cache()
 def get_request(url_path, tries=3):  # TODO: to config?
     """
     Sending GET request to url; returning responce's content.
