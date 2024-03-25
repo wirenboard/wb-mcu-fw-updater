@@ -3,6 +3,7 @@
 #
 import time
 from binascii import unhexlify
+from collections import namedtuple
 from copy import deepcopy
 from functools import wraps
 from itertools import product
@@ -19,6 +20,8 @@ from . import (
     logger,
     minimalmodbus,
 )
+
+SerialSettings = namedtuple("SerialSettings", "baudrate parity stopbits")
 
 
 class TooOldDeviceError(minimalmodbus.ModbusException):
@@ -131,15 +134,15 @@ class MinimalModbusAPIWrapper(object):
         self.port = port
         self.set_port_settings(baudrate, parity, stopbits)
 
-    def _set_port_settings_raw(self, settings_dict):
+    def _set_port_settings_raw(self, settings_namedtuple):
         """
         Setting serial settings (baudrate, parity, etc...) on already intialized instrument via updating pyserial's settings dict.
 
         :param settings_dict: pyserial's port settings dictionary
         :type settings_dict: dict
         """
-        self.settings = settings_dict
-        self.device.serial.apply_settings(self.settings)  # only sets params into serial's instance
+        self.settings = settings_namedtuple
+        self.device.serial.apply_settings(self.settings._asdict())  # only sets params into serial's instance
         """
         Settings are writing to serial's fd (posix) at:
             - each port opening (before next call to device, if close_port_after_each_call param is set in Instrument);
@@ -163,9 +166,12 @@ class MinimalModbusAPIWrapper(object):
             [baudrate, parity, stopbits], [ALLOWED_BAUDRATES, ALLOWED_PARITIES.keys(), ALLOWED_STOPBITS]
         ):
             _validate_param(param, allowed_row)
-        settings = {"baudrate": int(baudrate), "parity": parity, "stopbits": int(stopbits)}
+        settings = SerialSettings(baudrate=int(baudrate), parity=parity, stopbits=int(stopbits))
         self._set_port_settings_raw(settings)
         logger.debug("Set %s to %s", str(self.settings), self.port)
+
+    def get_port_settings(self):
+        return self.settings
 
     @apply_serial_settings
     @force()
@@ -595,13 +601,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: actual uart settings of connected device
         :rtype: dict
         """
-        initial_uart_settings = deepcopy(self.settings)
-        actual_uart_settings = []
+        initial_uart_settings = self.get_port_settings()
         allowed_parities = ALLOWED_PARITIES.keys()
         for settings in product(ALLOWED_BAUDRATES, allowed_parities, ALLOWED_STOPBITS):
             try:
                 probe_method_callable(*args, **kwargs)
-                actual_uart_settings = deepcopy(self.settings)
+                actual_uart_settings = self.get_port_settings()
                 self._set_port_settings_raw(initial_uart_settings)
                 return actual_uart_settings
             except IOError:
@@ -786,18 +791,14 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             raise RuntimeError("Device has not rebooted!")
 
     def _jump_to_bootloader(self):
-        if (
-            self.device.serial.baudrate != 9600
-            or self.device.serial.parity != "N"
-            or self.device.serial.stopbits != 2
-        ):
+        if self.get_port_settings() != SerialSettings(9600, "N", 2):
             for _ in range(ALLOWED_UNSUCCESSFUL_TRIES):
                 try:
                     self.write_once_u16(
                         self.COMMON_REGS_MAP["reboot_to_bootloader_preserve_port_settings"], 1
                     )
                     logger.debug("Bootloader uses port settings set in firmware")
-                    return self.settings
+                    return self.get_port_settings()
                 # IllegalRequestError means, that current firmware or bootloader do not support
                 # updating using settings other than 9600N2. So stop reties
                 except minimalmodbus.IllegalRequestError:
@@ -809,7 +810,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
             self.write_u16(self.COMMON_REGS_MAP["reboot_to_bootloader"], 1)
         except minimalmodbus.ModbusException:
             pass  # Device has rebooted and doesn't send response (Fixed in latest FWs)
-        return {"baudrate": 9600, "parity": "N", "stopbits": 2}
+        return SerialSettings(9600, "N", 2)
 
     def reboot_to_bootloader(self):
         """
