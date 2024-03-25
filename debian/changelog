@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.9) stable; urgency=medium
+
+  * update-all: trying to update only polling-enabled in (wb-mqtt-serial.conf) devices
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 25 Mar 2024 10:02:22 +0300
+
 wb-mcu-fw-updater (1.10.8) stable; urgency=medium
 
   * Enable suggestion to update bootloader during fw update again
