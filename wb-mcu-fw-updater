@@ -406,7 +406,7 @@ def parse_args():
 
     # Update firmware on all devices, found in wb-mqtt-serial config
     update_all_fw_parser = subparsers.add_parser(
-        "update-all", help="Trying to update firmwares on all devices, added to wb-mqtt-serial's config."
+        "update-all", help="Trying to update firmwares on all devices, enabled in wb-mqtt-serial's config."
     )
     update_all_fw_parser.add_argument(
         "--allow-downgrade",

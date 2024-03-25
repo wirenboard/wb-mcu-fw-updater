@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import enum
 import json
 import logging
 import os
@@ -55,6 +56,9 @@ class ConfigParsingError(Exception):
 
 
 DownloadedWBFW = namedtuple("DownloadedWBFW", "mode fpath version")
+
+
+SkipUpdateReason = enum.Enum(value="SkipUpdateReason", names=("is_actual", "gone_ahead"))
 
 
 def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
@@ -166,11 +170,11 @@ def find_connection_params(
         response_timeout,
     )
     try:
-        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
     except bindings.UARTSettingsNotFoundError as e:
         six.raise_from(minimalmodbus.NoResponseError, e)
-    logger.info("Has found serial port settings: %s", str(uart_settings_dict))
-    return uart_settings_dict
+    logger.info("Has found serial port settings: %s", str(uart_settings))
+    return uart_settings
 
 
 def find_bootloader_connection_params(
@@ -186,18 +190,18 @@ def find_bootloader_connection_params(
         response_timeout,
     )
     try:
-        uart_settings_dict = modbus_connection.find_uart_settings(modbus_connection.probe_bootloader)
+        uart_settings = modbus_connection.find_uart_settings(modbus_connection.probe_bootloader)
     except bindings.UARTSettingsNotFoundError as e:
         six.raise_from(minimalmodbus.NoResponseError, e)
 
     initial_uart_settings = deepcopy(modbus_connection.settings)
-    modbus_connection._set_port_settings_raw(uart_settings_dict)
+    modbus_connection._set_port_settings_raw(uart_settings)
     try:
         modbus_connection.get_slave_addr()
     except minimalmodbus.ModbusException:
         # Device is in bootloader mode and doesn't respond
-        logger.info("Has found bootloader port settings: %s", str(uart_settings_dict))
-        return uart_settings_dict
+        logger.info("Has found bootloader port settings: %s", str(uart_settings))
+        return uart_settings
     finally:
         modbus_connection._set_port_settings_raw(initial_uart_settings)
 
@@ -307,6 +311,8 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
             port_response_timeout = int(port.get("response_timeout_ms", 0)) * 1e-3
             devices_on_port = set()
             for serial_device in port.get("devices", []):
+                if not serial_device.get("enabled", True):
+                    continue
                 device_name = serial_device.get("device_type", "Unknown")
                 slaveid = serial_device["slave_id"]
                 device_response_timeout = int(serial_device.get("response_timeout_ms", 0)) * 1e-3
@@ -372,13 +378,23 @@ def direct_flash(
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
+    in_bl_settings = device.get_port_settings()
+    if in_bl_settings != bindings.SerialSettings(9600, "N", 2):
+        try:
+            device.device.read_registers(
+                device.COMMON_REGS_MAP["bootloader_version"], device.BOOTLOADER_VERSION_LENGTH, 3
+            )
+        except minimalmodbus.ModbusException:
+            logger.warning("Temporarily trying 9600N2 in bootloader (because of some old bootloaders issues)")
+            in_bl_settings = bindings.SerialSettings(9600, "N", 2)
+
     flasher = fw_flasher.ModbusInBlFlasher(
         device.slaveid,
         device.port,
         device.response_timeout,
-        device.settings["baudrate"],
-        device.settings["parity"],
-        device.settings["stopbits"],
+        in_bl_settings.baudrate,
+        in_bl_settings.parity,
+        in_bl_settings.stopbits,
         device.instrument,
     )
 
@@ -404,6 +420,7 @@ def is_reflash_necessary(
         provided_version
     )
     _do_flash = False
+    _skip_reason = None
 
     if actual_version == provided_version:
         if force_reflash:
@@ -416,8 +433,9 @@ def is_reflash_necessary(
             )
             _do_flash = True
         else:
-            logger.info("Update skipped: %s -> %s %s", actual_version, provided_version, debug_info)
+            logger.info("Is actual: %s -> %s %s", actual_version, provided_version, debug_info)
             _do_flash = False
+            _skip_reason = SkipUpdateReason.is_actual
     elif provided_version > actual_version:
         logger.info(
             "%s %s -> %s %s",
@@ -444,18 +462,21 @@ def is_reflash_necessary(
             provided_version,
             debug_info,
         )
-        logger.info("You can launch with '--allow-downgrade arg'")
         _do_flash = False
+        _skip_reason = SkipUpdateReason.gone_ahead
 
     if _do_flash and (actual_version.major != provided_version.major):
-        return ask_user(
-            """Major version has changed (v%s -> v%s);
+        return (
+            ask_user(
+                """Major version has changed (v%s -> v%s);
         Backward compatibility will be broken. Are you sure?"""
-            % (str(actual_version.major), str(provided_version.major)),
-            force_yes=force_reflash,
+                % (str(actual_version.major), str(provided_version.major)),
+                force_yes=force_reflash,
+            ),
+            _skip_reason,
         )
     else:
-        return _do_flash
+        return _do_flash, _skip_reason
 
 
 def is_bootloader_latest(mb_connection):
@@ -516,9 +537,6 @@ def is_interactive_shell():
 
 
 def is_bl_update_required(modbus_connection, force=False):
-    # TODO: some users faced bl-update problems (from v1.3 to 1.4) => temporarily disable auto-update bootloaders
-    return False
-
     fw_sig = modbus_connection.get_fw_signature()
     local_version = modbus_connection.get_bootloader_version()
     remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
@@ -629,13 +647,14 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     downloaded_wbfw = _do_download(fw_signature, specified_fw_version, branch_name, mode)
 
     logger.info("%s %s:", mode, device_str)
-    if is_reflash_necessary(
+    do_reflash, _ = is_reflash_necessary(
         actual_version=device_fw_version,
         provided_version=downloaded_wbfw.version,
         force_reflash=force,
         allow_downgrade=True,
         debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
-    ):
+    )
+    if do_reflash:
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
 
 
@@ -703,11 +722,7 @@ def probe_all_devices(
                     result["in_bootloader"].append(device_info)
                     continue
                 # could be old bootloader with fixed 9600N2 config
-                if (
-                    device_info.modbus_connection.settings["baudrate"] != 9600
-                    or device_info.modbus_connection.settings["parity"] != "N"
-                    or device_info.modbus_connection.settings["stopbits"] != 2
-                ):
+                if device_info.modbus_connection.get_port_settings() != bindings.SerialSettings(9600, "N", 2):
                     device_info.modbus_connection.set_port_settings(9600, "N", 2)
                     if device_info.modbus_connection.is_in_bootloader():
                         result["in_bootloader"].append(device_info)
@@ -760,13 +775,14 @@ def _update_all(
             )  # to guess, is reflash needed or not
         local_device_version = device_info.modbus_connection.get_fw_version()
 
-        if is_reflash_necessary(
+        do_reflash, skip_reason = is_reflash_necessary(
             actual_version=local_device_version,
             provided_version=latest_remote_version,
             force_reflash=force,
             allow_downgrade=allow_downgrade,
             debug_info="(%s)" % str(device_info),
-        ):
+        )
+        if do_reflash:
             downloaded_wbfw = DownloadedWBFW(
                 mode=MODE_FW,
                 fpath=fw_downloader.download_remote_file(
@@ -776,7 +792,8 @@ def _update_all(
             )
             cmd_status["to_perform"].append([device_info, downloaded_wbfw])
         else:
-            cmd_status["skipped"].append(device_info)
+            if skip_reason == SkipUpdateReason.gone_ahead:
+                cmd_status["skipped"].append(device_info)
 
     for device_info, downloaded_wbfw in cmd_status[
         "to_perform"
@@ -812,12 +829,12 @@ def _update_all(
             cmd_status["ok"].append(device_info)
             probing_result["in_bootloader"].remove(device_info)
 
-    if cmd_status["skipped"]:  # TODO: maybe split by reasons?
+    if cmd_status["skipped"]:
         print_status(
             logging.WARNING,
-            status="Not updated:",
+            status="Not updated (fw version gone ahead of release %s):" % RELEASE_INFO.get("SUITE", ""),
             devices_list=cmd_status["skipped"],
-            additional_info='You may try to run with "--force" or "--allow-downgrade" arg',
+            additional_info='You may try to run with "--allow-downgrade" arg',
         )
 
     if cmd_status["no_fw_release"]:
