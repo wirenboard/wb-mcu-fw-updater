@@ -37,7 +37,7 @@ def get_request(url_path, tries=3):  # TODO: to config?
     logger.debug("GET: %s", url_path)
     for _ in range(tries):
         try:
-            return urllib.request.urlopen(url_path)
+            return urllib.request.urlopen(url_path, timeout=1)
         except (urllib.error.URLError, urllib.error.HTTPError) as e:
             continue
     else:
