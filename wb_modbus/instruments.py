@@ -243,15 +243,15 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         self._initial_stopbits = self.serial._stopbits
         super(StopbitsTolerantInstrument, self)._write_to_bus(request)
         write_ts = time.time()
-        while (self.serial.out_waiting > 0) or (self.serial.in_waiting == 0):
+        while self.serial.out_waiting > 0:
             if time.time() - write_ts < self.serial.timeout:
-                time.sleep(0.1)
+                time.sleep(1e-3)
             else:
                 if (self.serial.out_waiting == 0) and (self.serial.in_waiting == 0):
                     raise minimalmodbus.NoResponseError("No communication with the instrument (no answer)")
                 else:
                     raise minimalmodbus.MasterReportedException(
-                        "Output serial buffer is not empty after %.2fs (serial.timeout)" % self.serial.timeout
+                        "Output serial buffer is not empty after %.4fs (serial.timeout)" % self.serial.timeout
                     )
         termios.tcdrain(self.serial.fd)  # ensuring, all buffered data has transmitted
         self._set_stopbits_onthefly(stopbits=1)
@@ -265,6 +265,25 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
         )
         self._set_stopbits_onthefly(self._initial_stopbits)
         return ret
+
+
+class FastWBDeviceDetectionInstrument(StopbitsTolerantInstrument):
+    def _read_from_bus(self, number_of_bytes_to_read, minimum_silent_period):
+        """
+        WB modbus devices are considered to start answering after 3.5 modbus chars timeout (calculated from actual BD)
+        => reading 1 byte with 3.5 mb chars serial timeout to reduce disconnected-devices delays
+        """
+        actual_serial_timeout = self.serial.timeout
+        firstbyte_timeout = minimum_silent_period  # 3.5 modbus chars
+        self.serial.timeout = firstbyte_timeout
+        try:
+            ret = self.serial.read(1)
+            if ret:  # device starts answering
+                self.serial.timeout = actual_serial_timeout
+                ret += super()._read_from_bus(number_of_bytes_to_read - 1, minimum_silent_period)
+            return ret
+        finally:
+            self.serial.timeout = actual_serial_timeout
 
 
 class RPCError(minimalmodbus.MasterReportedException):

@@ -7,7 +7,7 @@ import six
 from tqdm import tqdm
 
 from wb_modbus import bindings, minimalmodbus
-from wb_modbus.instruments import StopbitsTolerantInstrument
+from wb_modbus.instruments import PyserialBackendInstrument, StopbitsTolerantInstrument
 
 from . import logger
 
@@ -109,6 +109,12 @@ class ModbusInBlFlasher(object):
         stopbits=2,
         instrument=StopbitsTolerantInstrument,
     ):
+        if issubclass(instrument, PyserialBackendInstrument):
+            instrument = StopbitsTolerantInstrument
+            logger.debug(
+                "Turn off fast-device-detection magic for in-bootloader operations"
+            )  # we need temporarily enlarge response_timeout to handle in-bootloader device's magic on receiving info block
+            # here, device is already found => we actually don't need fast-device-detection instrument
         self.instrument = bindings.WBModbusDeviceBase(
             addr, port, bd, parity, stopbits, instrument=instrument, foregoing_noise_cancelling=True
         )
