@@ -3,6 +3,7 @@
 
 import errno
 import os
+import socket
 import sys
 from functools import lru_cache
 
@@ -37,8 +38,8 @@ def get_request(url_path, tries=3):  # TODO: to config?
     logger.debug("GET: %s", url_path)
     for _ in range(tries):
         try:
-            return urllib.request.urlopen(url_path, timeout=1)
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            return urllib.request.urlopen(url_path, timeout=1.5)
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.error) as e:
             continue
     else:
         raise WBRemoteStorageError(url_path)
