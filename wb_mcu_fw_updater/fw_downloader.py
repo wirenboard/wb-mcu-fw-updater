@@ -25,7 +25,6 @@ class RemoteFileDownloadingError(WBRemoteStorageError):
     pass
 
 
-@lru_cache()
 def get_request(url_path, tries=3):  # TODO: to config?
     """
     Sending GET request to url; returning responce's content.
@@ -45,12 +44,17 @@ def get_request(url_path, tries=3):  # TODO: to config?
         raise WBRemoteStorageError(url_path)
 
 
+@lru_cache(maxsize=10)
 def read_remote_file(url_path, coding="utf-8"):
+    ret = ""
     try:
         ret = get_request(url_path)
-        return str(ret.read().decode(coding)).strip()
+        ret = str(ret.read().decode(coding)).strip()
     except Exception as e:
         six.raise_from(RemoteFileReadingError, e)
+    if ret:
+        return ret
+    raise RemoteFileReadingError(f"{url_path} is empty!")
 
 
 def get_remote_releases_info(
@@ -64,6 +68,7 @@ def get_fw_signatures_list():
     return ret.split("\n") if ret else None
 
 
+@lru_cache(maxsize=3)
 def download_remote_file(url_path, saving_dir=None, fname=None):
     """
     Downloading a file from direct url
