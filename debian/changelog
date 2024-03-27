@@ -1,8 +1,14 @@
-wb-mcu-fw-updater (1.10.10) stable; urgency=medium
+wb-mcu-fw-updater (1.10.11) stable; urgency=medium
 
   * bindings: fix bootloader version parsing
 
- -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 17:12:54 +0300
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 17:22:54 +0300
+
+wb-mcu-fw-updater (1.10.10) stable; urgency=medium
+
+  * bindings: fix serial settings around set_slave_addr
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 17:15:34 +0300
 
 wb-mcu-fw-updater (1.10.9) stable; urgency=medium
 
