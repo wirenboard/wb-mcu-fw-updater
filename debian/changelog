@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.10) stable; urgency=medium
+
+  * bindings: fix bootloader version parsing
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 17:12:54 +0300
+
 wb-mcu-fw-updater (1.10.9) stable; urgency=medium
 
   * update-all: trying to update only polling-enabled in (wb-mqtt-serial.conf) devices
