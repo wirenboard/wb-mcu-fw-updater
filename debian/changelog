@@ -1,3 +1,11 @@
+wb-mcu-fw-updater (1.11.0) stable; urgency=medium
+
+  * reduce modbus retries from 5 to 2
+  * rework fws downloading & add cache
+  * add elapsed-time spinner
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 11:08:45 +0300
+
 wb-mcu-fw-updater (1.10.9) stable; urgency=medium
 
   * update-all: trying to update only polling-enabled in (wb-mqtt-serial.conf) devices
