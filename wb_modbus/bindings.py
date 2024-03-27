@@ -660,9 +660,9 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.ModbusException:
             pass
         baudrate, parity, stopbits = (
-            self.settings["baudrate"],
-            self.settings["parity"],
-            self.settings["stopbits"],
+            self.settings.baudrate,
+            self.settings.parity,
+            self.settings.stopbits,
         )
         checking_device = MinimalModbusAPIWrapper(
             to_write, self.port, baudrate, parity, stopbits, self.instrument
@@ -905,5 +905,5 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         ):
             _validate_param(param, allowed_row)
         self._write_port_settings(baudrate, ALLOWED_PARITIES[parity], stopbits)
-        new_port_settings = {"baudrate": baudrate, "parity": parity, "stopbits": stopbits}
+        new_port_settings = SerialSettings(baudrate=baudrate, parity=parity, stopbits=stopbits)
         self._set_port_settings_raw(new_port_settings)
