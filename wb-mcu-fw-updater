@@ -68,15 +68,18 @@ def _update_alive_device(
 
     try:
         if is_in_bootloader:
-            logger.info("Device %s supposed to be alive, but found in bootloader", device_str)
+            try:
+                bl_version = modbus_connection.get_bootloader_version()
+            except ModbusException:
+                logger.exception("Failed to read bootloader version")
+                bl_version = ""
+            logger.info("Device %s supposed to be alive, but found in bootloader %s", device_str, bl_version)
             logger.debug("Trying to acquire fw-signature...")
             fw_sig = update_monitor._restore_fw_signature(modbus_connection)
             if fw_sig:
-                downloaded_wbfw = update_monitor._do_download(
-                    fw_sig, version, branch, mode, retrieve_latest_vnum=False
-                )  # we don't need any update-check here
+                downloaded_wbfw = update_monitor._do_download(fw_sig, version, branch, mode)
                 logger.info(
-                    "Will flash %s v%s to bring %s %s alive",
+                    "Will flash %s v:%s to bring %s %s alive",
                     mode,
                     downloaded_wbfw.version,
                     fw_sig,
