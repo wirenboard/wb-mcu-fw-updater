@@ -281,7 +281,7 @@ def add_common_logic_args(parser):
         action="store_true",
         dest="force",
         default=False,
-        help='Answer "Yes" to all questions. (Default: %(default)s)',
+        help='Force updating all devices and answer "Yes" to all questions. (Default: %(default)s)',
     )
     parser.add_argument(
         "--debug",

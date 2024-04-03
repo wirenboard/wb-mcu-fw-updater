@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.10.13) stable; urgency=medium
+
+  * Fix help of force flag
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Wed, 03 Apr 2024 12:22:52 +0300
+
 wb-mcu-fw-updater (1.10.12) stable; urgency=medium
 
   * update-bl: print bootloader version in "latest" case
