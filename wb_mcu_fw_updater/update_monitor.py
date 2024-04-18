@@ -8,13 +8,16 @@ import os
 import subprocess
 import sys
 import termios
+import threading
 import urllib.parse
 from collections import defaultdict, namedtuple
+from contextlib import contextmanager
 from copy import deepcopy
 from io import open
 
 import semantic_version
 import six
+import tqdm
 import yaml
 
 # TODO: rework params setting to get rid of imports-order-magic
@@ -59,6 +62,29 @@ DownloadedWBFW = namedtuple("DownloadedWBFW", "mode fpath version")
 
 
 SkipUpdateReason = enum.Enum(value="SkipUpdateReason", names=("is_actual", "gone_ahead"))
+
+
+@contextmanager
+def spinner(estimated_time_s=float("+inf"), tdelta_s=1, description="", tqdm_kwargs={}):
+    if description:
+        logger.debug(description)
+        tqdm_kwargs.update({"desc": description})
+
+    pbar = tqdm.tqdm(total=estimated_time_s, **tqdm_kwargs)
+    stop_event = threading.Event()
+
+    def pbar_update_runner(pbar, interval, stop_event):
+        while not stop_event.is_set():
+            pbar.update(interval)
+
+    pbar_update_thread = threading.Thread(target=pbar_update_runner, args=(pbar, tdelta_s, stop_event))
+    pbar_update_thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        pbar_update_thread.join()
+        pbar.close()
 
 
 def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
@@ -163,16 +189,22 @@ def find_connection_params(
     modbus_connection = bindings.WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
-    logger.info(
-        "Will find serial port settings for (%s : %d; response_timeout: %.2f)...",
+    desc_str = "Will find serial port settings for (%s : %d; response_timeout: %.2f)..." % (
         port,
         slaveid,
         response_timeout,
     )
-    try:
-        uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
-    except bindings.UARTSettingsNotFoundError as e:
-        six.raise_from(minimalmodbus.NoResponseError, e)
+    uart_settings = None
+    with spinner(
+        description=desc_str,
+        tqdm_kwargs={
+            "bar_format": "{desc} (elapsed: {elapsed})",
+        },
+    ):
+        try:
+            uart_settings = modbus_connection.find_uart_settings(modbus_connection.get_slave_addr)
+        except bindings.UARTSettingsNotFoundError as e:
+            six.raise_from(minimalmodbus.NoResponseError, e)
     logger.info("Has found serial port settings: %s", str(uart_settings))
     return uart_settings
 
@@ -183,16 +215,22 @@ def find_bootloader_connection_params(
     modbus_connection = bindings.WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
-    logger.info(
-        "Will find bootloader port settings for (%s : %d; response_timeout: %.2f)...",
+    desc_str = "Will find bootloader port settings for (%s : %d; response_timeout: %.2f)..." % (
         port,
         slaveid,
         response_timeout,
     )
-    try:
-        uart_settings = modbus_connection.find_uart_settings(modbus_connection.probe_bootloader)
-    except bindings.UARTSettingsNotFoundError as e:
-        six.raise_from(minimalmodbus.NoResponseError, e)
+    uart_settings = None
+    with spinner(
+        description=desc_str,
+        tqdm_kwargs={
+            "bar_format": "{desc} (elapsed: {elapsed})",
+        },
+    ):
+        try:
+            uart_settings = modbus_connection.find_uart_settings(modbus_connection.probe_bootloader)
+        except bindings.UARTSettingsNotFoundError as e:
+            six.raise_from(minimalmodbus.NoResponseError, e)
 
     initial_uart_settings = deepcopy(modbus_connection.settings)
     modbus_connection._set_port_settings_raw(uart_settings)
@@ -688,57 +726,59 @@ def probe_all_devices(
             actual_response_timeout = max(
                 minimal_response_timeout, port_response_timeout, device_response_timeout
             )
-            logger.info(
-                "Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)...",
+            desc_str = "Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)..." % (
                 device_name,
                 port,
                 device_slaveid,
                 uart_params,
                 actual_response_timeout,
             )
-            device_info = DeviceInfo(
-                name=device_name,
-                modbus_connection=bindings.WBModbusDeviceBase(
-                    device_slaveid,
-                    port,
-                    *parse_uart_settings_str(uart_params),
-                    response_timeout=actual_response_timeout,
-                    instrument=instrument,
-                ),
-            )
-            try:
+            with spinner(description=desc_str, tqdm_kwargs={"bar_format": "{desc} (elapsed: {elapsed})"}):
                 device_info = DeviceInfo(
                     name=device_name,
-                    modbus_connection=get_correct_modbus_connection(
-                        device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
+                    modbus_connection=bindings.WBModbusDeviceBase(
+                        device_slaveid,
+                        port,
+                        *parse_uart_settings_str(uart_params),
+                        response_timeout=actual_response_timeout,
+                        instrument=instrument,
                     ),
                 )
-            except ForeignDeviceError:
-                result["foreign"].append(device_info)
-                continue
-            except minimalmodbus.NoResponseError:
-                # check current configured port settings
-                if device_info.modbus_connection.is_in_bootloader():
-                    result["in_bootloader"].append(device_info)
+                try:
+                    device_info = DeviceInfo(
+                        name=device_name,
+                        modbus_connection=get_correct_modbus_connection(
+                            device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
+                        ),
+                    )
+                except ForeignDeviceError:
+                    result["foreign"].append(device_info)
                     continue
-                # could be old bootloader with fixed 9600N2 config
-                if device_info.modbus_connection.get_port_settings() != bindings.SerialSettings(9600, "N", 2):
-                    device_info.modbus_connection.set_port_settings(9600, "N", 2)
+                except minimalmodbus.NoResponseError:
+                    # check current configured port settings
                     if device_info.modbus_connection.is_in_bootloader():
                         result["in_bootloader"].append(device_info)
                         continue
-                result["disconnected"].append(device_info)
-                continue
+                    # could be old bootloader with fixed 9600N2 config
+                    if device_info.modbus_connection.get_port_settings() != bindings.SerialSettings(
+                        9600, "N", 2
+                    ):
+                        device_info.modbus_connection.set_port_settings(9600, "N", 2)
+                        if device_info.modbus_connection.is_in_bootloader():
+                            result["in_bootloader"].append(device_info)
+                            continue
+                    result["disconnected"].append(device_info)
+                    continue
 
-            try:
-                mb_connection = device_info.modbus_connection
-                db.save(
-                    mb_connection.slaveid, mb_connection.port, mb_connection.get_fw_signature()
-                )  # old devices haven't fw_signatures
-                result["alive"].append(device_info)
-            except bindings.TooOldDeviceError:
-                logger.error("%s is too old and does not support firmware updates!", str(device_info))
-                result["too_old_to_update"].append(device_info)
+                try:
+                    mb_connection = device_info.modbus_connection
+                    db.save(
+                        mb_connection.slaveid, mb_connection.port, mb_connection.get_fw_signature()
+                    )  # old devices haven't fw_signatures
+                    result["alive"].append(device_info)
+                except bindings.TooOldDeviceError:
+                    logger.error("%s is too old and does not support firmware updates!", str(device_info))
+                    result["too_old_to_update"].append(device_info)
 
     return result
 

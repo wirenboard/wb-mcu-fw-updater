@@ -3,7 +3,9 @@
 
 import errno
 import os
+import socket
 import sys
+from functools import lru_cache
 
 import six
 from six.moves import urllib
@@ -35,19 +37,24 @@ def get_request(url_path, tries=3):  # TODO: to config?
     logger.debug("GET: %s", url_path)
     for _ in range(tries):
         try:
-            return urllib.request.urlopen(url_path)
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            return urllib.request.urlopen(url_path, timeout=1.5)
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.error) as e:
             continue
     else:
         raise WBRemoteStorageError(url_path)
 
 
+@lru_cache(maxsize=10)
 def read_remote_file(url_path, coding="utf-8"):
+    ret = ""
     try:
         ret = get_request(url_path)
-        return str(ret.read().decode(coding)).strip()
+        ret = str(ret.read().decode(coding)).strip()
     except Exception as e:
         six.raise_from(RemoteFileReadingError, e)
+    if ret:
+        return ret
+    raise RemoteFileReadingError(f"{url_path} is empty!")
 
 
 def get_remote_releases_info(
@@ -61,6 +68,7 @@ def get_fw_signatures_list():
     return ret.split("\n") if ret else None
 
 
+@lru_cache(maxsize=3)
 def download_remote_file(url_path, saving_dir=None, fname=None):
     """
     Downloading a file from direct url
