@@ -485,9 +485,7 @@ class MinimalModbusAPIWrapper(object):
             order = minimalmodbus.BYTEORDER_LITTLE
         self.device.write_long(addr, value, signed=True, byteorder=order)
 
-    @apply_serial_settings
-    @force()
-    def read_string(self, addr, regs_lenght):
+    def _to_wb_str(self, modbus_bytestr):
         """
         Reading a row of consecutive uint16 holding registers and interpreting row as a string.
         Wiren Board devices store a placeholder + char per one u16 reg (ex: '\x00A1' or '\xFFA1' in some roms)
@@ -500,12 +498,17 @@ class MinimalModbusAPIWrapper(object):
         :rtype: str
         """
         empty_chars_placeholders = ("00", "FF", " ")
-        ret = minimalmodbus._hexlify(self.device.read_string(addr, regs_lenght, 3))
+        ret = minimalmodbus._hexlify(modbus_bytestr)
         for placeholder in empty_chars_placeholders:  # Clearing a string to only meaningful bytes
             ret = ret.replace(placeholder, "")  # 'A1B2C3' bytes-only string
         return str(
             unhexlify(ret).decode(encoding="utf-8", errors="ignore")
         ).strip()  # TODO: "backslashreplace" when drop py2
+
+    @apply_serial_settings
+    @force()
+    def read_string(self, addr, regs_lenght):
+        return self._to_wb_str(self.device.read_string(addr, regs_lenght, 3))
 
 
 def auto_find_uart_settings(method_to_decorate):
@@ -660,9 +663,9 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.ModbusException:
             pass
         baudrate, parity, stopbits = (
-            self.settings["baudrate"],
-            self.settings["parity"],
-            self.settings["stopbits"],
+            self.settings.baudrate,
+            self.settings.parity,
+            self.settings.stopbits,
         )
         checking_device = MinimalModbusAPIWrapper(
             to_write, self.port, baudrate, parity, stopbits, self.instrument
@@ -732,21 +735,25 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         except minimalmodbus.IllegalRequestError:
             raise TooOldDeviceError("Device is too old and haven't fw_signature in regs!")
 
+    @apply_serial_settings
+    @force()
     def get_bootloader_version(self):
         # Try to read full-length version string. The last char is STM type or dev bootloader sign
         try:
-            version = self.read_string(
-                self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH
+            version = self.device.read_string(
+                self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH, 3
             )
-            return version[:-1]
+            ret = version[:-1]  # strip bootloader type marker from raw bytes
+            return self._to_wb_str(ret)
         except minimalmodbus.IllegalRequestError:
             pass
 
         # Try to read reduced version string for compatibility with old devices (available only in fw)
         try:
-            return self.read_string(
-                self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH - 1
+            ret = self.device.read_string(
+                self.COMMON_REGS_MAP["bootloader_version"], self.BOOTLOADER_VERSION_LENGTH - 1, 3
             )
+            return self._to_wb_str(ret)
         except minimalmodbus.IllegalRequestError:
             raise TooOldDeviceError("Device is too old and haven't bootloader version in regs!")
 
@@ -905,5 +912,5 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         ):
             _validate_param(param, allowed_row)
         self._write_port_settings(baudrate, ALLOWED_PARITIES[parity], stopbits)
-        new_port_settings = {"baudrate": baudrate, "parity": parity, "stopbits": stopbits}
+        new_port_settings = SerialSettings(baudrate=baudrate, parity=parity, stopbits=stopbits)
         self._set_port_settings_raw(new_port_settings)

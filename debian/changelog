@@ -4,7 +4,31 @@ wb-mcu-fw-updater (1.11.0) stable; urgency=medium
   * rework fws downloading & add cache
   * add elapsed-time spinner
 
- -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 11:08:45 +0300
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Thu, 18 Apr 2024 21:09:34 +0300
+
+wb-mcu-fw-updater (1.10.13) stable; urgency=medium
+
+  * Fix help of force flag
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Wed, 03 Apr 2024 12:22:52 +0300
+
+wb-mcu-fw-updater (1.10.12) stable; urgency=medium
+
+  * update-bl: print bootloader version in "latest" case
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 02 Mar 2024 18:45:32 +0300
+
+wb-mcu-fw-updater (1.10.11) stable; urgency=medium
+
+  * bindings: fix bootloader version parsing
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 17:22:54 +0300
+
+wb-mcu-fw-updater (1.10.10) stable; urgency=medium
+
+  * bindings: fix serial settings around set_slave_addr
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Wed, 27 Mar 2024 17:15:34 +0300
 
 wb-mcu-fw-updater (1.10.9) stable; urgency=medium
 
