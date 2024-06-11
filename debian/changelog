@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.11.1) stable; urgency=medium
+
+  * Update bootloader anyway, if local version not found on remote
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Tue, 11 Jun 2024 13:57:02 +0300
+
 wb-mcu-fw-updater (1.11.0) stable; urgency=medium
 
   * reduce modbus retries from 5 to 2
