@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.11.1) stable; urgency=medium
+
+  * Handle modbus exceptions
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Mon, 02 Sep 2024 15:10:00 +0400
+
 wb-mcu-fw-updater (1.11.0) stable; urgency=medium
 
   * reduce modbus retries from 5 to 2
