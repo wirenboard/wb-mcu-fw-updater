@@ -211,7 +211,7 @@ def update_all(args):
             allow_downgrade=args.allow_downgrade,
             instrument=args.instrument,
         )
-    except update_monitor.ConfigParsingError as e:
+    except (update_monitor.ConfigParsingError, ModbusException) as e:
         die(e)
 
 
@@ -226,7 +226,7 @@ def recover_all(args):
             force=args.force,
             instrument=args.instrument,
         )
-    except update_monitor.ConfigParsingError as e:
+    except (update_monitor.ConfigParsingError, ModbusException) as e:
         die(e)
 
 
