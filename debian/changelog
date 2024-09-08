@@ -1,4 +1,4 @@
-wb-mcu-fw-updater (1.11.1) stable; urgency=medium
+wb-mcu-fw-updater (1.11.2) stable; urgency=medium
 
   * update-all: fix modbus CRC errors
 
