@@ -9,6 +9,7 @@ import subprocess
 import sys
 import termios
 import threading
+import time
 import urllib.parse
 from collections import defaultdict, namedtuple
 from contextlib import contextmanager
@@ -65,7 +66,7 @@ SkipUpdateReason = enum.Enum(value="SkipUpdateReason", names=("is_actual", "gone
 
 
 @contextmanager
-def spinner(estimated_time_s=float("+inf"), tdelta_s=1, description="", tqdm_kwargs={}):
+def spinner(estimated_time_s=float("+inf"), tdelta_s=0.1, description="", tqdm_kwargs={}):
     if description:
         logger.debug(description)
         tqdm_kwargs.update({"desc": description})
@@ -76,6 +77,7 @@ def spinner(estimated_time_s=float("+inf"), tdelta_s=1, description="", tqdm_kwa
     def pbar_update_runner(pbar, interval, stop_event):
         while not stop_event.is_set():
             pbar.update(interval)
+            time.sleep(interval)
 
     pbar_update_thread = threading.Thread(target=pbar_update_runner, args=(pbar, tdelta_s, stop_event))
     pbar_update_thread.start()
