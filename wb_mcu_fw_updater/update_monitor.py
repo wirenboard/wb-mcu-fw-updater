@@ -579,11 +579,23 @@ def is_interactive_shell():
 def is_bl_update_required(modbus_connection, force=False):
     fw_sig = modbus_connection.get_fw_signature()
     local_version = modbus_connection.get_bootloader_version()
-    remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
-    if semantic_version.Version(local_version) == semantic_version.Version(remote_version):
+    remote_file_watcher = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER)
+    latest_remote_version = remote_file_watcher.get_latest_version_number(fw_sig)
+
+    if semantic_version.Version(local_version) == semantic_version.Version(latest_remote_version):
         return False
+
+    if not remote_file_watcher.is_version_exist(fw_sig, local_version):
+        logger.warning(
+            "Local bootloader version v%s is not found on remote! (maybe was removed manually) => "
+            "Will update bootloader to latest v%s anyway!",
+            local_version,
+            latest_remote_version,
+        )
+        return True
+
     suggestion_str = (
-        f"Bootloader update (v{local_version} -> v{remote_version}) for {fw_sig} "
+        f"Bootloader update (v{local_version} -> v{latest_remote_version}) for {fw_sig} "
         f"{modbus_connection.port}:{modbus_connection.slaveid} is available! "
         "(bootloader updates are highly recommended to install)"
     )

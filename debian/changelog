@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.11.3) stable; urgency=medium
+
+  * Update bootloader anyway, if local version not found on remote
+
+ -- Vladimir Romanov <v.romanov@wirenboard.ru>  Mon, 16 Sep 2024 15:14:13 +0300
+
 wb-mcu-fw-updater (1.11.2) stable; urgency=medium
 
   * update-all: fix modbus CRC errors
