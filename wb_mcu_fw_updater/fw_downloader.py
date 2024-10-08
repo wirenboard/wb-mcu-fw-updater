@@ -25,7 +25,7 @@ class RemoteFileDownloadingError(WBRemoteStorageError):
     pass
 
 
-def get_request(url_path, tries=3):  # TODO: to config?
+def get_request(url_path, tries=3):  # maybe move to config?
     """
     Sending GET request to url; returning responce's content.
 
@@ -38,10 +38,9 @@ def get_request(url_path, tries=3):  # TODO: to config?
     for _ in range(tries):
         try:
             return urllib.request.urlopen(url_path, timeout=1.5)
-        except (urllib.error.URLError, urllib.error.HTTPError, socket.error) as e:
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.error):
             continue
-    else:
-        raise WBRemoteStorageError(url_path)
+    raise WBRemoteStorageError(url_path)
 
 
 @lru_cache(maxsize=10)
@@ -50,7 +49,7 @@ def read_remote_file(url_path, coding="utf-8"):
     try:
         ret = get_request(url_path)
         ret = str(ret.read().decode(coding)).strip()
-    except Exception as e:
+    except Exception as e:  # pylint:disable=broad-exception-caught
         six.raise_from(RemoteFileReadingError, e)
     if ret:
         return ret
@@ -69,14 +68,16 @@ def get_fw_signatures_list():
 
 
 @lru_cache(maxsize=3)
-def download_remote_file(url_path, saving_dir=None, fname=None):
+def download_remote_file(  # pylint:disable=inconsistent-return-statements
+    url_path, saving_dir=None, fname=None
+):
     """
     Downloading a file from direct url
     """
     try:
         ret = get_request(url_path)
         content = ret.read()
-    except Exception as e:
+    except Exception as e:  # pylint:disable=broad-exception-caught
         six.raise_from(RemoteFileDownloadingError, e)
 
     saving_dir = saving_dir or CONFIG["FW_SAVING_DIR"]
@@ -92,7 +93,7 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
         fname = (
             default_fname.split("filename=")[1].strip("\"'")
             if default_fname
-            else "tmp%s" % CONFIG["FW_EXTENSION"]
+            else f'tmp{CONFIG["FW_EXTENSION"]}'
         )
         logger.debug("Got fname: %s", str(fname))
     if fname:
@@ -107,11 +108,11 @@ def download_remote_file(url_path, saving_dir=None, fname=None):
         with open(file_path, "wb+") as fh:
             fh.write(content)
             return file_path
-    except Exception as e:
+    except Exception as e:  # pylint:disable=broad-exception-caught
         six.raise_from(RemoteFileDownloadingError, e)
 
 
-class RemoteFileWatcher(object):
+class RemoteFileWatcher:
     """
     A class, downloading Firmware or Bootloader, found by device_signature or project_name from remote server.
     """
@@ -122,13 +123,15 @@ class RemoteFileWatcher(object):
 
         :param mode: firmware or bootloader, defaults to 'fw'
         :type mode: str, optional
-        :param sort_by: files on remote server are stored by project_name or device_signature, defaults to 'by-signature'
+        :param sort_by: files on remote server are stored by project_name or device_signature,
+            defaults to 'by-signature'
         :type sort_by: str, optional
-        :param branch_name: looking for fw/bootloader from specified branch (instead of stable), defaults to None
+        :param branch_name: looking for fw/bootloader from specified branch (instead of stable),
+            defaults to None
         :type branch_name: str, optional
         """
         self.mode = mode
-        fw_source = "unstable/%s" % branch_name if branch_name else CONFIG["DEFAULT_SOURCE"]
+        fw_source = f'unstable/{branch_name if branch_name else CONFIG["DEFAULT_SOURCE"]}'
         self.parent_url_path = self._join(self.mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
     def _join(self, *args):
@@ -160,7 +163,7 @@ class RemoteFileWatcher(object):
         except WBRemoteStorageError:
             return False
 
-    def download(self, name, version="latest"):
+    def download(self, name, version="latest"):  # pylint:disable=inconsistent-return-statements
         """
         Downloading a firmware/bootloader file with specified version to specified fname.
 
@@ -171,14 +174,14 @@ class RemoteFileWatcher(object):
         :return: path of saved file
         :rtype: str (if succeed) or None (if not)
         """
-        fw_ver = "%s%s" % (version, CONFIG["FW_EXTENSION"])
+        fw_ver = f'{version}{CONFIG["FW_EXTENSION"]}'
         remote_path = self._join(self.parent_url_path % name, fw_ver)
         url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
         file_saving_dir = os.path.join(CONFIG["FW_SAVING_DIR"], self.mode)
 
         try:
             return download_remote_file(url_path, file_saving_dir)
-        except Exception as e:
+        except Exception:  # pylint:disable=broad-exception-caught
             logger.error("Could not download: %s", url_path)
             logger.error("Remote path: %s", remote_path)
             logger.error("Save to: %s", file_saving_dir)

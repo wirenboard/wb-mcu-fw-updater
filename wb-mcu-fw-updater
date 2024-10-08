@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# pylint:disable=invalid-name
 
 import argparse
 import atexit
@@ -28,8 +29,8 @@ MODBUS_INSTRUMENTS = {"pyserial": StopbitsTolerantInstrument, "rpc": SerialRPCBa
 def check_internet_connection():
     try:
         fw_downloader.get_request(CONFIG["ROOT_URL"])
-    except fw_downloader.WBRemoteStorageError as e:
-        die("%s is not accessible. Check Internet connection!" % CONFIG["ROOT_URL"])
+    except fw_downloader.WBRemoteStorageError:
+        die(f"{CONFIG['ROOT_URL']} is not accessible. Check Internet connection!")
 
 
 def find_connection_params(slaveid, port, response_timeout, instrument):
@@ -41,7 +42,7 @@ def find_connection_params(slaveid, port, response_timeout, instrument):
         )
 
 
-def _update_alive_device(
+def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
     slaveid,
     port,
     mode,
@@ -54,14 +55,14 @@ def _update_alive_device(
 ):
     check_internet_connection()
 
-    device_str = "(%s %d; response_timeout: %.2fs)" % (port, slaveid, response_timeout)
+    device_str = f"({port} {slaveid}; response_timeout: {response_timeout:.2f}s)"
     modbus_connection = WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
 
     try:
         is_in_bootloader, conn_settings = find_connection_params(slaveid, port, response_timeout, instrument)
-        modbus_connection._set_port_settings_raw(conn_settings)
+        modbus_connection._set_port_settings_raw(conn_settings)  # pylint:disable=protected-access
     except NoResponseError as e:
         logger.error("Can't connect to %s, check physical connection or address/port", device_str)
         die(e)
@@ -75,9 +76,13 @@ def _update_alive_device(
                 bl_version = ""
             logger.info("Device %s supposed to be alive, but found in bootloader %s", device_str, bl_version)
             logger.debug("Trying to acquire fw-signature...")
-            fw_sig = update_monitor._restore_fw_signature(modbus_connection)
+            fw_sig = update_monitor._restore_fw_signature(  # pylint:disable=protected-access
+                modbus_connection
+            )
             if fw_sig:
-                downloaded_wbfw = update_monitor._do_download(fw_sig, version, branch, mode)
+                downloaded_wbfw = update_monitor._do_download(  # pylint:disable=protected-access
+                    fw_sig, version, branch, mode
+                )
                 logger.info(
                     "Will flash %s v:%s to bring %s %s alive",
                     mode,
@@ -111,7 +116,7 @@ def _update_alive_device(
         die(e)
 
 
-def update_fw(args):
+def update_fw(args):  # pylint:disable=redefined-outer-name
     # Could install specified fw_version from specified branch.
     version = args.specified_version or "release"
     _update_alive_device(
@@ -127,7 +132,7 @@ def update_fw(args):
     )
 
 
-def update_bootloader(args):
+def update_bootloader(args):  # pylint:disable=redefined-outer-name
     # Could install specified bl_version from specified branch.
     version = args.specified_version or "latest"  # no bl-releases.yaml yet
     _update_alive_device(
@@ -143,13 +148,13 @@ def update_bootloader(args):
     )
 
 
-def recover_fw(args):
+def recover_fw(args):  # pylint:disable=redefined-outer-name
     """
     Recovering the device, stuck in the bootloader
     """
     check_internet_connection()
 
-    device_str = "%d %s" % (args.slaveid, args.port)
+    device_str = f"{args.slaveid} {args.port}"
 
     device = WBModbusDeviceBase(
         args.slaveid, args.port, instrument=args.instrument, response_timeout=args.response_timeout
@@ -158,22 +163,23 @@ def recover_fw(args):
         conn_settings = update_monitor.find_bootloader_connection_params(
             args.slaveid, args.port, args.response_timeout, args.instrument
         )
-        device._set_port_settings_raw(conn_settings)
+        device._set_port_settings_raw(conn_settings)  # pylint:disable=protected-access
     except NoResponseError:
-        die("Device (%s) is not in bootloader mode! Check connection or slaveid/port" % device_str)
+        die(f"Device ({device_str}) is not in bootloader mode! Check connection or slaveid/port")
 
     try:
         fw_signatures_list = fw_downloader.get_fw_signatures_list()
+        # pylint:disable=protected-access
         args.known_signature = args.known_signature or update_monitor._restore_fw_signature(device)
 
         if args.known_signature:
             update_monitor.recover_device_iteration(args.known_signature, device)
 
         elif update_monitor.ask_user(
-            "Try all possible fw_signatures (%s) for (%s); response_timeout: %.2f?"
-            % (", ".join(fw_signatures_list), device_str, args.response_timeout)
+            f'Try all possible fw_signatures ({", ".join(fw_signatures_list)}) for ({device_str}); '
+            + f"response_timeout: {args.response_timeout:.2f}?"
         ):
-            for fw_sig in fw_signatures_list:
+            for fw_sig in fw_signatures_list:  # pylint:disable=not-an-iterable
                 logger.info("Trying %s:", fw_sig)
                 try:
                     update_monitor.recover_device_iteration(fw_sig, device)
@@ -182,7 +188,7 @@ def recover_fw(args):
                     continue
             else:
                 raise fw_flasher.FlashingError(
-                    "No fw_signature from all possible has succeed for device (%s)" % device_str
+                    "No fw_signature from all possible has succeed for device ({device_str})"
                 )
         else:
             raise update_monitor.UserCancelledError("Trying all possible fw_signatures has rejected by user")
@@ -195,17 +201,17 @@ def recover_fw(args):
         update_monitor.NoReleasedFwError,
         update_monitor.UserCancelledError,
     ) as e:
-        logger.error("Recovering (%d %s) was not successful" % (args.slaveid, args.port))
+        logger.error("Recovering (%d %s) was not successful", args.slaveid, args.port)
         die(e)
 
 
-def update_all(args):
+def update_all(args):  # pylint:disable=redefined-outer-name
     """
     Updating firmwares for all devices, specified in wb-mqtt-serial's config.
     """
     check_internet_connection()
     try:
-        update_monitor._update_all(
+        update_monitor._update_all(  # pylint:disable=protected-access
             force=args.force,
             minimal_response_timeout=args.minimal_response_timeout,
             allow_downgrade=args.allow_downgrade,
@@ -215,13 +221,13 @@ def update_all(args):
         die(e)
 
 
-def recover_all(args):
+def recover_all(args):  # pylint:disable=redefined-outer-name
     """
     Trying to recover all devices, specified in wb-mqtt-serial's config.
     """
     check_internet_connection()
     try:
-        update_monitor._recover_all(
+        update_monitor._recover_all(  # pylint:disable=protected-access
             minimal_response_timeout=args.minimal_response_timeout,
             force=args.force,
             instrument=args.instrument,
@@ -230,15 +236,12 @@ def recover_all(args):
         die(e)
 
 
-def flash_fw_file(args):
+def flash_fw_file(args):  # pylint:disable=redefined-outer-name
     """
     Directly flashing a fw-file (passed as arg) (args are almost compatible to wb-mcu-fw-flasher)
     """
-    device_str = "%s %d %s (response timeout: %.2f)" % (
-        args.port,
-        args.slaveid,
-        str(args.conn_settings),
-        args.response_timeout,
+    device_str = (
+        f"{args.port} {args.slaveid} {args.conn_settings} (response timeout: {args.response_timeout:.2f})"
     )
     device = WBModbusDeviceBase(
         args.slaveid,
@@ -251,13 +254,13 @@ def flash_fw_file(args):
         logger.debug("Rebooting %s to bootloader", device_str)
         try:
             device.reboot_to_bootloader()
-        except ModbusException as e:
-            die("Device (%s) could not reboot to bootloader. Check connection params" % device_str)
+        except ModbusException:
+            die("Device ({device_str}) could not reboot to bootloader. Check connection params")
 
     try:
         update_monitor.direct_flash(args.fname, device, args.erase_all, args.erase_uart)
         return
-    except fw_flasher.NotInBootloaderError as e:
+    except fw_flasher.NotInBootloaderError:
         logger.error("Seems, device (%s) is not in bootloader mode", device_str)
     except (fw_flasher.FlashingError, update_monitor.UserCancelledError) as e:
         logger.exception(e)
@@ -266,15 +269,15 @@ def flash_fw_file(args):
     die()
 
 
-def parse_conn_settings_arg(conn_settings_str):
+def parse_conn_settings_arg(conn_settings_str):  # pylint:disable=inconsistent-return-statements
     try:
         return parse_uart_settings_str(conn_settings_str)
-    except Exception as e:
+    except Exception as e:  # pylint:disable=broad-exception-caught
         logger.error(e)
         die()
 
 
-def add_common_logic_args(parser):
+def add_common_logic_args(parser):  # pylint:disable=inconsistent-return-statements
     parser.add_argument(
         "-f",
         "--force",
@@ -352,7 +355,7 @@ def add_fw_source_args(parser):
     )
 
 
-def parse_args():
+def parse_args():  # pylint:disable=inconsistent-return-statements
     main_parser = argparse.ArgumentParser(
         prog="wb-mcu-fw-updater",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -483,13 +486,13 @@ def parse_args():
     add_modbus_connection_args(direct_flash_parser)
     direct_flash_parser.set_defaults(func=flash_fw_file)
 
-    args = main_parser.parse_args()
+    args = main_parser.parse_args()  # pylint:disable=redefined-outer-name
     if "func" in vars(args):
         return args
-    else:
-        main_parser.print_help()
-        print("Each action supports <-h> key for help.")
-        die("No action has chosen!")
+
+    main_parser.print_help()
+    print("Each action supports <-h> key for help.")
+    die("No action has chosen!")
 
 
 if __name__ == "__main__":
@@ -519,7 +522,7 @@ if __name__ == "__main__":
             initial_port_settings = update_monitor.get_port_settings(args.port)
             atexit.register(lambda: update_monitor.set_port_settings(args.port, initial_port_settings))
     elif args.instrument == SerialRPCBackendInstrument:
-        SerialRPCBackendInstrument._MQTT_BROKER_URL = args.broker
+        SerialRPCBackendInstrument._MQTT_BROKER_URL = args.broker  # pylint:disable=protected-access
 
     atexit.register(update_monitor.db.dump)
 

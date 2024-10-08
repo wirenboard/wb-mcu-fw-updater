@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+from distutils.core import setup  # pylint: disable=deprecated-module
 
 
 def get_version():
