@@ -1082,7 +1082,7 @@ def stop_clients(force, *ports):
             + "Will be paused and resumed after finish",
             force,
         ):
-            die(f"Stop {" ".join(actual_clients)} manually!")
+            die(f'Stop {" ".join(actual_clients)} manually!')
     if actual_clients:
         _send_signal("-STOP", *ports)
 
