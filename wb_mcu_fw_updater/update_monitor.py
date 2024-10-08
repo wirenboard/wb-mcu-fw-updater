@@ -203,9 +203,7 @@ def find_connection_params(
     modbus_connection = bindings.WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
-    desc_str = (
-        "Will find serial port settings for ({port} : {slaveid}; response_timeout: {response_timeout:.2f})..."
-    )
+    desc_str = f"Will find serial port settings for ({port} : {slaveid}; response_timeout: {response_timeout:.2f})..."
     uart_settings = None
     with spinner(
         description=desc_str,

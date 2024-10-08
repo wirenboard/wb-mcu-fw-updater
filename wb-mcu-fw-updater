@@ -188,7 +188,7 @@ def recover_fw(args):  # pylint:disable=redefined-outer-name
                     continue
             else:
                 raise fw_flasher.FlashingError(
-                    "No fw_signature from all possible has succeed for device ({device_str})"
+                    f"No fw_signature from all possible has succeed for device ({device_str})"
                 )
         else:
             raise update_monitor.UserCancelledError("Trying all possible fw_signatures has rejected by user")
@@ -255,7 +255,7 @@ def flash_fw_file(args):  # pylint:disable=redefined-outer-name
         try:
             device.reboot_to_bootloader()
         except ModbusException:
-            die("Device ({device_str}) could not reboot to bootloader. Check connection params")
+            die(f"Device ({device_str}) could not reboot to bootloader. Check connection params")
 
     try:
         update_monitor.direct_flash(args.fname, device, args.erase_all, args.erase_uart)
