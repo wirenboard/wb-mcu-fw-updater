@@ -20,17 +20,17 @@ ANSI_COLORS = {
 def colorize(msg, color):
     if not isinstance(msg, str):
         raise RuntimeError("Only string could be colored!")
-    if color not in ANSI_COLORS.keys():
-        raise RuntimeError("Unsupported color %s. Try one of %s" % (color, ", ".join(ANSI_COLORS.keys())))
+    if color not in ANSI_COLORS:
+        raise RuntimeError(f'Unsupported color {color}. Try one of {", ".join(ANSI_COLORS.keys())}')
     return ANSI_COLORS[color] + msg + ANSI_COLORS["RESET"]
 
 
-class HidingTracebackFilter(logging.Filter):
+class HidingTracebackFilter(logging.Filter):  # pylint: disable=too-few-public-methods
     """
     A dummy filter, hiding record's exception traceback, if was not hidden already.
     """
 
-    def __init__(self, hide_tb=False):
+    def __init__(self, hide_tb=False):  # pylint:disable=super-init-not-called
         self.hide_tb = hide_tb
 
     def _hide_tb(self, record):
@@ -38,20 +38,20 @@ class HidingTracebackFilter(logging.Filter):
             record._exc_info_hidden, record.exc_info = record.exc_info, None
             record.exc_text = None
         elif hasattr(record, "_exc_info_hidden"):  # Traceback was already hidden by another handler
-            record.exc_info = record._exc_info_hidden
+            record.exc_info = record._exc_info_hidden  # pylint: disable=protected-access
             del record._exc_info_hidden
 
     def filter(self, record):
         return True
 
 
-class StdoutFilter(HidingTracebackFilter):
+class StdoutFilter(HidingTracebackFilter):  # pylint: disable=too-few-public-methods
     def filter(self, record):
         self._hide_tb(record)
         return record.levelno < logging.ERROR
 
 
-class StderrFilter(HidingTracebackFilter):
+class StderrFilter(HidingTracebackFilter):  # pylint: disable=too-few-public-methods
     def filter(self, record):
         self._hide_tb(record)
         return logging.CRITICAL > record.levelno >= logging.ERROR

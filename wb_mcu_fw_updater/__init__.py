@@ -72,15 +72,13 @@ def update_config(config_fname):
     :type config_fname: str
     """
     try:
-        conffile = open(config_fname)
+        with open(config_fname, encoding="utf-8") as conffile:
+            config_dict = literal_eval(conffile.read())
+            CONFIG.update(pair for pair in config_dict.items() if pair[0] in CONFIG)
     except IOError:
         logger.warning("No user config file has found! Will use built-in default")
-        return
-    try:
-        config_dict = literal_eval(conffile.read())
-        CONFIG.update(pair for pair in config_dict.items() if pair[0] in CONFIG.keys())
     except (SyntaxError, ValueError) as e:
-        die("Error in config syntax:\n%s" % str(e))
+        die(f"Error in config syntax:\n{e}")
 
 
 update_config(CONFIG["EXTERNAL_CONFIG_FNAME"])
