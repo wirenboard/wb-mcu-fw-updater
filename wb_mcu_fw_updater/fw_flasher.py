@@ -110,10 +110,16 @@ class ModbusInBlFlasher(object):
         instrument=StopbitsTolerantInstrument,
     ):
         self.instrument = bindings.WBModbusDeviceBase(
-            addr, port, bd, parity, stopbits, instrument=instrument, foregoing_noise_cancelling=True
+            addr,
+            port,
+            bd,
+            parity,
+            stopbits,
+            response_timeout=response_timeout,
+            instrument=instrument,
+            foregoing_noise_cancelling=True,
         )
         self._actual_response_timeout = response_timeout
-        self.instrument.set_response_timeout(self._actual_response_timeout)
 
     def _send_info(self, regs_row):
         """

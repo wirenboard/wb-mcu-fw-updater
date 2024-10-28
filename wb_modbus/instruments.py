@@ -232,15 +232,18 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
     Setting stopbits to 1 between sending request and receiving response.
     """
 
+    def __init__(self, *args, **kwargs):
+        super(StopbitsTolerantInstrument, self).__init__(*args, **kwargs)
+        self._initial_stopbits = self.serial.stopbits
+
     def _set_stopbits_onthefly(self, stopbits):
-        self.serial._stopbits = stopbits
-        self.serial._reconfigure_port()
+        self.serial.apply_settings({"stopbits": stopbits})
 
     def _write_to_bus(self, request):
         """
         Set stopbits-to-receive after all data-to-send goes out from output buffer
         """
-        self._initial_stopbits = self.serial._stopbits
+        self._set_stopbits_onthefly(self._initial_stopbits)
         super(StopbitsTolerantInstrument, self)._write_to_bus(request)
         write_ts = time.time()
         while (self.serial.out_waiting > 0) or (self.serial.in_waiting == 0):
@@ -255,16 +258,6 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
                     )
         termios.tcdrain(self.serial.fd)  # ensuring, all buffered data has transmitted
         self._set_stopbits_onthefly(stopbits=1)
-
-    def _read_from_bus(self, number_of_bytes_to_read, minimum_silent_period):
-        """
-        Initial stopbits (to-write) are setting just after data has received
-        """
-        ret = super(StopbitsTolerantInstrument, self)._read_from_bus(
-            number_of_bytes_to_read, minimum_silent_period
-        )
-        self._set_stopbits_onthefly(self._initial_stopbits)
-        return ret
 
 
 class RPCError(minimalmodbus.MasterReportedException):
