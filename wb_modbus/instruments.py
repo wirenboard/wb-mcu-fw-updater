@@ -240,12 +240,13 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
 
     def _set_stopbits_onthefly(self, stopbits):
         self.serial._stopbits = stopbits
-        flags = termios.tcgetattr(self.serial.fd)
+        self.serial._reconfigure_port()
+        (iflag, oflag, cflag, lflag, ispeed, ospeed, cc) = termios.tcgetattr(self.serial.fd)
         if stopbits == 1:
-            flags[3] = flags[3] & ~termios.CSTOPB
+            cflag &= ~termios.CSTOPB
         else:  # 2sb
-            flags[3] = flags[3] | termios.CSTOPB
-        termios.tcsetattr(self.serial.fd, termios.TCSADRAIN, flags)
+            cflag |= termios.CSTOPB
+        termios.tcsetattr(self.serial.fd, termios.TCSADRAIN, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
 
     def _write_to_bus(self, request):
         """
