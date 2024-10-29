@@ -1,6 +1,5 @@
 import atexit
 import ipaddress
-import os
 import sys
 import termios
 import time
@@ -233,14 +232,13 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
     Setting stopbits to 1 between sending request and receiving response.
     """
 
-    def __init__(self, *args, **kwargs):
-        super(StopbitsTolerantInstrument, self).__init__(*args, **kwargs)
-        if os.name != "posix":
-            raise RuntimeError("Stopbits-tolerance is supported only in posix")
-
     def _set_stopbits_onthefly(self, stopbits):
+        """
+        We need to ensure, all data has gone from buffers before setting stopbits to avoid payload corruption
+        """
+        termios.tcdrain(self.serial.fd)
+
         self.serial._stopbits = stopbits
-        self.serial._reconfigure_port()
         (iflag, oflag, cflag, lflag, ispeed, ospeed, cc) = termios.tcgetattr(self.serial.fd)
         if stopbits == 1:
             cflag &= ~termios.CSTOPB
@@ -248,12 +246,25 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
             cflag |= termios.CSTOPB
         termios.tcsetattr(self.serial.fd, termios.TCSADRAIN, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
 
+        termios.tcdrain(self.serial.fd)
+
     def _write_to_bus(self, request):
         """
         Set stopbits-to-receive after all data-to-send goes out from output buffer
         """
         self._initial_stopbits = self.serial._stopbits
         super(StopbitsTolerantInstrument, self)._write_to_bus(request)
+        write_ts = time.time()
+        while (self.serial.out_waiting > 0) or (self.serial.in_waiting == 0):
+            if time.time() - write_ts < self.serial.timeout:
+                time.sleep(0.1)
+            else:
+                if (self.serial.out_waiting == 0) and (self.serial.in_waiting == 0):
+                    raise minimalmodbus.NoResponseError("No communication with the instrument (no answer)")
+                else:
+                    raise minimalmodbus.MasterReportedException(
+                        "Output serial buffer is not empty after %.2fs (serial.timeout)" % self.serial.timeout
+                    )
         self._set_stopbits_onthefly(stopbits=1)
 
     def _read_from_bus(self, number_of_bytes_to_read, minimum_silent_period):
