@@ -233,8 +233,20 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
     """
 
     def _set_stopbits_onthefly(self, stopbits):
+        """
+        We need to ensure, all data has gone from buffers before setting stopbits to avoid payload corruption
+        """
+        termios.tcdrain(self.serial.fd)
+
         self.serial._stopbits = stopbits
-        self.serial._reconfigure_port()
+        (iflag, oflag, cflag, lflag, ispeed, ospeed, cc) = termios.tcgetattr(self.serial.fd)
+        if stopbits == 1:
+            cflag &= ~termios.CSTOPB
+        else:  # 2sb
+            cflag |= termios.CSTOPB
+        termios.tcsetattr(self.serial.fd, termios.TCSADRAIN, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+
+        termios.tcdrain(self.serial.fd)
 
     def _write_to_bus(self, request):
         """
@@ -253,7 +265,6 @@ class StopbitsTolerantInstrument(PyserialBackendInstrument):
                     raise minimalmodbus.MasterReportedException(
                         "Output serial buffer is not empty after %.2fs (serial.timeout)" % self.serial.timeout
                     )
-        termios.tcdrain(self.serial.fd)  # ensuring, all buffered data has transmitted
         self._set_stopbits_onthefly(stopbits=1)
 
     def _read_from_bus(self, number_of_bytes_to_read, minimum_silent_period):
