@@ -76,8 +76,8 @@ class ParsedWBFW:
         if len(self._info_values) != self.INFO_BLOCK_LENGTH_U16_REGS:
             raise IncorrectFwError(
                 f"Info block size should be {self.INFO_BLOCK_LENGTH_U16_REGS} regs!"
-                + f"Got {len(self._info_values)} instead"
-                + f"\nRaw regs: {self._info_values}"
+                f"Got {len(self._info_values)} instead"
+                f"\nRaw regs: {self._info_values}"
             )
         self._data_chunks = [
             data_values[i : i + self.DATA_BLOCK_LENGTH_U16_REGS]

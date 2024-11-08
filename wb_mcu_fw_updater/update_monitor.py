@@ -166,7 +166,9 @@ def get_released_fw(fw_signature, release_info):
         except releases.VersionParsingError as e:
             logger.exception(e)
     raise NoReleasedFwError(
-        f'Released FW not found for "{fw_signature}"\nRelease info:\n{json.dumps(release_info, indent=4)}'
+        f'Released FW not found for "{fw_signature}"\n'
+        "Release info:\n"
+        f"{json.dumps(release_info, indent=4)}"
     )
 
 
@@ -205,7 +207,7 @@ def find_connection_params(
     )
     desc_str = (
         f"Will find serial port settings for ({port} : {slaveid}; "
-        + f"response_timeout: {response_timeout:.2f})..."
+        f"response_timeout: {response_timeout:.2f})..."
     )
     uart_settings = None
     with spinner(
@@ -941,7 +943,8 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
         )
 
     logger.info(
-        "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, %s disconnected and %s too old for any updates.",  # pylint:disable=line-too-long
+        "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, "
+        "%s disconnected and %s too old for any updates.",
         user_log.colorize(str(len(cmd_status["ok"])), "GREEN" if cmd_status["ok"] else "RED"),
         user_log.colorize(str(len(cmd_status["skipped"])), "YELLOW" if cmd_status["skipped"] else "GREEN"),
         user_log.colorize(
