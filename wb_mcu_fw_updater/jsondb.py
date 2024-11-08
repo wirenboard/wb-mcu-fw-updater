@@ -14,7 +14,7 @@ class FixedLengthList(list):
     MAXLEN = CONFIG["MAX_DB_RECORDS"]
 
     def __init__(self, *args, **kwargs):
-        super(FixedLengthList, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._keep_length()
 
     def _keep_length(self):
@@ -22,19 +22,19 @@ class FixedLengthList(list):
             self.pop(0)
 
     def append(self, item):
-        super(FixedLengthList, self).append(item)
+        super().append(item)
         self._keep_length()
 
     def extend(self, sequence):
-        super(FixedLengthList, self).extend(sequence)
-        self.__delslice__(0, len(self) - self.MAXLEN)
+        super().extend(sequence)
+        self._keep_length()
 
     def insert(self, index, element):
-        super(FixedLengthList, self).insert(index, element)
+        super().insert(index, element)
         self._keep_length()
 
 
-class JsonDB(object):
+class JsonDB:
     """
     Storing information about device's fw_signature.
     """
@@ -50,24 +50,25 @@ class JsonDB(object):
     def load(self, db_fname):
         if os.path.exists(db_fname):
             logger.debug("Loading db from file: %s", db_fname)
-            self.container = FixedLengthList(json.load(open(db_fname, "r")))
+            with open(db_fname, "r", encoding="utf-8") as file:
+                self.container = FixedLengthList(json.load(file))
         else:
             logger.debug("File %s not found! Initiallizing empty db", db_fname)
             self.container = FixedLengthList()
 
     def dump(self):
         try:
-            json.dump(self.container, open(self.db_fname, "w+"))
+            with open(self.db_fname, "w+", encoding="utf-8") as file:
+                json.dump(self.container, file)
             logger.debug("Has saved db to %s", self.db_fname)
-        except PermissionError as e:
+        except PermissionError:
             logger.error("Haven't rights to write %s! Try with sudo", self.db_fname, exc_info=True)
 
     def _find(self, slaveid, port, sequence):
         for index, device in enumerate(sequence):
             if (device[self._SLAVEID] == slaveid) and (device[self._PORT] == port):
                 return index
-        else:
-            return None
+        return None
 
     def save(self, slaveid, port, fw_signature):
         existing_device_index = self._find(slaveid, port, sequence=self.container)

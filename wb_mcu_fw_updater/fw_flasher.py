@@ -64,6 +64,7 @@ class ParsedWBFW:
             raw_bytes = fp.read()
             bytestr = str(raw_bytes, encoding="latin1")
             try:
+                # pylint: disable=protected-access
                 u16_regs = minimalmodbus._bytestring_to_valuelist(bytestr, int(bs / 2))
             except (TypeError, ValueError) as e:
                 raise IncorrectFwError from e
@@ -74,7 +75,9 @@ class ParsedWBFW:
         )
         if len(self._info_values) != self.INFO_BLOCK_LENGTH_U16_REGS:
             raise IncorrectFwError(
-                f"Info block size should be {self.INFO_BLOCK_LENGTH_U16_REGS} regs! Got {len(self._info_values)} instead\nRaw regs: {self._info_values}"
+                f"Info block size should be {self.INFO_BLOCK_LENGTH_U16_REGS} regs!"
+                f"Got {len(self._info_values)} instead"
+                f"\nRaw regs: {self._info_values}"
             )
         self._data_chunks = [
             data_values[i : i + self.DATA_BLOCK_LENGTH_U16_REGS]
@@ -82,7 +85,7 @@ class ParsedWBFW:
         ]
 
 
-class ModbusInBlFlasher(object):
+class ModbusInBlFlasher:
     """
     Interacting with WirenBoard Modbus device's bootloader:
         flashing .wbfw files
@@ -99,7 +102,7 @@ class ModbusInBlFlasher(object):
 
     GET_FREE_SPACE_FLASHFS_REG = 1003
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         addr,
         port,
@@ -127,7 +130,7 @@ class ModbusInBlFlasher(object):
             self.instrument.write_u16_regs(self.INFO_BLOCK_START, regs_row)
         except minimalmodbus.IllegalRequestError as e:
             six.raise_from(NotInBootloaderError, e)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             six.raise_from(FlashingError, e)
         finally:
             self.instrument.set_response_timeout(self._actual_response_timeout)
@@ -136,7 +139,8 @@ class ModbusInBlFlasher(object):
         """
         Writing DATA block as u16 regs (split into fixed length chunks)
         """
-        has_previous_chunk_failed = False  # Due to bootloader's behaviour, actual flashing failure is current-chunk failure + next-chunk failure
+        # Due to bootloader's behaviour, actual flashing failure is current-chunk failure + next-chunk failure
+        has_previous_chunk_failed = False
         for chunk in tqdm(chunks, ascii=True, dynamic_ncols=True, bar_format="{l_bar}{bar}|{n}/{total}"):
             try:
                 self.instrument.write_u16_regs(
@@ -150,6 +154,7 @@ class ModbusInBlFlasher(object):
                     has_previous_chunk_failed = True
                     continue
 
+        # pylint: disable=protected-access
         if has_previous_chunk_failed and self.instrument._has_bootloader_answered():
             raise FlashingError(
                 "Flashing has failed at last frame (device remains in bootloader). Check device's connection!"

@@ -21,15 +21,27 @@ import six
 import tqdm
 import yaml
 
-# TODO: rework params setting to get rid of imports-order-magic
+# rework params setting to get rid of imports-order-magic
 # isort: off
 from . import CONFIG, MODE_BOOTLOADER, MODE_FW, logger
-import wb_modbus  # Params should be set before any wb_modbus usage!
+import wb_modbus  # Params should be set before any wb_modbus usage! # pylint:disable=wrong-import-order
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG["ALLOWED_UNSUCCESSFUL_MODBUS_TRIES"]
 wb_modbus.DEBUG = CONFIG["MODBUS_DEBUG"]
-from wb_modbus import minimalmodbus, bindings, parse_uart_settings_str, instruments
-from . import fw_flasher, fw_downloader, user_log, jsondb, releases, die
+from wb_modbus import (  # pylint:disable=wrong-import-position, wrong-import-order
+    minimalmodbus,
+    bindings,
+    parse_uart_settings_str,
+    instruments,
+)
+from . import (  # pylint:disable=wrong-import-position
+    fw_flasher,
+    fw_downloader,
+    user_log,
+    jsondb,
+    releases,
+    die,
+)
 
 # isort: on
 
@@ -66,7 +78,9 @@ SkipUpdateReason = enum.Enum(value="SkipUpdateReason", names=("is_actual", "gone
 
 
 @contextmanager
-def spinner(estimated_time_s=float("+inf"), tdelta_s=0.1, description="", tqdm_kwargs={}):
+def spinner(
+    estimated_time_s=float("+inf"), tdelta_s=0.1, description="", tqdm_kwargs={}
+):  # pylint:disable=dangerous-default-value
     if description:
         logger.debug(description)
         tqdm_kwargs.update({"desc": description})
@@ -89,7 +103,7 @@ def spinner(estimated_time_s=float("+inf"), tdelta_s=0.1, description="", tqdm_k
         pbar.close()
 
 
-def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
+def ask_user(message, force_yes=False):
     """
     Asking user before potentionally dangerous action.
     <force_yes> removes all interactivity and hides the question
@@ -100,7 +114,7 @@ def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
     :rtype: bool
     """
     loglevel = logging.DEBUG if force_yes else logging.WARNING
-    message_str = "\n%s [Y/N]" % (message)
+    message_str = f"\n{message} [Y/N]"
     for msg in message_str.split("\n"):
         logger.log(loglevel, msg)
     ret = force_yes or six.moves.input().upper().startswith("Y")
@@ -108,16 +122,16 @@ def ask_user(message, force_yes=False):  # TODO: non-blocking with timer?
     return ret
 
 
-def fill_release_info():  # TODO: make a class, storing a release-info context
+def fill_release_info():
     """
     wb-mcu-fw-updater supposed to be launched only on devices, supporting wb-releases
     incorrect wb-releases file indicates strange erroneous behavior
     """
-    global RELEASE_INFO
+    global RELEASE_INFO  # pylint:disable=global-statement
     releases_fname = CONFIG["RELEASES_FNAME"]
     try:
         RELEASE_INFO = releases.parse_releases(releases_fname)
-    except Exception as e:
+    except Exception:  # pylint:disable=broad-exception-caught
         logger.error("Critical error in %s file! Contact the support!", releases_fname)
         six.reraise(*sys.exc_info())
 
@@ -147,21 +161,21 @@ def get_released_fw(fw_signature, release_info):
                     fw_endpoint,
                 )
                 return str(fw_version), str(fw_endpoint)
-        except fw_downloader.RemoteFileReadingError as e:
+        except fw_downloader.RemoteFileReadingError:
             logger.warning('No released fw for "%s" in "%s"', fw_signature, url)
         except releases.VersionParsingError as e:
             logger.exception(e)
-    else:
-        raise NoReleasedFwError(
-            'Released FW not found for "%s"\nRelease info:\n%s'
-            % (fw_signature, json.dumps(release_info, indent=4))
-        )
+    raise NoReleasedFwError(
+        f'Released FW not found for "{fw_signature}"\n'
+        "Release info:\n"
+        f"{json.dumps(release_info, indent=4)}"
+    )
 
 
 def download_fw_fallback(fw_signature, release_info, ask_for_latest=True, force=False):
     try:
         _, released_fw_endpoint = get_released_fw(fw_signature, release_info)
-    except NoReleasedFwError as e:
+    except NoReleasedFwError:
         logger.warning(
             'Device "%s" is not supported in %s (as %s)',
             fw_signature,
@@ -191,10 +205,9 @@ def find_connection_params(
     modbus_connection = bindings.WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
-    desc_str = "Will find serial port settings for (%s : %d; response_timeout: %.2f)..." % (
-        port,
-        slaveid,
-        response_timeout,
+    desc_str = (
+        f"Will find serial port settings for ({port} : {slaveid}; "
+        f"response_timeout: {response_timeout:.2f})..."
     )
     uart_settings = None
     with spinner(
@@ -217,11 +230,8 @@ def find_bootloader_connection_params(
     modbus_connection = bindings.WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
     )
-    desc_str = "Will find bootloader port settings for (%s : %d; response_timeout: %.2f)..." % (
-        port,
-        slaveid,
-        response_timeout,
-    )
+    # pylint:disable=line-too-long
+    desc_str = f"Will find bootloader port settings for ({port} : {slaveid}; response_timeout: {response_timeout:.2f})..."
     uart_settings = None
     with spinner(
         description=desc_str,
@@ -235,7 +245,7 @@ def find_bootloader_connection_params(
             six.raise_from(minimalmodbus.NoResponseError, e)
 
     initial_uart_settings = deepcopy(modbus_connection.settings)
-    modbus_connection._set_port_settings_raw(uart_settings)
+    modbus_connection._set_port_settings_raw(uart_settings)  # pylint: disable=protected-access
     try:
         modbus_connection.get_slave_addr()
     except minimalmodbus.ModbusException:
@@ -243,7 +253,7 @@ def find_bootloader_connection_params(
         logger.info("Has found bootloader port settings: %s", str(uart_settings))
         return uart_settings
     finally:
-        modbus_connection._set_port_settings_raw(initial_uart_settings)
+        modbus_connection._set_port_settings_raw(initial_uart_settings)  # pylint: disable=protected-access
 
     raise minimalmodbus.NoResponseError()
 
@@ -256,14 +266,16 @@ def check_device_is_a_wb_one(modbus_connection):
             minimalmodbus.NoResponseError() if disconnected;
             ValueError() if minimalmodbus's slaveid check failed => device is foreign
         2) performing get_fw_signature() call. If 1) succeed, could raise:
-            minimalmodbus.IllegalRequestError() (inside!!; reraises TooOldDeviceError()) if device is a wb-one, but too old for any updates
-        3) performing a set of additional wb-specific calls: get_device_signature(), get_fw_version(), get_uptime()
-            if 1), 2) are succeed, any modbus error here means, device is foreign
+            minimalmodbus.IllegalRequestError() (inside!!; reraises TooOldDeviceError())
+                if device is a wb-one, but too old for any updates
+        3) performing a set of additional wb-specific calls:
+            get_device_signature(), get_fw_version(), get_uptime().
+            If 1), 2) are succeed, any modbus error here means, device is foreign
     """
     try:
         sn = modbus_connection.get_serial_number()  # Will raise NoResponseError, if disconnected
         fw_sig = modbus_connection.get_fw_signature()
-    except bindings.TooOldDeviceError as e:
+    except bindings.TooOldDeviceError:
         fw_sig = ""
     except (
         ValueError,
@@ -283,8 +295,8 @@ def check_device_is_a_wb_one(modbus_connection):
         )
     except minimalmodbus.ModbusException as e:
         raise ForeignDeviceError(
-            "Possibly, device (%s %d) is not a WB-one!" % (modbus_connection.port, modbus_connection.slaveid)
-        )
+            f"Possibly, device ({modbus_connection.port} {modbus_connection.slaveid}) is not a WB-one!"
+        ) from e
 
 
 def get_correct_modbus_connection(
@@ -293,11 +305,12 @@ def get_correct_modbus_connection(
     response_timeout,
     known_uart_params_str=None,
     instrument=instruments.StopbitsTolerantInstrument,
-):  # TODO: to device_prober module?
+):  # maybe move to device_prober module?
     """
     Alive device only:
-        searching device's uart settings (if not passed);
-        checking, that device is a wb-one via reading device_signature, serial_number, fw_signature, fw_version
+        1) searching device's uart settings (if not passed);
+        2) checking, that device is a wb-one via reading
+            device_signature, serial_number, fw_signature, fw_version;
     """
     modbus_connection = bindings.WBModbusDeviceBase(
         slaveid, port, response_timeout=response_timeout, instrument=instrument
@@ -307,7 +320,7 @@ def get_correct_modbus_connection(
         modbus_connection.set_port_settings(*parse_uart_settings_str(known_uart_params_str))
     else:
         raw_uart_params = find_connection_params(slaveid, port, response_timeout, instrument=instrument)
-        modbus_connection._set_port_settings_raw(raw_uart_params)
+        modbus_connection._set_port_settings_raw(raw_uart_params)  # pylint: disable=protected-access
 
     check_device_is_a_wb_one(modbus_connection)
     return modbus_connection
@@ -316,7 +329,8 @@ def get_correct_modbus_connection(
 def get_ports_on_driver(driver_config_fname):
     ports = []
     try:
-        config_dict = json.load(open(driver_config_fname, "r", encoding="utf-8"))
+        with open(driver_config_fname, "r", encoding="utf-8") as file:
+            config_dict = json.load(file)
     except (ValueError, IOError) as e:
         logger.exception("Error in %s", driver_config_fname)
         raise ConfigParsingError from e
@@ -327,7 +341,7 @@ def get_ports_on_driver(driver_config_fname):
     return ports
 
 
-def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
+def get_devices_on_driver(driver_config_fname):
     """
     Parsing a driver's config file to get ports, their uart params and devices, connected to.
 
@@ -337,7 +351,8 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
     found_devices = {}
 
     try:
-        config_dict = json.load(open(driver_config_fname, "r", encoding="utf-8"))
+        with open(driver_config_fname, "r", encoding="utf-8") as file:
+            config_dict = json.load(file)
     except (ValueError, IOError) as e:
         logger.exception("Error in %s", driver_config_fname)
         six.raise_from(ConfigParsingError, e)
@@ -388,13 +403,14 @@ def get_devices_on_driver(driver_config_fname):  # TODO: move to separate module
 
 def recover_device_iteration(fw_signature, device: bindings.WBModbusDeviceBase, force=False):
     """
-    A device supposed to be in "dead" state => fw_signature, slaveid, port have passed instead of modbus_connection
+    A device supposed to be in "dead" state =>
+    fw_signature, slaveid, port have passed instead of modbus_connection
     """
     downloaded_fw = download_fw_fallback(fw_signature, RELEASE_INFO, force=force)
     direct_flash(downloaded_fw, device, force=force)
 
 
-def direct_flash(
+def direct_flash(  # pylint:disable=too-many-arguments
     fw_fpath,
     device: bindings.WBModbusDeviceBase,
     erase_all_settings=False,
@@ -411,10 +427,9 @@ def direct_flash(
     def _ensure(message_str):
         if ask_user(message_str, force_yes=force):
             return True
-        else:
-            raise UserCancelledError(
-                f"Rejected by user. Device ({device.slaveid}, {device.port}) is in bootloder now; wait 120s, untill it starts."
-            )
+        raise UserCancelledError(
+            f"Rejected by user. Device ({device.slaveid}, {device.port}) is in bootloder now; wait 120s, untill it starts."  # pylint:disable=line-too-long
+        )
 
     default_msg = "Device's settings will be reset to defaults (1, 9600-8-N-2). Are you sure?"
 
@@ -508,15 +523,13 @@ def is_reflash_necessary(
     if _do_flash and (actual_version.major != provided_version.major):
         return (
             ask_user(
-                """Major version has changed (v%s -> v%s);
-        Backward compatibility will be broken. Are you sure?"""
-                % (str(actual_version.major), str(provided_version.major)),
+                f"""Major version has changed (v{str(actual_version.major)} -> v{str(provided_version.major)});
+        Backward compatibility will be broken. Are you sure?""",  # pylint:disable=line-too-long
                 force_yes=force_reflash,
             ),
             _skip_reason,
         )
-    else:
-        return _do_flash, _skip_reason
+    return _do_flash, _skip_reason
 
 
 def is_bootloader_latest(mb_connection):
@@ -554,7 +567,8 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
             downloaded_fw = downloader.download(fw_sig, version)
         if mode_name == "bootloader":
             retrieve_latest_vnum = False
-            # TODO: clear bootloader branches from s3 (or wait some time) and remove "retrieve_latest_vnum" logic
+            # maybe clear bootloader branches from s3 (or wait some time)
+            # instead of "retrieve_latest_vnum" logic?
 
     if version == "release":  # triggered updating from releases
         version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO)
@@ -573,7 +587,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
 
 
 def is_interactive_shell():
-    return os.getenv("WBGSM_INTERACTIVE", "").strip() != ""  # TODO: maybe rename env var?
+    return os.getenv("WBGSM_INTERACTIVE", "").strip() != ""  # maybe rename env var?
 
 
 def is_bl_update_required(modbus_connection, force=False):
@@ -652,11 +666,18 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
             force=force,
             do_check_userdata_saving=do_check_userdata_saving,
         )
-    modbus_connection._set_port_settings_raw(initial_port_settings)
+    modbus_connection._set_port_settings_raw(initial_port_settings)  # pylint: disable=protected-access
     modbus_connection.set_response_timeout(initial_response_timeout)
 
 
-def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_version, force, erase_settings):
+def flash_alive_device(  # pylint:disable=too-many-arguments
+    modbus_connection,
+    mode,
+    branch_name,
+    specified_fw_version,
+    force,
+    erase_settings,
+):
     """
     Checking for update, if branch is stable;
     Just flashing specified fw version, if branch is unstable.
@@ -664,16 +685,14 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
     fw_signature = modbus_connection.get_fw_signature()
     db.save(modbus_connection.slaveid, modbus_connection.port, fw_signature)
 
-    device_str = "(%s %d on %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port)
+    device_str = f"({fw_signature} {modbus_connection.slaveid} on {modbus_connection.port})"
 
-    """
-    Flashing specified fw version (without any update-checking), if branch is unstable
-    """
+    # Flashing specified fw version (without any update-checking), if branch is unstable
+
     if branch_name:
         if ask_user(
-            """Flashing device: "%s" branch: "%s" version: "%s" is requested.
-        Stability cannot be guaranteed. Flash at your own risk?"""
-            % (fw_signature, branch_name, specified_fw_version),
+            f"""Flashing device: "{fw_signature}" branch: "{branch_name}" version: "{specified_fw_version}" is requested.
+        Stability cannot be guaranteed. Flash at your own risk?""",  # pylint:disable=line-too-long
             force_yes=force,
         ):
             downloaded_wbfw = _do_download(fw_signature, specified_fw_version, branch_name, mode)
@@ -685,12 +704,10 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
             )
             _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
             return
-        else:
-            raise UserCancelledError("Flashing %s has rejected" % fw_signature)
+        raise UserCancelledError(f"Flashing {fw_signature} has rejected")
 
-    """
-    Reflashing with update-checking
-    """
+    # Reflashing with update-checking
+
     device_fw_version = (
         modbus_connection.get_bootloader_version()
         if mode == MODE_BOOTLOADER
@@ -704,7 +721,7 @@ def flash_alive_device(modbus_connection, mode, branch_name, specified_fw_versio
         provided_version=downloaded_wbfw.version,
         force_reflash=force,
         allow_downgrade=True,
-        debug_info="(%s %d %s)" % (fw_signature, modbus_connection.slaveid, modbus_connection.port),
+        debug_info=f"({fw_signature} {modbus_connection.slaveid} {modbus_connection.port})",
     )
     if do_reflash:
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
@@ -714,12 +731,12 @@ class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
     __slots__ = ()
 
     def __str__(self):
-        return "%s (%d, %s)" % (self.name, self.modbus_connection.slaveid, self.modbus_connection.port)
+        return f"{self.name} ({self.modbus_connection.slaveid}, {self.modbus_connection.port})"
 
 
-def probe_all_devices(
+def probe_all_devices(  # pylint:disable=too-many-locals
     driver_config_fname, minimal_response_timeout, instrument=instruments.StopbitsTolerantInstrument
-):  # TODO: rework entire data model (to get rid of passing lists)
+):  # maybe rework entire data model (to get rid of passing lists)
     """
     Acquiring states of all devices, added to config.
     States could be:
@@ -740,13 +757,8 @@ def probe_all_devices(
             actual_response_timeout = max(
                 minimal_response_timeout, port_response_timeout, device_response_timeout
             )
-            desc_str = "Probing %s (port: %s, slaveid: %d, uart_params: %s, response_timeout: %.2f)..." % (
-                device_name,
-                port,
-                device_slaveid,
-                uart_params,
-                actual_response_timeout,
-            )
+            # pylint:disable=line-too-long
+            desc_str = f"Probing {device_name} (port: {port}, slaveid: {device_slaveid}, uart_params: {uart_params}, response_timeout: {actual_response_timeout:.2f})..."
             with spinner(description=desc_str, tqdm_kwargs={"bar_format": "{desc} (elapsed: {elapsed})"}):
                 device_info = DeviceInfo(
                     name=device_name,
@@ -797,15 +809,17 @@ def probe_all_devices(
     return result
 
 
-def print_status(loglevel, status="", devices_list=[], additional_info=""):
+def print_status(
+    loglevel, status="", devices_list=[], additional_info=""
+):  # pylint:disable=dangerous-default-value
     logger.log(loglevel, status)
     logger.log(loglevel, "\t%s", "; ".join([str(device_info) for device_info in devices_list]))
     logger.log(loglevel, additional_info)
 
 
-def _update_all(
+def _update_all(  # pylint:disable=too-many-branches,too-many-statements
     force, minimal_response_timeout, allow_downgrade=False, instrument=instruments.StopbitsTolerantInstrument
-):  # TODO: maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
+):  # maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
     probing_result = probe_all_devices(
         CONFIG["SERIAL_DRIVER_CONFIG_FNAME"], minimal_response_timeout, instrument=instrument
     )
@@ -834,7 +848,7 @@ def _update_all(
             provided_version=latest_remote_version,
             force_reflash=force,
             allow_downgrade=allow_downgrade,
-            debug_info="(%s)" % str(device_info),
+            debug_info=f"({device_info})",
         )
         if do_reflash:
             downloaded_wbfw = DownloadedWBFW(
@@ -886,7 +900,7 @@ def _update_all(
     if cmd_status["skipped"]:
         print_status(
             logging.WARNING,
-            status="Not updated (fw version gone ahead of release %s):" % RELEASE_INFO.get("SUITE", ""),
+            status=f'Not updated (fw version gone ahead of release {RELEASE_INFO.get("SUITE", "")}):',
             devices_list=cmd_status["skipped"],
             additional_info='You may try to run with "--allow-downgrade" arg',
         )
@@ -894,7 +908,7 @@ def _update_all(
     if cmd_status["no_fw_release"]:
         print_status(
             logging.WARNING,
-            status="Not supported in current %s release:" % RELEASE_INFO.get("RELEASE_NAME", ""),
+            status=f'Not supported in current {RELEASE_INFO.get("RELEASE_NAME", "")} release:',
             devices_list=cmd_status["no_fw_release"],
             additional_info="You may try to switch to newer release",
         )
@@ -929,7 +943,8 @@ def _update_all(
         )
 
     logger.info(
-        "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, %s disconnected and %s too old for any updates.",
+        "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, "
+        "%s disconnected and %s too old for any updates.",
         user_log.colorize(str(len(cmd_status["ok"])), "GREEN" if cmd_status["ok"] else "RED"),
         user_log.colorize(str(len(cmd_status["skipped"])), "YELLOW" if cmd_status["skipped"] else "GREEN"),
         user_log.colorize(
@@ -1004,7 +1019,7 @@ def _recover_all(minimal_response_timeout, force=False, instrument=instruments.S
             logging.ERROR,
             status="Not recovered:",
             devices_list=cmd_status["skipped"],
-            additional_info="Try again or launch single recover with --fw-sig <fw_signature> key for each device!",
+            additional_info="Try again or launch single recover with --fw-sig <fw_signature> key for each device!",  # pylint:disable=line-too-long
         )
 
     logger.info(
@@ -1027,7 +1042,7 @@ def _recover_all(minimal_response_timeout, force=False, instrument=instruments.S
 
 def _get_clients(*ports):
     ports = " ".join(ports)
-    cmd_str = "fuser %s" % ports
+    cmd_str = f"fuser {ports}"
     logger.debug("Will run: %s", cmd_str)
     try:
         pids = str(subprocess.check_output(cmd_str, shell=True, stderr=subprocess.DEVNULL), encoding="utf-8")
@@ -1037,7 +1052,7 @@ def _get_clients(*ports):
     pids = [pid.strip() for pid in pids.split()]
     pids = " ".join(set(pids))
     logger.debug("Clients of %s: %s", ports, pids)
-    cmd_str = "ps -o cmd= %s" % pids
+    cmd_str = f"ps -o cmd= {pids}"
     logger.debug("Will run: %s", cmd_str)
     try:
         procs = str(subprocess.check_output(cmd_str, shell=True, stderr=subprocess.DEVNULL), encoding="utf-8")
@@ -1053,7 +1068,7 @@ def _send_signal(signal, *ports):
     to handle cases, like <wb-mqtt-serial -c config.conf>
     """
     ports = " ".join(ports)
-    cmd_str = "fuser -k %s %s" % (signal, ports)
+    cmd_str = f"fuser -k {signal} {ports}"
     logger.debug("Will run: %s", cmd_str)
     subprocess.call(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -1067,11 +1082,11 @@ def stop_clients(force, *ports):
     actual_clients = set(_get_clients(*ports))
     if actual_clients.difference(default_clients):
         if not ask_user(
-            "%s used by %s; Will be paused and resumed after finish"
-            % (", ".join(ports), ", ".join(actual_clients)),
+            f"{', '.join(ports)} used by {', '.join(actual_clients)}; "
+            + "Will be paused and resumed after finish",
             force,
         ):
-            die("Stop %s manually!" % " ".join(actual_clients))
+            die(f'Stop {" ".join(actual_clients)} manually!')
     if actual_clients:
         _send_signal("-STOP", *ports)
 
@@ -1085,11 +1100,11 @@ def get_port_settings(port_fname):
     python-serial does not remember initial port settings (bd, parity, etc...)
     => restoring it manually after all operations to let wb-mqtt-serial work again
     """
-    with open(port_fname) as port:
+    with open(port_fname, encoding="utf-8") as port:
         fd = port.fileno()
         return termios.tcgetattr(fd)
 
 
 def set_port_settings(port_fname, termios_settings):
-    with open(port_fname) as port:
+    with open(port_fname, encoding="utf-8") as port:
         termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)

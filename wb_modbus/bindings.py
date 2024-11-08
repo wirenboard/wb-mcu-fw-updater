@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-#
+# pylint: skip-file
 import time
 from binascii import unhexlify
 from collections import namedtuple

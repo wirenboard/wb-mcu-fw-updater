@@ -12,7 +12,9 @@ class VersionParsingError(Exception):
     pass
 
 
-def parse_releases(fname=CONFIG["RELEASES_FNAME"]):  # TODO: look at wb-update-manager package
+def parse_releases(
+    fname=CONFIG["RELEASES_FNAME"],
+):  # maybe it would be better to look at wb-update-manager package
     """
     WirenBoard controllers have releases info, stored in file <CONFIG['RELEASES_FNAME']>
     Releases info file usually contains:
@@ -24,7 +26,7 @@ def parse_releases(fname=CONFIG["RELEASES_FNAME"]):  # TODO: look at wb-update-m
     ret = defaultdict(lambda: None)
 
     logger.debug("Reading %s for releases info", fname)
-    with open(fname) as fp:
+    with open(fname, encoding="utf-8") as fp:
         ret.update({k.strip(): v.strip() for k, v in (l.split("=", 1) for l in fp)})
         logger.debug("Got releases info:")
         logger.debug("\t%s", str(ret))
@@ -40,8 +42,8 @@ def get_release_file_urls(
     ret = []
     fname_suffix = release_info["REPO_PREFIX"]
     if fname_suffix:
-        fname_suffix = re.sub("[\W_]+", "~", fname_suffix)  # changing non letters or numbers to ~
-        ret.append(default_releases_file_url.replace(".yaml", ".%s.yaml" % fname_suffix))
+        fname_suffix = re.sub(r"[\W_]+", "~", fname_suffix)  # changing non letters or numbers to ~
+        ret.append(default_releases_file_url.replace(".yaml", f".{fname_suffix}.yaml"))
     ret.append(default_releases_file_url)
     logger.debug("FW releases files: %s", str(ret))
     return ret
@@ -52,9 +54,8 @@ def parse_fw_version(endpoint_url):
     Parsing fw version from endpoint url, stored in releases file
     """
     extension = CONFIG["FW_EXTENSION"]
-    re_str = ".+/(.+)%s" % extension
+    re_str = f".+/(.+){extension}"
     mat = re.match(re_str, endpoint_url)  # matches .../*.wbfw
     if mat:
         return mat.group(1)
-    else:
-        raise VersionParsingError("Could not parse fw version from %s by regexp %s" % (endpoint_url, re_str))
+    raise VersionParsingError(f"Could not parse fw version from {endpoint_url} by regexp {re_str}")

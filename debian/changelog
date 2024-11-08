@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.11.5) stable; urgency=medium
+
+  * Enable angry pylint. No fuctional changes
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Tue, 8 Nov 2024 17:54:46 +0300
+
 wb-mcu-fw-updater (1.11.4) stable; urgency=medium
 
   * instruments: rework StopbitsTolerantInstrument (more strictly wait for outgoing data);
