@@ -131,7 +131,7 @@ class RemoteFileWatcher:
         :type branch_name: str, optional
         """
         self.mode = mode
-        fw_source = f'unstable/{branch_name if branch_name else CONFIG["DEFAULT_SOURCE"]}'
+        fw_source = f"unstable/{branch_name}" if branch_name else CONFIG["DEFAULT_SOURCE"]
         self.parent_url_path = self._join(self.mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
     def _join(self, *args):

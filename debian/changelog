@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.11.6) stable; urgency=medium
+
+  * Fix typo in branch name for fw source
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Mon, 18 Nov 2024 14:31:08 +0300
+
 wb-mcu-fw-updater (1.11.5) stable; urgency=medium
 
   * Enable angry pylint. No fuctional changes
