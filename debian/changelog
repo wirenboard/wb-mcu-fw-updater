@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.12.0) stable; urgency=medium
+
+  * Disable stop bit tolerant during flashing
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Wed, 19 Mar 2025 13:09:31 +0300
+
 wb-mcu-fw-updater (1.11.6) stable; urgency=medium
 
   * Fix typo in branch name for fw source
