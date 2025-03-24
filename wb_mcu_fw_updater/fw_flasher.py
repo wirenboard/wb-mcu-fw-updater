@@ -7,7 +7,7 @@ import six
 from tqdm import tqdm
 
 from wb_modbus import bindings, minimalmodbus
-from wb_modbus.instruments import StopbitsTolerantInstrument
+from wb_modbus.instruments import PyserialBackendInstrument, StopbitsTolerantInstrument
 
 from . import logger
 
@@ -112,8 +112,11 @@ class ModbusInBlFlasher:
         stopbits=2,
         instrument=StopbitsTolerantInstrument,
     ):
+        actual_instrument = (
+            PyserialBackendInstrument if instrument == StopbitsTolerantInstrument else instrument
+        )
         self.instrument = bindings.WBModbusDeviceBase(
-            addr, port, bd, parity, stopbits, instrument=instrument, foregoing_noise_cancelling=True
+            addr, port, bd, parity, stopbits, instrument=actual_instrument, foregoing_noise_cancelling=True
         )
         self._actual_response_timeout = response_timeout
         self.instrument.set_response_timeout(self._actual_response_timeout)
