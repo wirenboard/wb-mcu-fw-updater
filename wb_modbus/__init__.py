@@ -17,7 +17,7 @@ ALLOWED_PARITIES = OrderedDict([("N", 0), ("O", 1), ("E", 2)])
 DEBUG = False
 
 
-WBMAP_MARKER = re.compile("\S*MAP\d+\S*")  # *MAP%d* matches
+WBMAP_MARKER = re.compile(r"\S*MAP\d+\S*")  # *MAP%d* matches
 
 
 class SettingsParsingError(Exception):
@@ -31,7 +31,7 @@ def parse_uart_settings_str(settings_str):
     :return: [baudrate, parity, stopbits]
     :rtype: list
     """
-    if re.match("\d*[A-Z]\d*", settings_str):
+    if re.match(r"\d*[A-Z]\d*", settings_str):
         baudrate, stopbits = re.split("[A-Z]", settings_str)
         parity = settings_str.replace(baudrate, "").replace(stopbits, "").strip()
         if (

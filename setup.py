@@ -5,7 +5,7 @@ from setuptools import setup
 
 def get_version():
     with open("debian/changelog", "r", encoding="utf-8") as f:
-        return f.readline().split()[1][1:-1]
+        return f.readline().split()[1][1:-1].split("~")[0]
 
 
 setup(

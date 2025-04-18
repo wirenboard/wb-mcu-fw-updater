@@ -6,12 +6,10 @@ A command-line tool, updating WirenBoard modbus devices to latest firmwares. Ver
 * wb_modbus - safe & configurable wrappers around minimalmodbus; common (for Wiren Board devices) modbus bindings.
 
 ## Debian packages:
-* python2-wb-mcu-fw-updater - python2 library (wb_mcu_fw_updater + wb_modbus)
 * python3-wb-mcu-fw-updater - python3 library (wb_mcu_fw_updater + wb_modbus)
 * wb-mcu-fw-updater - python3-library-dependent binary
 
 ## External dependencies:
-* for python2-package: python-serial
 * for python3-package: python3-serial
 
 ## Building:
