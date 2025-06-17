@@ -869,6 +869,7 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
         logger.info("Flashing firmware to %s", str(device_info))
         try:
             _do_flash(device_info.modbus_connection, downloaded_wbfw, False, force=force)
+            # map12 takes more time to wake up, so wait
             if not wait_for_wake_up(device_info.modbus_connection, 0.5):
                 logger.info("Device %s is not responding after flashing", str(device_info))
                 probing_result["in_bootloader"].append(device_info)
