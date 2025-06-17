@@ -869,6 +869,11 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
         logger.info("Flashing firmware to %s", str(device_info))
         try:
             _do_flash(device_info.modbus_connection, downloaded_wbfw, False, force=force)
+            # map12 takes more time to wake up, so wait
+            if not wait_for_wake_up(device_info.modbus_connection, 0.5):
+                logger.info("Device %s is not responding after flashing", str(device_info))
+                probing_result["in_bootloader"].append(device_info)
+                continue
             if not is_bootloader_latest(device_info.modbus_connection):
                 cmd_status["bl_update_available"].append(device_info)
         except fw_flasher.FlashingError as e:
@@ -1108,3 +1113,18 @@ def get_port_settings(port_fname):
 def set_port_settings(port_fname, termios_settings):
     with open(port_fname, encoding="utf-8") as port:
         termios.tcsetattr(port.fileno(), termios.TCSANOW, termios_settings)
+
+
+def wait_for_wake_up(modbus_connection, timeout):
+    """
+    Wait for device to wake up after flashing.
+    """
+    min_tries = 2
+    tries = 0
+    start_time = time.time()
+    while (time.time() - start_time < timeout) or (tries < min_tries):
+        tries += 1
+        if not modbus_connection.is_in_bootloader():
+            return True
+    logger.error("Device did not wake up after %d tries", tries)
+    return False

@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.12.2) stable; urgency=medium
+
+  * Add waiting device after flashing in update_all
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Thu, 05 Jun 2025 14:11:59 +0300
+
 wb-mcu-fw-updater (1.12.1) stable; urgency=medium
 
   * Fix warnings
