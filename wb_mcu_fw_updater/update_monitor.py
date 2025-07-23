@@ -1061,7 +1061,12 @@ def _get_clients(*ports):
     logger.debug("Will run: %s", cmd_str)
     try:
         procs = str(subprocess.check_output(cmd_str, shell=True, stderr=subprocess.DEVNULL), encoding="utf-8")
-        return [proc.strip() for proc in procs.split("\n") if proc.strip()]
+        proc_names = []
+        for proc in procs.split("\n"):
+            stripped_proc = proc.strip()
+            if stripped_proc and not stripped_proc.startswith("socat"):
+                proc_names.append(stripped_proc)
+        return proc_names
     except subprocess.CalledProcessError:
         logger.debug("No pid from %s is alive now", pids)
         return []
