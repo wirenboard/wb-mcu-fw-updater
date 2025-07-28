@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.13.0) stable; urgency=medium
+
+  * Allow to update using socat
+
+ -- Petr Krasnoshchekov <petr.krasnoshchekov@wirenboard.com>  Wed, 23 Jul 2025 17:01:11 +0500
+
 wb-mcu-fw-updater (1.12.2) stable; urgency=medium
 
   * Add waiting device after flashing in update_all
