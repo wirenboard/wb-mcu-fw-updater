@@ -10,6 +10,7 @@ from wb_common.mqtt_client import DEFAULT_BROKER_URL
 from wb_mcu_fw_updater import (
     CONFIG,
     MODE_BOOTLOADER,
+    MODE_COMPONENTS,
     MODE_FW,
     die,
     fw_downloader,
@@ -69,6 +70,13 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
 
     try:
         if is_in_bootloader:
+            if mode == MODE_COMPONENTS:
+                logger.info(
+                    "Device %s is in bootloader. Unable to update components. Try to launch update-bl or update-fw",
+                    device_str,
+                )
+                die()
+
             try:
                 bl_version = modbus_connection.get_bootloader_version()
             except ModbusException:
@@ -95,13 +103,22 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
                 )
                 if mode == MODE_BOOTLOADER:  # we don't know fw's branch/version (only bl's ones)
                     update_monitor.recover_device_iteration(fw_sig, modbus_connection, force)
+                else:
+                    update_monitor.flash_alive_device_components(
+                        modbus_connection, mode, branch, version, force
+                    )
             else:
                 logger.error("Could not find fw-signature for %s", device_str)
                 logger.error('Try to launch "recover" mode with --fw-sig provided manually')
                 die()
         else:  # device is alive
             update_monitor.check_device_is_a_wb_one(modbus_connection)
-            update_monitor.flash_alive_device(modbus_connection, mode, branch, version, force, erase_settings)
+            if mode != MODE_COMPONENTS:  # do not update fw/bl if we are updating components
+                update_monitor.flash_alive_device(
+                    modbus_connection, mode, branch, version, force, erase_settings
+                )
+            if mode != MODE_BOOTLOADER:  # do not update components in update-bl
+                update_monitor.flash_alive_device_components(modbus_connection, mode, branch, version, force)
             logger.info("%s", user_log.colorize("Done", "GREEN"))
     except (
         TooOldDeviceError,
@@ -142,6 +159,21 @@ def update_bootloader(args):  # pylint:disable=redefined-outer-name
         response_timeout=args.response_timeout,
         branch=args.branch_name,
         version=version,
+        force=args.force,
+        erase_settings=False,
+        instrument=args.instrument,
+    )
+
+
+def update_components(args):  # pylint:disable=redefined-outer-name
+    # Could install specified bl_version from specified branch.
+    _update_alive_device(
+        slaveid=args.slaveid,
+        port=args.port,
+        mode=MODE_COMPONENTS,
+        response_timeout=args.response_timeout,
+        branch="",
+        version="latest",
         force=args.force,
         erase_settings=False,
         instrument=args.instrument,
@@ -243,6 +275,10 @@ def flash_fw_file(args):  # pylint:disable=redefined-outer-name
     device_str = (
         f"{args.port} {args.slaveid} {args.conn_settings} (response timeout: {args.response_timeout:.2f})"
     )
+    mode = MODE_FW  # no difference between fw and bl flashing in this case
+    if args.fname.endswith(".compfw"):
+        mode = MODE_COMPONENTS
+
     device = WBModbusDeviceBase(
         args.slaveid,
         args.port,
@@ -250,15 +286,26 @@ def flash_fw_file(args):  # pylint:disable=redefined-outer-name
         response_timeout=args.response_timeout,
         instrument=args.instrument,
     )
-    if not device.is_in_bootloader():
+    is_in_bootloader = device.is_in_bootloader()
+    if mode == MODE_FW and not is_in_bootloader:
         logger.debug("Rebooting %s to bootloader", device_str)
         try:
             device.reboot_to_bootloader()
         except ModbusException:
             die(f"Device ({device_str}) could not reboot to bootloader. Check connection params")
 
+    if mode == MODE_COMPONENTS:
+        if is_in_bootloader:
+            die("Device (%s) is in bootloader mode. Unable to flash components", device_str)
+
+        if device.get_available_components() is None:
+            die("Device (%s) does not support components update feature", device_str)
+
     try:
-        update_monitor.direct_flash(args.fname, device, args.erase_all, args.erase_uart)
+        if mode == MODE_FW:
+            update_monitor.direct_flash(args.fname, device, args.erase_all, args.erase_uart)
+        else:
+            update_monitor.flash_components_with_files(device, [args.fname])
         return
     except fw_flasher.NotInBootloaderError:
         logger.error("Seems, device (%s) is not in bootloader mode", device_str)
@@ -386,6 +433,14 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
     add_modbus_connection_args(update_bootloader_parser)
     add_fw_source_args(update_bootloader_parser)
     update_bootloader_parser.set_defaults(func=update_bootloader)
+
+    # Updating components on single working device
+    update_components_parser = subparsers.add_parser(
+        "update-cmp", help="Update components on single working device."
+    )
+    add_common_logic_args(update_components_parser)
+    add_modbus_connection_args(update_components_parser)
+    update_components_parser.set_defaults(func=update_components)
 
     # Flash single device, stuck in the bootloader
     recover_fw_parser = subparsers.add_parser(
