@@ -72,7 +72,8 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
         if is_in_bootloader:
             if mode == MODE_COMPONENTS:
                 logger.info(
-                    "Device %s is in bootloader. Unable to update components. Try to launch update-bl or update-fw",
+                    "Device %s is in bootloader. Unable to update components. "
+                    "Try to launch update-bl or update-fw",
                     device_str,
                 )
                 die()

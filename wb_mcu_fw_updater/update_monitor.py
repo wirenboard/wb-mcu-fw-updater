@@ -762,7 +762,8 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
 
     if specified_fw_version not in ["latest", "release"] or branch_name:
         logger.debug(
-            "Skip components update, due to branch is specified (%s) or fw version is not latest/release (%s)",
+            "Skip components update, due to branch is specified (%s) or "
+            "fw version is not latest/release (%s)",
             branch_name,
             specified_fw_version,
         )
