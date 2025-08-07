@@ -803,8 +803,11 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
 def flash_components_with_files(modbus_connection, downloaded_firmwares):
     settings = modbus_connection.get_port_settings()
     initial_response_timeout = modbus_connection.response_timeout
-    if modbus_connection.response_timeout <= 0.2:
-        modbus_connection.set_response_timeout(initial_response_timeout + 0.1)
+    # Flashing components requires bigger response timeout than default flashing timeout
+    # which is 0.2s by default. On default time flashing components is unstable.
+    minimal_response_timeout = 0.3
+    if modbus_connection.response_timeout <= minimal_response_timeout:
+        modbus_connection.set_response_timeout(minimal_response_timeout)
     flasher = fw_flasher.ModbusFlasher(
         modbus_connection.slaveid,
         modbus_connection.port,
