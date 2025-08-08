@@ -760,12 +760,13 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
     fw_signature = modbus_connection.get_fw_signature()
     component_str = f"({fw_signature} {modbus_connection.slaveid} on {modbus_connection.port})"
 
-    if specified_fw_version not in ["latest", "release"] or branch_name:
+    if (mode != MODE_COMPONENTS and specified_fw_version not in ["latest", "release"]) or branch_name:
         logger.debug(
             "Skip components update, due to branch is specified (%s) or "
-            "fw version is not latest/release (%s)",
+            "fw version is not latest/release (%s), mode: %s",
             branch_name,
             specified_fw_version,
+            mode,
         )
         return
     if not wait_for_wake_up(modbus_connection, timeout=2):
@@ -783,7 +784,7 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
     downloaded_firmwares = []
     for component_number in components_list:
         info = modbus_connection.get_component_info(component_number)
-        compfw = _do_download(info["signature"], "latest", branch_name, mode=MODE_COMPONENTS)
+        compfw = _do_download(info["signature"], specified_fw_version, branch_name, mode=MODE_COMPONENTS)
         if not is_reflash_component_necessary(info["fw_version"], compfw.version, force, info["signature"]):
             continue
 

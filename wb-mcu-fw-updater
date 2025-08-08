@@ -168,13 +168,14 @@ def update_bootloader(args):  # pylint:disable=redefined-outer-name
 
 def update_components(args):  # pylint:disable=redefined-outer-name
     # Could install specified bl_version from specified branch.
+    version = args.specified_version or "release"
     _update_alive_device(
         slaveid=args.slaveid,
         port=args.port,
         mode=MODE_COMPONENTS,
         response_timeout=args.response_timeout,
         branch="",
-        version="latest",
+        version=version,
         force=args.force,
         erase_settings=False,
         instrument=args.instrument,
@@ -384,15 +385,16 @@ def add_modbus_connection_args(parser):
     parser.add_argument("port", type=str, metavar="<port>", help="Serial port, device connected to.")
 
 
-def add_fw_source_args(parser):
-    parser.add_argument(
-        "--branch",
-        type=str,
-        dest="branch_name",
-        metavar="<branch_name>",
-        default="",
-        help="Install from specified branch. (Default: %(default)s)",
-    )
+def add_fw_source_args(parser, version_only=False):
+    if not version_only:
+        parser.add_argument(
+            "--branch",
+            type=str,
+            dest="branch_name",
+            metavar="<branch_name>",
+            default="",
+            help="Install from specified branch. (Default: %(default)s)",
+        )
     parser.add_argument(
         "--version",
         type=str,
@@ -441,6 +443,7 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
     )
     add_common_logic_args(update_components_parser)
     add_modbus_connection_args(update_components_parser)
+    add_fw_source_args(update_components_parser, version_only=True)
     update_components_parser.set_defaults(func=update_components)
 
     # Flash single device, stuck in the bootloader
