@@ -10,7 +10,7 @@ from functools import lru_cache
 import six
 from six.moves import urllib
 
-from . import CONFIG, MODE_FW, logger
+from . import CONFIG, MODE_COMPONENTS, MODE_FW, logger
 
 
 class WBRemoteStorageError(Exception):
@@ -131,15 +131,20 @@ class RemoteFileWatcher:
         :type branch_name: str, optional
         """
         self.mode = mode
+        self.extension = (
+            CONFIG["COMPONENTS_FW_EXTENSION"] if mode == MODE_COMPONENTS else CONFIG["FW_EXTENSION"]
+        )
+
+        url_mode = MODE_FW if mode == MODE_COMPONENTS else mode
         fw_source = f"unstable/{branch_name}" if branch_name else CONFIG["DEFAULT_SOURCE"]
-        self.parent_url_path = self._join(self.mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
+        self.parent_url_path = self._join(url_mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
     def _join(self, *args):
         return "/".join(map(str, args))
 
     def get_latest_version_number(self, name):
         """
-        Latest fw or bootloader version number is stored into a text file on server.
+        Latest fw/bootloader/component version number is stored into a text file on server.
 
         :param name: could be a device_signature or project_name
         :type name: str
@@ -152,10 +157,10 @@ class RemoteFileWatcher:
 
     def is_version_exist(self, fwsig: str, version: str):
         """
-        Check, does specified fw/bl version exist for actual fw_sig.
+        Check, does specified fw/bootloader/component version exist for actual fw_sig.
         In some cases, buggy fws could be removed from fw-releases.
         """
-        remote_path = self._join(self.parent_url_path % fwsig, f"{version}{CONFIG['FW_EXTENSION']}")
+        remote_path = self._join(self.parent_url_path % fwsig, f"{version}{self.extension}")
         url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
         try:
             get_request(url_path)
@@ -174,7 +179,7 @@ class RemoteFileWatcher:
         :return: path of saved file
         :rtype: str (if succeed) or None (if not)
         """
-        fw_ver = f'{version}{CONFIG["FW_EXTENSION"]}'
+        fw_ver = f"{version}{self.extension}"
         remote_path = self._join(self.parent_url_path % name, fw_ver)
         url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
         file_saving_dir = os.path.join(CONFIG["FW_SAVING_DIR"], self.mode)

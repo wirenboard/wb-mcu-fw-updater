@@ -85,10 +85,10 @@ class ParsedWBFW:
         ]
 
 
-class ModbusInBlFlasher:
+class ModbusFlasher:
     """
-    Interacting with WirenBoard Modbus device's bootloader:
-        flashing .wbfw files
+    Interacting with WirenBoard Modbus device's:
+        flashing .wbfw/.compfw files (bootloader, fw or components files)
         erasing device's connection params (slaveid, parity, stopbits, baudrate)
         erasing all device's settings (including connection params)
     """
@@ -193,9 +193,9 @@ class ModbusInBlFlasher:
             return False
         return available_chunks_fs > len(parsed_wbfw.data_chunks)
 
-    def flash_in_bl(self, parsed_wbfw: ParsedWBFW):
+    def flash(self, parsed_wbfw: ParsedWBFW):
         """
-        Writing fw to device as u16 regs; device should be in bootloader mode!
+        Writing fw to device as u16 regs; for fw or bootloader flashing device should be in bootloader mode!
         """
         logger.info("Flashing %s", str(parsed_wbfw))
         self._send_info(parsed_wbfw.info)

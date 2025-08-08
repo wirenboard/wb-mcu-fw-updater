@@ -19,6 +19,7 @@ CONFIG = {
     "SERIAL_DRIVER_CONFIG_FNAME": "/etc/wb-mqtt-serial.conf",
     "FW_SAVING_DIR": "/var/lib/wb-mcu-fw-updater/",
     "FW_EXTENSION": ".wbfw",
+    "COMPONENTS_FW_EXTENSION": ".compfw",
     "LATEST_FW_VERSION_FILE": "latest.txt",
     "DEFAULT_SOURCE": "main",
     "USERLOG_MESSAGE_FMT": "%(asctime)s %(message)s",
@@ -38,6 +39,7 @@ CONFIG = {
 
 MODE_FW = "fw"
 MODE_BOOTLOADER = "bootloader"
+MODE_COMPONENTS = "components"
 
 
 def die(err=None, exitcode=1):
