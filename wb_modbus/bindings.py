@@ -558,8 +558,8 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         "serial_number": 270,
         "bootloader_version": 330,
         "available_components": 65152,
-        "component_fw_version": 65136,
-        "component_signature": 65152,
+        "component_fw_version": 64800,
+        "component_signature": 64788,
     }
 
     FIRMWARE_VERSION_LENGTH = 16  # 250-265 u16 regs
@@ -570,7 +570,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
     MAX_COMPONENTS_NUMBER = 8
     COMPONENT_FW_VERSION_LENGTH = 16
     COMPONENT_SIGNATURE_LENGTH = 12
-    COMPONENT_STEP = 32  # step between components signatures and firmware versions
+    COMPONENT_STEP = 48  # step between components signatures and firmware versions
 
     BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT = 1.0  # Bl needs some time to perform info-block magic
 
