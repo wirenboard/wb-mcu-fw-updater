@@ -760,7 +760,7 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
     fw_signature = modbus_connection.get_fw_signature()
     component_str = f"({fw_signature} {modbus_connection.slaveid} on {modbus_connection.port})"
 
-    if (mode != MODE_COMPONENTS and specified_fw_version not in ["latest", "release"]) or branch_name:
+    if mode != MODE_COMPONENTS and (specified_fw_version not in ["latest", "release"] or branch_name):
         logger.debug(
             "Skip components update, due to branch is specified (%s) or "
             "fw version is not latest/release (%s), mode: %s",
@@ -976,8 +976,8 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
             flash_alive_device_components(
                 modbus_connection=device_info.modbus_connection,
                 mode=downloaded_wbfw.mode,
-                branch_name="feature-ns8-fw-update",
-                specified_fw_version=downloaded_wbfw.version,
+                branch_name="",
+                specified_fw_version="release",
                 force=force,
             )
         except fw_flasher.FlashingError as e:

@@ -174,7 +174,7 @@ def update_components(args):  # pylint:disable=redefined-outer-name
         port=args.port,
         mode=MODE_COMPONENTS,
         response_timeout=args.response_timeout,
-        branch="",
+        branch=args.branch_name,
         version=version,
         force=args.force,
         erase_settings=False,
@@ -385,16 +385,15 @@ def add_modbus_connection_args(parser):
     parser.add_argument("port", type=str, metavar="<port>", help="Serial port, device connected to.")
 
 
-def add_fw_source_args(parser, version_only=False):
-    if not version_only:
-        parser.add_argument(
-            "--branch",
-            type=str,
-            dest="branch_name",
-            metavar="<branch_name>",
-            default="",
-            help="Install from specified branch. (Default: %(default)s)",
-        )
+def add_fw_source_args(parser):
+    parser.add_argument(
+        "--branch",
+        type=str,
+        dest="branch_name",
+        metavar="<branch_name>",
+        default="",
+        help="Install from specified branch. (Default: %(default)s)",
+    )
     parser.add_argument(
         "--version",
         type=str,
@@ -443,7 +442,7 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
     )
     add_common_logic_args(update_components_parser)
     add_modbus_connection_args(update_components_parser)
-    add_fw_source_args(update_components_parser, version_only=True)
+    add_fw_source_args(update_components_parser)
     update_components_parser.set_defaults(func=update_components)
 
     # Flash single device, stuck in the bootloader
