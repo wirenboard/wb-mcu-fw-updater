@@ -53,7 +53,7 @@ def parse_fw_version(endpoint_url):
     """
     Parsing fw version from endpoint url, stored in releases file
     """
-    re_str = f".+/(?P<wbfw_version>.+){CONFIG['FW_EXTENSION']}|.+/(?P<compfw_version>.+){CONFIG['COMPONENTS_FW_EXTENSION']}"
+    re_str = f".+/(?P<wbfw_version>.+){CONFIG['FW_EXTENSION']}|.+/(?P<compfw_version>.+){CONFIG['COMPONENTS_FW_EXTENSION']}"  # pylint:disable=line-too-long
     mat = re.match(re_str, endpoint_url)  # matches .../*.wbfw
     if mat:
         return mat.groupdict().get("wbfw_version") or mat.groupdict().get("compfw_version")
