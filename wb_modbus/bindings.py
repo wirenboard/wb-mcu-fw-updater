@@ -557,12 +557,20 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         "fw_version": 250,
         "serial_number": 270,
         "bootloader_version": 330,
+        "available_components": 65152,
+        "component_fw_version": 64800,
+        "component_signature": 64788,
     }
 
     FIRMWARE_VERSION_LENGTH = 16  # 250-265 u16 regs
     DEVICE_SIGNATURE_LENGTH = 6  # 200-205 u16 regs
     FIRMWARE_SIGNATURE_LENGTH = 12  # 290-301 u16 regs
     BOOTLOADER_VERSION_LENGTH = 8  # 330-337 u16 regs
+
+    MAX_COMPONENTS_NUMBER = 8
+    COMPONENT_FW_VERSION_LENGTH = 16
+    COMPONENT_SIGNATURE_LENGTH = 12
+    COMPONENT_STEP = 48  # step between components signatures and firmware versions
 
     BOOTLOADER_INFOBLOCK_MAGIC_TIMEOUT = 1.0  # Bl needs some time to perform info-block magic
 
@@ -914,3 +922,50 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         self._write_port_settings(baudrate, ALLOWED_PARITIES[parity], stopbits)
         new_port_settings = SerialSettings(baudrate=baudrate, parity=parity, stopbits=stopbits)
         self._set_port_settings_raw(new_port_settings)
+
+    def get_available_components(self, timeout=2):
+        """
+        Get list of available components numbers. Timeout is used because data is not available immediately after switching on
+
+        :param timeout: timeout for operation
+        :type timeout: float
+        :return: list of available components numbers
+        :rtype: list
+        """
+        availability = []
+        result = []
+        start_time = time.time()
+        while time.time() - start_time < timeout and not availability:
+            try:
+                availability = self.read_bits(
+                    self.COMMON_REGS_MAP["available_components"], self.MAX_COMPONENTS_NUMBER
+                )
+            except minimalmodbus.SlaveDeviceBusyError:
+                time.sleep(0.1)  # wait for device to be ready
+            except minimalmodbus.IllegalRequestError:
+                return None
+
+        for i, value in enumerate(availability):
+            if value:
+                result.append(i)
+        return result
+
+    def get_component_info(self, component_number):
+        """
+        Get info of a component by its number
+
+        :param component_number: number of the component
+        :type component_number: int
+        :return: info of the component
+        :rtype: dict
+        """
+
+        fw_addrress = self.COMMON_REGS_MAP["component_fw_version"] + component_number * self.COMPONENT_STEP
+        signature_address = (
+            self.COMMON_REGS_MAP["component_signature"] + component_number * self.COMPONENT_STEP
+        )
+
+        return {
+            "fw_version": self.read_string(fw_addrress, self.COMPONENT_FW_VERSION_LENGTH),
+            "signature": self.read_string(signature_address, self.COMPONENT_SIGNATURE_LENGTH),
+        }

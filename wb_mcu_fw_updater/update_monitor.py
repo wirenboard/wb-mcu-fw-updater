@@ -23,7 +23,7 @@ import yaml
 
 # rework params setting to get rid of imports-order-magic
 # isort: off
-from . import CONFIG, MODE_BOOTLOADER, MODE_FW, logger
+from . import CONFIG, MODE_BOOTLOADER, MODE_FW, MODE_COMPONENTS, logger
 import wb_modbus  # Params should be set before any wb_modbus usage! # pylint:disable=wrong-import-order
 
 wb_modbus.ALLOWED_UNSUCCESSFUL_TRIES = CONFIG["ALLOWED_UNSUCCESSFUL_MODBUS_TRIES"]
@@ -443,7 +443,7 @@ def direct_flash(  # pylint:disable=too-many-arguments
             logger.warning("Temporarily trying 9600N2 in bootloader (because of some old bootloaders issues)")
             in_bl_settings = bindings.SerialSettings(9600, "N", 2)
 
-    flasher = fw_flasher.ModbusInBlFlasher(
+    flasher = fw_flasher.ModbusFlasher(
         device.slaveid,
         device.port,
         device.response_timeout,
@@ -461,7 +461,7 @@ def direct_flash(  # pylint:disable=too-many-arguments
     parsed_wbfw = fw_flasher.ParsedWBFW(fw_fpath)
     if do_check_userdata_saving and (not flasher.is_userdata_preserved(parsed_wbfw)):
         _ensure("User data (such as ir commands) will be erased. Are you sure? (do a backup if not!)")
-    flasher.flash_in_bl(parsed_wbfw)
+    flasher.flash(parsed_wbfw)
 
 
 def is_reflash_necessary(
@@ -532,6 +532,33 @@ def is_reflash_necessary(
     return _do_flash, _skip_reason
 
 
+def is_reflash_component_necessary(actual_version, provided_version, force_reflash, component_info):
+    do_flash = False
+    if actual_version == provided_version:
+        if force_reflash:
+            logger.info(
+                "%s %s -> %s %s",
+                user_log.colorize("Force update:", "YELLOW"),
+                actual_version,
+                provided_version,
+                component_info,
+            )
+            do_flash = True
+        else:
+            logger.info("Is actual: %s -> %s %s", actual_version, provided_version, component_info)
+            do_flash = False
+    else:
+        logger.info(
+            "%s %s -> %s %s",
+            user_log.colorize("Update:", "GREEN"),
+            actual_version,
+            provided_version,
+            component_info,
+        )
+        do_flash = True
+    return do_flash
+
+
 def is_bootloader_latest(mb_connection):
     fw_sig = mb_connection.get_fw_signature()
     local_version = mb_connection.get_bootloader_version()
@@ -555,7 +582,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     if mode == MODE_FW:
         mode_name = "firmware"
     else:
-        mode_name = "bootloader"
+        mode_name = mode
 
     downloaded_fw = None
 
@@ -727,6 +754,76 @@ def flash_alive_device(  # pylint:disable=too-many-arguments
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
 
 
+def flash_alive_device_components(  # pylint:disable=too-many-arguments
+    modbus_connection, mode, branch_name, specified_fw_version, force
+):
+    fw_signature = modbus_connection.get_fw_signature()
+    component_str = f"({fw_signature} {modbus_connection.slaveid} on {modbus_connection.port})"
+
+    if mode != MODE_COMPONENTS and (specified_fw_version not in ["latest", "release"] or branch_name):
+        logger.debug(
+            "Skip components update, due to branch is specified (%s) or "
+            "fw version is not latest/release (%s), mode: %s",
+            branch_name,
+            specified_fw_version,
+            mode,
+        )
+        return
+    if not wait_for_wake_up(modbus_connection, timeout=2):
+        logger.info("Device did not wake up after flashing")
+        return
+    components_list = modbus_connection.get_available_components()
+    if components_list is None:
+        logger.debug("Device does not support components update feature")
+        return
+    if len(components_list) == 0:
+        logger.debug("No components available")
+        return
+
+    logger.info("Check updates for components %s", component_str)
+    downloaded_firmwares = []
+    for component_number in components_list:
+        info = modbus_connection.get_component_info(component_number)
+        compfw = _do_download(info["signature"], specified_fw_version, branch_name, mode=MODE_COMPONENTS)
+        if not is_reflash_component_necessary(info["fw_version"], compfw.version, force, info["signature"]):
+            continue
+
+        downloaded_firmwares.append(compfw.fpath)
+
+    if (
+        downloaded_firmwares
+        and mode == MODE_FW
+        and not ask_user("Found updates for device components. Do you want to continue?", force)
+    ):
+        logger.info("Components update skipped by user")
+        return
+
+    flash_components_with_files(modbus_connection, downloaded_firmwares)
+
+
+def flash_components_with_files(modbus_connection, downloaded_firmwares):
+    settings = modbus_connection.get_port_settings()
+    initial_response_timeout = modbus_connection.response_timeout
+    # Flashing components requires bigger response timeout than default flashing timeout
+    # which is 0.2s by default. On default time flashing components is unstable.
+    minimal_response_timeout = 0.3
+    if modbus_connection.response_timeout <= minimal_response_timeout:
+        modbus_connection.set_response_timeout(minimal_response_timeout)
+    flasher = fw_flasher.ModbusFlasher(
+        modbus_connection.slaveid,
+        modbus_connection.port,
+        modbus_connection.response_timeout,
+        settings.baudrate,
+        settings.parity,
+        settings.stopbits,
+        modbus_connection.instrument,
+    )
+    for compfw in downloaded_firmwares:
+        parsed_compfw = fw_flasher.ParsedWBFW(compfw)
+        flasher.flash(parsed_compfw)
+    modbus_connection.set_response_timeout(initial_response_timeout)
+
+
 class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
     __slots__ = ()
 
@@ -876,6 +973,13 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
                 continue
             if not is_bootloader_latest(device_info.modbus_connection):
                 cmd_status["bl_update_available"].append(device_info)
+            flash_alive_device_components(
+                modbus_connection=device_info.modbus_connection,
+                mode=downloaded_wbfw.mode,
+                branch_name="",
+                specified_fw_version="release",
+                force=force,
+            )
         except fw_flasher.FlashingError as e:
             logger.exception(e)
             probing_result["in_bootloader"].append(device_info)

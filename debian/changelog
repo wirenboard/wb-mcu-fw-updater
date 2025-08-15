@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.14.0) stable; urgency=medium
+
+  * Add components update feature
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Thu, 31 Jul 2025 12:41:12 +0300
+
 wb-mcu-fw-updater (1.13.0) stable; urgency=medium
 
   * Allow to update using socat
