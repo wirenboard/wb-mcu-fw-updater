@@ -755,18 +755,17 @@ def flash_alive_device(  # pylint:disable=too-many-arguments
 
 
 def flash_alive_device_components(  # pylint:disable=too-many-arguments
-    modbus_connection, mode, branch_name, specified_fw_version, force
+    modbus_connection, mode, branch_name, specified_fw_version, force, component_signature=None
 ):
     fw_signature = modbus_connection.get_fw_signature()
     component_str = f"({fw_signature} {modbus_connection.slaveid} on {modbus_connection.port})"
-
-    if mode != MODE_COMPONENTS and (specified_fw_version not in ["latest", "release"] or branch_name):
-        logger.debug(
+    branch_or_version_specified = specified_fw_version not in ["latest", "release"] or branch_name
+    if mode != MODE_COMPONENTS and branch_or_version_specified:
+        logger.info(
             "Skip components update, due to branch is specified (%s) or "
-            "fw version is not latest/release (%s), mode: %s",
+            "fw version is not latest/release (%s)",
             branch_name,
             specified_fw_version,
-            mode,
         )
         return
     if not wait_for_wake_up(modbus_connection, timeout=2):
@@ -779,11 +778,30 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
     if len(components_list) == 0:
         logger.info("No components available")
         return
+    if branch_or_version_specified and not component_signature:
+        logger.error("Specify the signature of the component to update to the specified version or branch")
+        return
 
     logger.info("Check updates for components %s", component_str)
-    downloaded_firmwares = []
+    components_info = []
     for component_number in components_list:
-        info = modbus_connection.get_component_info(component_number)
+        components_info.append(modbus_connection.get_component_info(component_number))
+
+    if branch_or_version_specified:
+        specified_component = next(
+            (info for info in components_info if info["signature"] == component_signature), None
+        )
+        if not specified_component:
+            logger.error(
+                "Component with signature %s not found, available signatures: %s",
+                component_signature,
+                ",".join([info["signature"] for info in components_info]),
+            )
+            return
+        components_info = [specified_component]
+
+    downloaded_firmwares = []
+    for info in components_info:
         compfw = _do_download(info["signature"], specified_fw_version, branch_name, mode=MODE_COMPONENTS)
         if not is_reflash_component_necessary(info["fw_version"], compfw.version, force, info["signature"]):
             continue

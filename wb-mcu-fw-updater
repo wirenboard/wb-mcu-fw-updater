@@ -52,6 +52,7 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
     version,
     force,
     erase_settings,
+    component_signature,
     instrument=StopbitsTolerantInstrument,
 ):
     check_internet_connection()
@@ -106,7 +107,7 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
                     update_monitor.recover_device_iteration(fw_sig, modbus_connection, force)
                 else:
                     update_monitor.flash_alive_device_components(
-                        modbus_connection, mode, branch, version, force
+                        modbus_connection, mode, branch, version, force, component_signature
                     )
             else:
                 logger.error("Could not find fw-signature for %s", device_str)
@@ -119,7 +120,9 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
                     modbus_connection, mode, branch, version, force, erase_settings
                 )
             if mode != MODE_BOOTLOADER:  # do not update components in update-bl
-                update_monitor.flash_alive_device_components(modbus_connection, mode, branch, version, force)
+                update_monitor.flash_alive_device_components(
+                    modbus_connection, mode, branch, version, force, component_signature
+                )
             logger.info("%s", user_log.colorize("Done", "GREEN"))
     except (
         TooOldDeviceError,
@@ -147,6 +150,7 @@ def update_fw(args):  # pylint:disable=redefined-outer-name
         force=args.force,
         erase_settings=args.erase_settings,
         instrument=args.instrument,
+        component_signature="",
     )
 
 
@@ -163,6 +167,7 @@ def update_bootloader(args):  # pylint:disable=redefined-outer-name
         force=args.force,
         erase_settings=False,
         instrument=args.instrument,
+        component_signature="",
     )
 
 
@@ -179,6 +184,7 @@ def update_components(args):  # pylint:disable=redefined-outer-name
         force=args.force,
         erase_settings=False,
         instrument=args.instrument,
+        component_signature=args.component_signature,
     )
 
 
@@ -443,6 +449,13 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
     add_common_logic_args(update_components_parser)
     add_modbus_connection_args(update_components_parser)
     add_fw_source_args(update_components_parser)
+    update_components_parser.add_argument(
+        "--cmp-sig",
+        dest="component_signature",
+        type=str,
+        default=None,
+        help="Specify the signature of the component to update in case of branch or version specified.",
+    )
     update_components_parser.set_defaults(func=update_components)
 
     # Flash single device, stuck in the bootloader

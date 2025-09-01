@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.14.2) stable; urgency=medium
+
+  * Add component signature argument for updating components to version/branch 
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Mon, 01 Sep 2025 14:02:06 +0300
+
 wb-mcu-fw-updater (1.14.1) stable; urgency=medium
 
   * Fix log level
