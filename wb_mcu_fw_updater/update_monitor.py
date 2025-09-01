@@ -754,7 +754,7 @@ def flash_alive_device(  # pylint:disable=too-many-arguments
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
 
 
-def flash_alive_device_components(  # pylint:disable=too-many-arguments
+def flash_alive_device_components(  # pylint:disable=too-many-arguments, too-many-locals, too-many-return-statements
     modbus_connection, mode, branch_name, specified_fw_version, force, component_signature=None
 ):
     fw_signature = modbus_connection.get_fw_signature()
