@@ -774,10 +774,10 @@ def flash_alive_device_components(  # pylint:disable=too-many-arguments
         return
     components_list = modbus_connection.get_available_components()
     if components_list is None:
-        logger.debug("Device does not support components update feature")
+        logger.info("Device does not support components update feature")
         return
     if len(components_list) == 0:
-        logger.debug("No components available")
+        logger.info("No components available")
         return
 
     logger.info("Check updates for components %s", component_str)
