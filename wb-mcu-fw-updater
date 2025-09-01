@@ -453,6 +453,7 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
         "--cmp-sig",
         dest="component_signature",
         type=str,
+        metavar="<component_signature>",
         default=None,
         help="Specify the signature of the component to update in case of branch or version specified.",
     )
