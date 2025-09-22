@@ -564,6 +564,7 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
 
     FIRMWARE_VERSION_LENGTH = 16  # 250-265 u16 regs
     DEVICE_SIGNATURE_LENGTH = 6  # 200-205 u16 regs
+    DEVICE_SIGNATURE_EXTENDED_LENGTH = 20  # 200-219 u16 regs
     FIRMWARE_SIGNATURE_LENGTH = 12  # 290-301 u16 regs
     BOOTLOADER_VERSION_LENGTH = 8  # 330-337 u16 regs
 
@@ -729,7 +730,12 @@ class WBModbusDeviceBase(MinimalModbusAPIWrapper):
         :return: device signature string
         :rtype: str
         """
-        return self.read_string(self.COMMON_REGS_MAP["device_signature"], self.DEVICE_SIGNATURE_LENGTH)
+        try:
+            return self.read_string(
+                self.COMMON_REGS_MAP["device_signature"], self.DEVICE_SIGNATURE_EXTENDED_LENGTH
+            )
+        except minimalmodbus.IllegalRequestError:
+            return self.read_string(self.COMMON_REGS_MAP["device_signature"], self.DEVICE_SIGNATURE_LENGTH)
 
     def get_fw_signature(self):
         """
