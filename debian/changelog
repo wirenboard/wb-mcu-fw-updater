@@ -2,7 +2,7 @@ wb-mcu-fw-updater (1.14.4) stable; urgency=medium
 
   * Fix update-fw with wb-MAP* 
 
- -- ekateluv <ekateluv@ekateluv>  Wed, 04 Mar 2026 13:41:53 +0300
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Wed, 04 Mar 2026 13:41:53 +0300
 
 wb-mcu-fw-updater (1.14.3) stable; urgency=medium
 
