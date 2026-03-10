@@ -43,7 +43,7 @@ def find_connection_params(slaveid, port, response_timeout, instrument):
         )
 
 
-def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
+def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals,too-many-branches
     slaveid,
     port,
     mode,
@@ -120,6 +120,9 @@ def _update_alive_device(  # pylint:disable=too-many-arguments,too-many-locals
                     modbus_connection, mode, branch, version, force, erase_settings
                 )
             if mode != MODE_BOOTLOADER:  # do not update components in update-bl
+                if not update_monitor.wait_for_wake_up(modbus_connection, 0.5):
+                    raise ModbusException("Device did not wake up after flashing")
+
                 update_monitor.flash_alive_device_components(
                     modbus_connection, mode, branch, version, force, component_signature
                 )
