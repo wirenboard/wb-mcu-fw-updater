@@ -17,6 +17,7 @@ from copy import deepcopy
 from io import open
 
 import semantic_version
+import serial
 import six
 import tqdm
 import yaml
@@ -410,7 +411,7 @@ def recover_device_iteration(fw_signature, device: bindings.WBModbusDeviceBase, 
     direct_flash(downloaded_fw, device, force=force)
 
 
-def direct_flash(  # pylint:disable=too-many-arguments
+def direct_flash(  # pylint:disable=too-many-arguments,too-many-positional-arguments
     fw_fpath,
     device: bindings.WBModbusDeviceBase,
     erase_all_settings=False,
@@ -697,7 +698,7 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
     modbus_connection.set_response_timeout(initial_response_timeout)
 
 
-def flash_alive_device(  # pylint:disable=too-many-arguments
+def flash_alive_device(  # pylint:disable=too-many-arguments,too-many-positional-arguments
     modbus_connection,
     mode,
     branch_name,
@@ -754,7 +755,7 @@ def flash_alive_device(  # pylint:disable=too-many-arguments
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
 
 
-def flash_alive_device_components(  # pylint:disable=too-many-arguments, too-many-locals, too-many-return-statements
+def flash_alive_device_components(  # pylint:disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-return-statements
     modbus_connection, mode, branch_name, specified_fw_version, force, component_signature=None
 ):
     fw_signature = modbus_connection.get_fw_signature()
@@ -849,6 +850,9 @@ class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
         return f"{self.name} ({self.modbus_connection.slaveid}, {self.modbus_connection.port})"
 
 
+ConnectionInfo = namedtuple("ConnectionInfo", ["slaveid", "port"])
+
+
 def probe_all_devices(  # pylint:disable=too-many-locals
     driver_config_fname, minimal_response_timeout, instrument=instruments.StopbitsTolerantInstrument
 ):  # maybe rework entire data model (to get rid of passing lists)
@@ -875,22 +879,26 @@ def probe_all_devices(  # pylint:disable=too-many-locals
             # pylint:disable=line-too-long
             desc_str = f"Probing {device_name} (port: {port}, slaveid: {device_slaveid}, uart_params: {uart_params}, response_timeout: {actual_response_timeout:.2f})..."
             with spinner(description=desc_str, tqdm_kwargs={"bar_format": "{desc} (elapsed: {elapsed})"}):
-                device_info = DeviceInfo(
-                    name=device_name,
-                    modbus_connection=bindings.WBModbusDeviceBase(
+                try:
+                    configured_connection = bindings.WBModbusDeviceBase(
                         device_slaveid,
                         port,
                         *parse_uart_settings_str(uart_params),
                         response_timeout=actual_response_timeout,
                         instrument=instrument,
-                    ),
-                )
+                    )
+                except serial.SerialException:
+                    result["disconnected"].append(
+                        DeviceInfo(
+                            name=device_name,
+                            modbus_connection=ConnectionInfo(slaveid=device_slaveid, port=port),
+                        )
+                    )
+                    continue
+                device_info = DeviceInfo(name=device_name, modbus_connection=configured_connection)
                 try:
-                    device_info = DeviceInfo(
-                        name=device_name,
-                        modbus_connection=get_correct_modbus_connection(
-                            device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
-                        ),
+                    detected_connection = get_correct_modbus_connection(
+                        device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
                     )
                 except ForeignDeviceError:
                     result["foreign"].append(device_info)
@@ -910,6 +918,11 @@ def probe_all_devices(  # pylint:disable=too-many-locals
                             continue
                     result["disconnected"].append(device_info)
                     continue
+                except minimalmodbus.InvalidResponseError:
+                    result["disconnected"].append(device_info)
+                    continue
+                else:
+                    device_info = DeviceInfo(name=device_name, modbus_connection=detected_connection)
 
                 try:
                     mb_connection = device_info.modbus_connection
@@ -941,7 +954,14 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
     cmd_status = defaultdict(list)
 
     for device_info in probing_result["alive"]:
-        fw_signature = device_info.modbus_connection.get_fw_signature()
+        try:
+            fw_signature = device_info.modbus_connection.get_fw_signature()
+        except minimalmodbus.ModbusException:
+            logger.exception(
+                "Device %s was alive at the probing time, but is not responding now", str(device_info)
+            )
+            probing_result["disconnected"].append(device_info)
+            continue
         try:
             latest_remote_version, released_fw_endpoint = get_released_fw(
                 fw_signature, RELEASE_INFO
@@ -1071,7 +1091,7 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
 
     logger.info(
         "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, "
-        "%s disconnected and %s too old for any updates.",
+        "%s disconnected, %s foreign and %s too old for any updates.",
         user_log.colorize(str(len(cmd_status["ok"])), "GREEN" if cmd_status["ok"] else "RED"),
         user_log.colorize(str(len(cmd_status["skipped"])), "YELLOW" if cmd_status["skipped"] else "GREEN"),
         user_log.colorize(
@@ -1083,6 +1103,9 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
         ),
         user_log.colorize(
             str(len(probing_result["disconnected"])), "RED" if probing_result["disconnected"] else "GREEN"
+        ),
+        user_log.colorize(
+            str(len(probing_result["foreign"])), "RED" if probing_result["foreign"] else "GREEN"
         ),
         user_log.colorize(
             str(len(probing_result["too_old_to_update"])),
