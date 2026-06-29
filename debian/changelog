@@ -1,3 +1,13 @@
+wb-mcu-fw-updater (1.14.6) stable; urgency=medium
+
+  * recover: take the brute-force fw_signatures candidate list from
+    release-versions.yaml instead of the fw_signatures.txt index, which is being
+    retired. Only signatures with a released firmware are tried now (the rest could
+    not be flashed back anyway), so recovering an unknown-signature device no longer
+    prompts to pull an unreleased master build for every non-released signature
+
+ -- Ilia Skochilov <ilia.skochilov@wirenboard.com>  Mon, 29 Jun 2026 15:31:49 +0300
+
 wb-mcu-fw-updater (1.14.5) stable; urgency=medium
 
   * update-all: skip devices with errors during update
