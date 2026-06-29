@@ -8,6 +8,7 @@ import sys
 from functools import lru_cache
 
 import six
+import yaml
 from six.moves import urllib
 
 from . import CONFIG, MODE_COMPONENTS, MODE_FW, logger
@@ -63,8 +64,15 @@ def get_remote_releases_info(
 
 
 def get_fw_signatures_list():
-    ret = read_remote_file(urllib.parse.urljoin(CONFIG["ROOT_URL"], CONFIG["FW_SIGNATURES_FILE_URI"]))
-    return ret.split("\n") if ret else None
+    """
+    All fw signatures that have a released firmware, taken from release-versions.yaml
+    (its "releases" mapping is keyed by signature). Used by `recover` to brute-force a
+    device stuck in the bootloader whose signature is unknown: only signatures with a
+    released firmware can actually be flashed back, so that mapping is exactly the set
+    worth trying. Replaces the standalone fw_signatures.txt index, which is being retired.
+    """
+    contents = get_remote_releases_info()
+    return list(yaml.safe_load(contents).get("releases", {})) or None
 
 
 @lru_cache(maxsize=3)
