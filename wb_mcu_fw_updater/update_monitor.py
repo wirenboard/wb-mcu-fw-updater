@@ -137,17 +137,26 @@ def fill_release_info():
         six.reraise(*sys.exc_info())
 
 
-def get_released_fw(fw_signature, release_info):
+def get_released_fw(fw_signature, release_info, mode=MODE_FW):
     """
-    Looking for released-fw:
+    Looking for released firmware/bootloader:
         version
         url on fw-releases
     By:
         fw_signature
         release suite
+        mode (firmwares and bootloaders have separate release-versions.yaml files,
+        both keyed by signature and suite)
     """
     suite = release_info["SUITE"]
-    for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
+    releases_file_uri = (
+        CONFIG["BOOT_RELEASES_FILE_URI"] if mode == MODE_BOOTLOADER else CONFIG["FW_RELEASES_FILE_URI"]
+    )
+    default_releases_file_url = urllib.parse.urljoin(CONFIG["ROOT_URL"], releases_file_uri)
+    mode_label = "bootloader" if mode == MODE_BOOTLOADER else "firmware"
+    for url in releases.get_release_file_urls(
+        release_info, default_releases_file_url
+    ):  # repo-prefix is the first, if exists
         logger.debug("Looking to %s (suite: %s)", url, str(suite))
         try:
             contents = fw_downloader.get_remote_releases_info(url)
@@ -155,7 +164,8 @@ def get_released_fw(fw_signature, release_info):
             if fw_endpoint:
                 fw_version = releases.parse_fw_version(fw_endpoint)
                 logger.debug(
-                    "FW version for %s on release %s: %s (endpoint: %s)",
+                    "%s version for %s on release %s: %s (endpoint: %s)",
+                    mode_label,
                     fw_signature,
                     suite,
                     fw_version,
@@ -163,11 +173,11 @@ def get_released_fw(fw_signature, release_info):
                 )
                 return str(fw_version), str(fw_endpoint)
         except fw_downloader.RemoteFileReadingError:
-            logger.warning('No released fw for "%s" in "%s"', fw_signature, url)
+            logger.warning('No released %s for "%s" in "%s"', mode_label, fw_signature, url)
         except releases.VersionParsingError as e:
             logger.exception(e)
     raise NoReleasedFwError(
-        f'Released FW not found for "{fw_signature}"\n'
+        f'Released {mode_label} not found for "{fw_signature}"\n'
         "Release info:\n"
         f"{json.dumps(release_info, indent=4)}"
     )
@@ -563,8 +573,11 @@ def is_reflash_component_necessary(actual_version, provided_version, force_refla
 def is_bootloader_latest(mb_connection):
     fw_sig = mb_connection.get_fw_signature()
     local_version = mb_connection.get_bootloader_version()
-    remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
-    return semantic_version.Version(local_version) == semantic_version.Version(remote_version)
+    try:
+        remote_version, _ = get_released_fw(fw_sig, RELEASE_INFO, mode=MODE_BOOTLOADER)
+    except NoReleasedFwError:
+        return True  # nothing released for this signature/suite -> nothing to offer
+    return semantic_version.Version(local_version) >= semantic_version.Version(remote_version)
 
 
 def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
@@ -599,7 +612,7 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
             # instead of "retrieve_latest_vnum" logic?
 
     if version == "release":  # triggered updating from releases
-        version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO)
+        version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO, mode=mode)
         downloaded_fw = fw_downloader.download_remote_file(
             six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint)
         )
@@ -621,23 +634,21 @@ def is_interactive_shell():
 def is_bl_update_required(modbus_connection, force=False):
     fw_sig = modbus_connection.get_fw_signature()
     local_version = modbus_connection.get_bootloader_version()
-    remote_file_watcher = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER)
-    latest_remote_version = remote_file_watcher.get_latest_version_number(fw_sig)
-
-    if semantic_version.Version(local_version) == semantic_version.Version(latest_remote_version):
+    try:
+        remote_version, _ = get_released_fw(fw_sig, RELEASE_INFO, mode=MODE_BOOTLOADER)
+    except NoReleasedFwError:
+        logger.debug(
+            "No released bootloader for %s in suite %s; skip bootloader update",
+            fw_sig,
+            RELEASE_INFO.get("SUITE"),
+        )
         return False
 
-    if not remote_file_watcher.is_version_exist(fw_sig, local_version):
-        logger.warning(
-            "Local bootloader version v%s is not found on remote! (maybe was removed manually) => "
-            "Will update bootloader to latest v%s anyway!",
-            local_version,
-            latest_remote_version,
-        )
-        return True
+    if semantic_version.Version(local_version) >= semantic_version.Version(remote_version):
+        return False
 
     suggestion_str = (
-        f"Bootloader update (v{local_version} -> v{latest_remote_version}) for {fw_sig} "
+        f"Bootloader update (v{local_version} -> v{remote_version}) for {fw_sig} "
         f"{modbus_connection.port}:{modbus_connection.slaveid} is available! "
         "(bootloader updates are highly recommended to install)"
     )
@@ -653,14 +664,14 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
     logger.debug("Flashing approved for %s", device_str)
     bl_to_flash = None
     actual_bl_version = modbus_connection.get_bootloader_version()
+    # Bootloader downgrade is allowed and mirrors firmware: the up/down/keep decision is
+    # made by is_reflash_necessary (allow_downgrade) in flash_alive_device, so an explicit
+    # `update-bl` rolls a device back to the version pinned in the released
+    # boot/by-signature/release-versions.yaml -- lower the pin to roll bootloaders back in
+    # the field (no hard guard anymore, same as firmwares).
     if downloaded_wbfw.mode == MODE_FW:
         if is_bl_update_required(modbus_connection, force):
-            bl_to_flash = fw_downloader.RemoteFileWatcher(MODE_BOOTLOADER).download(fw_signature, "latest")
-    elif downloaded_wbfw.mode == MODE_BOOTLOADER:
-        if semantic_version.Version(downloaded_wbfw.version) < semantic_version.Version(actual_bl_version):
-            raise UpdateDeviceError(
-                f"Bootloader downgrade (v{actual_bl_version} -> v{downloaded_wbfw.version}) is not allowed!"
-            )
+            bl_to_flash = _do_download(fw_signature, "release", None, MODE_BOOTLOADER).fpath
 
     do_check_userdata_saving = semantic_version.Version(actual_bl_version) >= semantic_version.Version(
         "1.2.0"

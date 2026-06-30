@@ -11,7 +11,13 @@ import six
 import yaml
 from six.moves import urllib
 
-from . import CONFIG, MODE_COMPONENTS, MODE_FW, logger
+from . import CONFIG, MODE_BOOTLOADER, MODE_COMPONENTS, MODE_FW, logger
+
+REMOTE_SECTION_BY_MODE = {
+    MODE_FW: "fw",
+    MODE_COMPONENTS: "fw",
+    MODE_BOOTLOADER: "boot",
+}
 
 
 class WBRemoteStorageError(Exception):
@@ -143,9 +149,9 @@ class RemoteFileWatcher:
             CONFIG["COMPONENTS_FW_EXTENSION"] if mode == MODE_COMPONENTS else CONFIG["FW_EXTENSION"]
         )
 
-        url_mode = MODE_FW if mode == MODE_COMPONENTS else mode
+        remote_section = REMOTE_SECTION_BY_MODE.get(mode, mode)
         fw_source = f"unstable/{branch_name}" if branch_name else CONFIG["DEFAULT_SOURCE"]
-        self.parent_url_path = self._join(url_mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
+        self.parent_url_path = self._join(remote_section, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
     def _join(self, *args):
         return "/".join(map(str, args))

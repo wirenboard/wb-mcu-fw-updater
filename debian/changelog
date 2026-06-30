@@ -1,3 +1,14 @@
+wb-mcu-fw-updater (1.15.0) stable; urgency=medium
+
+  * bootloader updates: pick the actual version from the released
+    boot/by-signature/release-versions.yaml (keyed by signature and the
+    controller's release suite, testing or stable) and compare with the version
+    in the device -- same source of truth as firmwares. update-bl now defaults to
+    the release lookup instead of latest.txt.
+  * bootloader rollback now works like firmwares.
+
+ -- Ilia Skochilov <ilia.skochilov@wirenboard.com>  Tue, 30 Jun 2026 10:44:20 +0300
+
 wb-mcu-fw-updater (1.14.6) stable; urgency=medium
 
   * recover: take the brute-force fw_signatures candidate list from
@@ -16,7 +27,7 @@ wb-mcu-fw-updater (1.14.5) stable; urgency=medium
 
 wb-mcu-fw-updater (1.14.4) stable; urgency=medium
 
-  * Fix update-fw with wb-MAP* 
+  * Fix update-fw with wb-MAP*ё
 
  -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Wed, 04 Mar 2026 13:41:53 +0300
 
@@ -28,7 +39,7 @@ wb-mcu-fw-updater (1.14.3) stable; urgency=medium
 
 wb-mcu-fw-updater (1.14.2) stable; urgency=medium
 
-  * Add component signature argument for updating components to version/branch 
+  * Add component signature argument for updating components to version/branch
 
  -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Mon, 01 Sep 2025 14:02:06 +0300
 
