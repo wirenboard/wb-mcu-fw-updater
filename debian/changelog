@@ -27,7 +27,7 @@ wb-mcu-fw-updater (1.14.5) stable; urgency=medium
 
 wb-mcu-fw-updater (1.14.4) stable; urgency=medium
 
-  * Fix update-fw with wb-MAP*ё
+  * Fix update-fw with wb-MAP*
 
  -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Wed, 04 Mar 2026 13:41:53 +0300
 
