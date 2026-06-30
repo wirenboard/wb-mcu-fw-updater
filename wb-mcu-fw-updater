@@ -440,7 +440,9 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
 
     # Updating bootloader on single working device
     update_bootloader_parser = subparsers.add_parser(
-        "update-bl", help="Update bootloader on single working device."
+        "update-bl",
+        help="Update bootloader on single working device "
+        "(to the suite-aware released version; downgrade/rollback allowed).",
     )
     add_common_logic_args(update_bootloader_parser)
     add_modbus_connection_args(update_bootloader_parser)

@@ -153,7 +153,7 @@ def get_released_fw(fw_signature, release_info, mode=MODE_FW):
         CONFIG["BOOT_RELEASES_FILE_URI"] if mode == MODE_BOOTLOADER else CONFIG["FW_RELEASES_FILE_URI"]
     )
     default_releases_file_url = urllib.parse.urljoin(CONFIG["ROOT_URL"], releases_file_uri)
-    mode_label = "bootloader" if mode == MODE_BOOTLOADER else "firmware"
+    mode_label = {MODE_BOOTLOADER: "bootloader", MODE_COMPONENTS: "components"}.get(mode, "firmware")
     for url in releases.get_release_file_urls(
         release_info, default_releases_file_url
     ):  # repo-prefix is the first, if exists
@@ -570,20 +570,35 @@ def is_reflash_component_necessary(actual_version, provided_version, force_refla
     return do_flash
 
 
-def is_bootloader_latest(mb_connection):
+def _released_bootloader_versions(mb_connection):
+    """
+    (fw_signature, local, released) bootloader versions, local/released as
+    semantic_version.Version; or None when no bootloader is released for the device's
+    signature/suite. Shared by is_bootloader_latest and is_bl_update_required so both
+    read the same source (boot/by-signature/release-versions.yaml).
+    """
     fw_sig = mb_connection.get_fw_signature()
-    local_version = mb_connection.get_bootloader_version()
     try:
         remote_version, _ = get_released_fw(fw_sig, RELEASE_INFO, mode=MODE_BOOTLOADER)
     except NoReleasedFwError:
+        return None
+    local_version = mb_connection.get_bootloader_version()
+    return fw_sig, semantic_version.Version(local_version), semantic_version.Version(remote_version)
+
+
+def is_bootloader_latest(mb_connection):
+    versions = _released_bootloader_versions(mb_connection)
+    if versions is None:
         return True  # nothing released for this signature/suite -> nothing to offer
-    return semantic_version.Version(local_version) >= semantic_version.Version(remote_version)
+    _, local_version, remote_version = versions
+    return local_version >= remote_version
 
 
 def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     """
     Generic .wbfw downloading logic: ("release" is a default val for version)
         version=="release"; branch==None -> looking into release-versions.yaml (default case)
+            (fw/by-signature/ for fw & components, boot/by-signature/ for bootloader)
         version=="release"; branch==<specified_branch> -> looking into branch/latest
         version==<specified_version>; branch==None -> looking into main/version
         version==<specified_version>; branch==<specified_branch> -> looking into branch/version
@@ -614,7 +629,8 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     if version == "release":  # triggered updating from releases
         version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO, mode=mode)
         downloaded_fw = fw_downloader.download_remote_file(
-            six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint)
+            six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint),
+            saving_dir=os.path.join(CONFIG["FW_SAVING_DIR"], mode),  # keep fw/bl/components apart
         )
     else:
         logger.debug("%s version has specified manually: %s", mode_name, version)
@@ -632,19 +648,16 @@ def is_interactive_shell():
 
 
 def is_bl_update_required(modbus_connection, force=False):
-    fw_sig = modbus_connection.get_fw_signature()
-    local_version = modbus_connection.get_bootloader_version()
-    try:
-        remote_version, _ = get_released_fw(fw_sig, RELEASE_INFO, mode=MODE_BOOTLOADER)
-    except NoReleasedFwError:
+    versions = _released_bootloader_versions(modbus_connection)
+    if versions is None:
         logger.debug(
             "No released bootloader for %s in suite %s; skip bootloader update",
-            fw_sig,
+            modbus_connection.get_fw_signature(),
             RELEASE_INFO.get("SUITE"),
         )
         return False
-
-    if semantic_version.Version(local_version) >= semantic_version.Version(remote_version):
+    fw_sig, local_version, remote_version = versions
+    if local_version >= remote_version:
         return False
 
     suggestion_str = (

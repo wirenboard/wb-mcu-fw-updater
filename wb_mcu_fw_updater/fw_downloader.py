@@ -169,19 +169,6 @@ class RemoteFileWatcher:
         url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
         return read_remote_file(url_path)
 
-    def is_version_exist(self, fwsig: str, version: str):
-        """
-        Check, does specified fw/bootloader/component version exist for actual fw_sig.
-        In some cases, buggy fws could be removed from fw-releases.
-        """
-        remote_path = self._join(self.parent_url_path % fwsig, f"{version}{self.extension}")
-        url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
-        try:
-            get_request(url_path)
-            return True
-        except WBRemoteStorageError:
-            return False
-
     def download(self, name, version="latest"):  # pylint:disable=inconsistent-return-statements
         """
         Downloading a firmware/bootloader file with specified version to specified fname.
