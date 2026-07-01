@@ -11,7 +11,13 @@ import six
 import yaml
 from six.moves import urllib
 
-from . import CONFIG, MODE_COMPONENTS, MODE_FW, logger
+from . import CONFIG, MODE_BOOTLOADER, MODE_COMPONENTS, MODE_FW, logger
+
+REMOTE_SECTION_BY_MODE = {
+    MODE_FW: "fw",
+    MODE_COMPONENTS: "fw",
+    MODE_BOOTLOADER: "boot",
+}
 
 
 class WBRemoteStorageError(Exception):
@@ -143,9 +149,9 @@ class RemoteFileWatcher:
             CONFIG["COMPONENTS_FW_EXTENSION"] if mode == MODE_COMPONENTS else CONFIG["FW_EXTENSION"]
         )
 
-        url_mode = MODE_FW if mode == MODE_COMPONENTS else mode
+        remote_section = REMOTE_SECTION_BY_MODE.get(mode, mode)
         fw_source = f"unstable/{branch_name}" if branch_name else CONFIG["DEFAULT_SOURCE"]
-        self.parent_url_path = self._join(url_mode, sort_by, "%s", fw_source)  # fw_sig or device_sig
+        self.parent_url_path = self._join(remote_section, sort_by, "%s", fw_source)  # fw_sig or device_sig
 
     def _join(self, *args):
         return "/".join(map(str, args))
@@ -162,19 +168,6 @@ class RemoteFileWatcher:
         remote_path = self._join(self.parent_url_path % name, CONFIG["LATEST_FW_VERSION_FILE"])
         url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
         return read_remote_file(url_path)
-
-    def is_version_exist(self, fwsig: str, version: str):
-        """
-        Check, does specified fw/bootloader/component version exist for actual fw_sig.
-        In some cases, buggy fws could be removed from fw-releases.
-        """
-        remote_path = self._join(self.parent_url_path % fwsig, f"{version}{self.extension}")
-        url_path = urllib.parse.urljoin(CONFIG["ROOT_URL"], remote_path)
-        try:
-            get_request(url_path)
-            return True
-        except WBRemoteStorageError:
-            return False
 
     def download(self, name, version="latest"):  # pylint:disable=inconsistent-return-statements
         """

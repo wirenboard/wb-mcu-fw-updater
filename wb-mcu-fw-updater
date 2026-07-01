@@ -159,7 +159,9 @@ def update_fw(args):  # pylint:disable=redefined-outer-name
 
 def update_bootloader(args):  # pylint:disable=redefined-outer-name
     # Could install specified bl_version from specified branch.
-    version = args.specified_version or "latest"  # no bl-releases.yaml yet
+    # Default "release" => suite-aware lookup in boot/by-signature/release-versions.yaml,
+    # mirroring the firmware update path.
+    version = args.specified_version or "release"
     _update_alive_device(
         slaveid=args.slaveid,
         port=args.port,
@@ -438,7 +440,9 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
 
     # Updating bootloader on single working device
     update_bootloader_parser = subparsers.add_parser(
-        "update-bl", help="Update bootloader on single working device."
+        "update-bl",
+        help="Update bootloader on single working device "
+        "(to the suite-aware released version; downgrade/rollback allowed).",
     )
     add_common_logic_args(update_bootloader_parser)
     add_modbus_connection_args(update_bootloader_parser)
