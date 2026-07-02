@@ -78,6 +78,9 @@ DownloadedWBFW = namedtuple("DownloadedWBFW", "mode fpath version")
 SkipUpdateReason = enum.Enum(value="SkipUpdateReason", names=("is_actual", "gone_ahead"))
 
 
+BootloaderAction = enum.Enum(value="BootloaderAction", names=("skip", "update", "blocked"))
+
+
 @contextmanager
 def spinner(
     estimated_time_s=float("+inf"), tdelta_s=0.1, description="", tqdm_kwargs={}
@@ -671,6 +674,116 @@ def is_bl_update_required(modbus_connection, force=False):
     return False
 
 
+def _released_firmware_available(fw_signature):
+    """
+    Is a firmware released for the signature/suite? Flashing a bootloader erases the
+    application, so update-all may touch the bootloader only when it can restore the
+    firmware afterwards.
+    """
+    try:
+        get_released_fw(fw_signature, RELEASE_INFO, mode=MODE_FW)
+        return True
+    except NoReleasedFwError:
+        return False
+
+
+def decide_bootloader_action(  # pylint:disable=too-many-arguments,too-many-positional-arguments,too-many-return-statements
+    modbus_connection, fw_signature, fw_local_version, fw_remote_version, allow_downgrade
+):
+    """
+    Decide what update-all should do with a device's bootloader, mirroring the firmware
+    policy. A bootloader flash erases the application and _do_flash then rewrites the
+    released firmware unconditionally (which may move the firmware up or down), so the whole
+    "flash bootloader + restore firmware" operation is treated as a downgrade -- and gated by
+    --allow-downgrade -- whenever either the bootloader or the firmware would move backwards.
+
+    Returns BootloaderAction:
+        skip    -- bootloader already released / nothing released / no released firmware to
+                   restore the app: leave the device to the normal firmware logic.
+        update  -- flash the released bootloader (this also restores the released firmware);
+                   the caller must skip the firmware step for this device.
+        blocked -- a bootloader change exists but it would roll the firmware/bootloader back
+                   and --allow-downgrade is off.
+    """
+    try:
+        bl_remote_version, _ = get_released_fw(fw_signature, RELEASE_INFO, mode=MODE_BOOTLOADER)
+    except NoReleasedFwError:
+        return BootloaderAction.skip  # nothing released for this signature/suite
+    try:
+        bl_local = semantic_version.Version(modbus_connection.get_bootloader_version())
+    except (minimalmodbus.ModbusException, bindings.TooOldDeviceError):
+        return BootloaderAction.skip
+    bl_remote = semantic_version.Version(bl_remote_version)
+    if bl_local == bl_remote:
+        return BootloaderAction.skip  # bootloader already up to date
+    if not _released_firmware_available(fw_signature):
+        return BootloaderAction.skip  # cannot restore the app after erasing it
+    firmware_rolls_back = semantic_version.Version(fw_local_version) > semantic_version.Version(
+        fw_remote_version
+    )
+    if (bl_local > bl_remote or firmware_rolls_back) and not allow_downgrade:
+        logger.warning(
+            "Bootloader for %s %s:%s can be set to the released v%s (installed v%s), but applying it "
+            "would roll %s back; re-run with --allow-downgrade",
+            fw_signature,
+            modbus_connection.port,
+            modbus_connection.slaveid,
+            bl_remote,
+            bl_local,
+            "the bootloader" if bl_local > bl_remote else "the firmware",
+        )
+        return BootloaderAction.blocked
+    logger.info(
+        "Bootloader update for %s %s:%s: v%s -> v%s",
+        fw_signature,
+        modbus_connection.port,
+        modbus_connection.slaveid,
+        bl_local,
+        bl_remote,
+    )
+    return BootloaderAction.update
+
+
+def _maybe_flash_released_bootloader(modbus_connection, fw_signature, allow_downgrade, force):
+    """
+    For a device sitting in the bootloader: flash the released bootloader (its version is
+    readable at reg 330 in bootloader mode) before the application is restored, when a newer
+    one is pinned for the signature/suite. The firmware is restored right after by
+    recover_device_iteration, so no separate app re-flash is needed here. A bootloader
+    downgrade needs --allow-downgrade, mirroring the firmware policy.
+    """
+    try:
+        bl_remote_version, _ = get_released_fw(fw_signature, RELEASE_INFO, mode=MODE_BOOTLOADER)
+    except NoReleasedFwError:
+        return
+    if not _released_firmware_available(fw_signature):
+        return  # recover_device_iteration would have nothing safe to restore the app with
+    try:
+        bl_local = semantic_version.Version(modbus_connection.get_bootloader_version())
+    except (minimalmodbus.ModbusException, bindings.TooOldDeviceError):
+        return
+    bl_remote = semantic_version.Version(bl_remote_version)
+    if bl_local == bl_remote:
+        return
+    if bl_local > bl_remote and not allow_downgrade:
+        logger.warning(
+            "Released bootloader for %s (v%s) is older than installed v%s; skip bootloader "
+            "downgrade (re-run with --allow-downgrade)",
+            fw_signature,
+            bl_remote,
+            bl_local,
+        )
+        return
+    logger.info(
+        "Updating bootloader on %s (v%s -> v%s) before restoring firmware",
+        fw_signature,
+        bl_local,
+        bl_remote,
+    )
+    bootloader_file = _do_download(fw_signature, "release", None, MODE_BOOTLOADER).fpath
+    direct_flash(bootloader_file, modbus_connection, force=force)
+
+
 def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings, force=False):
     fw_signature = modbus_connection.get_fw_signature()
     device_str = f"{fw_signature} {modbus_connection.port}:{modbus_connection.slaveid}"
@@ -969,7 +1082,7 @@ def print_status(
     logger.log(loglevel, additional_info)
 
 
-def _update_all(  # pylint:disable=too-many-branches,too-many-statements
+def _update_all(  # pylint:disable=too-many-branches,too-many-statements,too-many-locals
     force, minimal_response_timeout, allow_downgrade=False, instrument=instruments.StopbitsTolerantInstrument
 ):  # maybe store fw endpoint in device_info? (to prevent multiple releases-parsing)
     probing_result = probe_all_devices(
@@ -1001,6 +1114,23 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
                 fw_signature
             )  # to guess, is reflash needed or not
         local_device_version = device_info.modbus_connection.get_fw_version()
+
+        # Bootloader first: flashing it erases the app and restores the released firmware,
+        # so an outdated bootloader is handled here (the firmware comes along) instead of
+        # being merely reported after a firmware update.
+        bootloader_action = decide_bootloader_action(
+            device_info.modbus_connection,
+            fw_signature,
+            local_device_version,
+            latest_remote_version,
+            allow_downgrade,
+        )
+        if bootloader_action == BootloaderAction.update:
+            cmd_status["bl_to_perform"].append(device_info)
+            continue  # bootloader flash also restores the released firmware
+        if bootloader_action == BootloaderAction.blocked:
+            cmd_status["bl_downgrade_blocked"].append(device_info)
+            # fall through to the normal firmware logic (it skips a gone-ahead firmware)
 
         do_reflash, skip_reason = is_reflash_necessary(
             actual_version=local_device_version,
@@ -1053,12 +1183,51 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
         else:
             cmd_status["ok"].append(device_info)
 
+    for device_info in cmd_status["bl_to_perform"]:  # Firmware is current, only the bootloader is behind
+        logger.info("Updating bootloader on %s", str(device_info))
+        try:
+            # Flashes the released bootloader and then re-flashes the released firmware (a
+            # bootloader flash erases the app); keeps the major-version and user-data warnings.
+            flash_alive_device(
+                device_info.modbus_connection,
+                mode=MODE_BOOTLOADER,
+                branch_name="",
+                specified_fw_version="release",
+                force=force,
+                erase_settings=False,
+            )
+            if not wait_for_wake_up(device_info.modbus_connection, 0.5):
+                logger.info("Device %s is not responding after flashing", str(device_info))
+                probing_result["in_bootloader"].append(device_info)
+                continue
+            flash_alive_device_components(
+                modbus_connection=device_info.modbus_connection,
+                mode=MODE_FW,
+                branch_name="",
+                specified_fw_version="release",
+                force=force,
+            )
+        except UserCancelledError as e:
+            logger.info(e)
+            cmd_status["bl_update_available"].append(device_info)
+        except fw_flasher.FlashingError as e:
+            logger.exception(e)
+            probing_result["in_bootloader"].append(device_info)
+        except minimalmodbus.ModbusException as e:
+            logger.exception(e)
+            probing_result["disconnected"].append(device_info)
+        else:
+            cmd_status["ok"].append(device_info)
+
     for device_info in probing_result["in_bootloader"][:]:
         fw_signature = _restore_fw_signature(device_info.modbus_connection)
         logger.info("Found in bootloader: %s; fw_signature: %s", str(device_info), str(fw_signature))
         if not fw_signature:
             continue  # remain as in-bootloader
         try:
+            _maybe_flash_released_bootloader(
+                device_info.modbus_connection, fw_signature, allow_downgrade, force
+            )
             recover_device_iteration(fw_signature, device_info.modbus_connection, force)
             if not is_bootloader_latest(device_info.modbus_connection):
                 cmd_status["bl_update_available"].append(device_info)
@@ -1090,6 +1259,14 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
             status="Bootloader update available:",
             devices_list=cmd_status["bl_update_available"],
             additional_info="Try 'wb-mcu-fw-updater update-bl -a <addr> <port>' for each device",
+        )
+
+    if cmd_status["bl_downgrade_blocked"]:
+        print_status(
+            logging.WARNING,
+            status="Bootloader change available but would roll firmware/bootloader back:",
+            devices_list=cmd_status["bl_downgrade_blocked"],
+            additional_info='Re-run with "--allow-downgrade" to apply it',
         )
 
     if probing_result["disconnected"]:
