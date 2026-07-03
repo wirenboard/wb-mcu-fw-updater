@@ -489,9 +489,9 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
     add_modbus_connection_args(recover_fw_parser)
     recover_fw_parser.set_defaults(func=recover_fw)
 
-    # Update firmware on all devices, found in wb-mqtt-serial config
+    # Update bootloaders and firmwares on all devices, found in wb-mqtt-serial config
     update_all_fw_parser = subparsers.add_parser(
-        "update-all", help="Trying to update firmwares on all devices, enabled in wb-mqtt-serial's config."
+        "update-all", help="Trying to update bootloaders and firmwares on all devices, enabled in wb-mqtt-serial's config."
     )
     update_all_fw_parser.add_argument(
         "--allow-downgrade",
