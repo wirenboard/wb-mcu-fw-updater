@@ -674,7 +674,7 @@ def is_bl_update_required(modbus_connection, force=False):
     return False
 
 
-def _released_firmware_available(fw_signature):
+def _released_firmware_available(fw_signature: str) -> bool:
     """
     Is a firmware released for the signature/suite? Flashing a bootloader erases the
     application, so update-all may touch the bootloader only when it can restore the
@@ -687,9 +687,13 @@ def _released_firmware_available(fw_signature):
         return False
 
 
-def decide_bootloader_action(  # pylint:disable=too-many-arguments,too-many-positional-arguments,too-many-return-statements
-    modbus_connection, fw_signature, fw_local_version, fw_remote_version, allow_downgrade
-):
+def decide_bootloader_action(
+    modbus_connection: bindings.WBModbusDeviceBase,
+    fw_signature: str,
+    fw_local_version: str,
+    fw_remote_version: str,
+    allow_downgrade: bool,
+) -> BootloaderAction:
     """
     Decide what update-all should do with a device's bootloader, mirroring the firmware
     policy. A bootloader flash erases the application and _do_flash then rewrites the
@@ -744,7 +748,9 @@ def decide_bootloader_action(  # pylint:disable=too-many-arguments,too-many-posi
     return BootloaderAction.update
 
 
-def _maybe_flash_released_bootloader(modbus_connection, fw_signature, allow_downgrade, force):
+def _maybe_flash_released_bootloader(
+    modbus_connection: bindings.WBModbusDeviceBase, fw_signature: str, allow_downgrade: bool, force: bool
+) -> None:
     """
     For a device sitting in the bootloader: flash the released bootloader (its version is
     readable at reg 330 in bootloader mode) before the application is restored, when a newer
