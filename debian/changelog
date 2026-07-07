@@ -1,3 +1,18 @@
+wb-mcu-fw-updater (1.16.0) stable; urgency=medium
+
+  * update-all: update an outdated bootloader even when the firmware is already
+    current, instead of only reporting it afterwards. The bootloader is checked
+    first for every device; if the released one is newer it is flashed (which also
+    re-flashes the released firmware, because a bootloader flash erases the app)
+    without a separate prompt.
+    Applying a bootloader that would roll the firmware or the bootloader back still
+    requires --allow-downgrade; otherwise it is reported and nothing is flashed. A
+    bootloader is only touched when a released firmware exists to restore the app.
+    Devices found stuck in the bootloader get the released bootloader too, before
+    their firmware is restored.
+
+ -- Ilia Skochilov <ilia.skochilov@wirenboard.com>  Fri, 03 Jul 2026 09:55:51 +0300
+
 wb-mcu-fw-updater (1.15.0) stable; urgency=medium
 
   * bootloader updates: pick the actual version from the released
