@@ -1,4 +1,4 @@
 wb-mcu-fw-updater.conf etc
 completions/wb-mcu-fw-updater.bash /usr/share/bash-completion/completions
 completions/wb-mcu-fw-updater.fish /usr/share/fish/completions
-completions/wb-mcu-fw-updater.zsh /usr/share/zsh/site-functions/_wb-mcu-fw-updater
+completions/_wb-mcu-fw-updater /usr/share/zsh/site-functions
