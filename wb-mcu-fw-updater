@@ -415,7 +415,7 @@ def add_fw_source_args(parser):
     )
 
 
-def parse_args():  # pylint:disable=inconsistent-return-statements
+def get_parser() -> argparse.ArgumentParser:
     main_parser = argparse.ArgumentParser(
         prog="wb-mcu-fw-updater",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -566,17 +566,17 @@ def parse_args():  # pylint:disable=inconsistent-return-statements
     add_modbus_connection_args(direct_flash_parser)
     direct_flash_parser.set_defaults(func=flash_fw_file)
 
-    args = main_parser.parse_args()  # pylint:disable=redefined-outer-name
-    if "func" in vars(args):
-        return args
-
-    main_parser.print_help()
-    print("Each action supports <-h> key for help.")
-    die("No action has chosen!")
+    return main_parser
 
 
-if __name__ == "__main__":
-    args = parse_args()
+def main():
+    parser = get_parser()
+    args = parser.parse_args()
+
+    if "func" not in vars(args):
+        parser.print_help()
+        print("Each action supports <-h> key for help.")
+        die("No action has chosen!")
 
     user_log.setup_syslog_logger("wb_mcu_fw_updater")
     user_loglevel = args.user_loglevel or CONFIG["USER_LOGLEVEL"]
@@ -609,3 +609,7 @@ if __name__ == "__main__":
     update_monitor.fill_release_info()
 
     args.func(args)
+
+
+if __name__ == "__main__":
+    main()

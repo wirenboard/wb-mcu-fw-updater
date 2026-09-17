@@ -1,3 +1,9 @@
+wb-mcu-fw-updater (1.17.0) stable; urgency=medium
+
+  * Add shell completions
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Thu, 17 Sep 2026 19:19:00 +0400
+
 wb-mcu-fw-updater (1.16.0) stable; urgency=medium
 
   * update-all: update an outdated bootloader even when the firmware is already
