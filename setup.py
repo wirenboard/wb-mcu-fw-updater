@@ -19,4 +19,5 @@ setup(
     license="MIT",
     url="https://github.com/wirenboard/wb-mcu-fw-updater",
     packages=["wb_mcu_fw_updater", "wb_modbus"],
+    scripts=["wb-mcu-fw-updater"],
 )
