@@ -100,6 +100,9 @@ class ModbusFlasher:
     UART_SETTINGS_RESET_REG = 1000  # in-bl only
     EEPROM_ERASE_REG = 1001  # in-bl only
 
+    # AT32 bl walks the whole FlashFS on uart settings reset: up to 2.2s with 256 files
+    UART_SETTINGS_RESET_TIMEOUT = 5.0
+
     GET_FREE_SPACE_FLASHFS_REG = 1003
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -173,7 +176,13 @@ class ModbusFlasher:
 
     def reset_uart(self):
         logger.debug("Resetting uart params")
-        self.perform_bootloader_cmd(self.UART_SETTINGS_RESET_REG)
+        try:
+            self.instrument.set_response_timeout(
+                max(self._actual_response_timeout, self.UART_SETTINGS_RESET_TIMEOUT)
+            )
+            self.perform_bootloader_cmd(self.UART_SETTINGS_RESET_REG)
+        finally:
+            self.instrument.set_response_timeout(self._actual_response_timeout)
 
     def reset_eeprom(self):
         logger.debug("Resetting all device's settings")

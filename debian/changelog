@@ -1,3 +1,10 @@
+wb-mcu-fw-updater (1.18.1) stable; urgency=medium
+
+  * Wait at least 5 s for the bootloader to reset UART settings (-u):
+    the AT32 bootloader takes up to ~2 s with a large FlashFS
+
+ -- Maxim Toropov <maxim.toropov@wirenboard.com>  Mon, 19 Oct 2026 16:10:00 +0300
+
 wb-mcu-fw-updater (1.18.0) stable; urgency=medium
 
   * Convert python3-wb-mcu-fw-updater into transitional dummy package
