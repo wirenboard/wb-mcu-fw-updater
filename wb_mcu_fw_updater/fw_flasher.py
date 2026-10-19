@@ -200,7 +200,7 @@ class ModbusFlasher:
         except minimalmodbus.ModbusException:
             logger.error("Device (%s) has too old bootloader to save user data!", device_str)
             return False
-        return available_chunks_fs > len(parsed_wbfw.data_chunks)
+        return available_chunks_fs >= len(parsed_wbfw.data_chunks)
 
     def flash(self, parsed_wbfw: ParsedWBFW):
         """
