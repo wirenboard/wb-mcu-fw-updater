@@ -1,3 +1,16 @@
+wb-mcu-fw-updater (1.14.4+wb100) stable; urgency=medium
+
+  * bootloader updates (backport of 1.15.0 to wb-2606): take the released
+    version from boot/by-signature/release-versions.yaml by the controller's
+    release suite instead of bootloader/by-signature/<sig>/main/latest.txt,
+    which is no longer updated. update-fw and update-all no longer flash an
+    older bootloader over a newer one and no longer fail for signatures that
+    have no bootloader in the old section; update-bl defaults to the released
+    version, and bootloader rollback works like firmwares
+  * update-all: skip devices with errors during update (backport of 1.14.5)
+
+ -- Nikolay Oleinik <nikolay.oleinik@wirenboard.com>  Wed, 18 Nov 2026 18:07:26 +0700
+
 wb-mcu-fw-updater (1.14.4) stable; urgency=medium
 
   * Fix update-fw with wb-MAP* 

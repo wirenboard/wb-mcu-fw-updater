@@ -34,6 +34,7 @@ CONFIG = {
     "ROOT_URL": "http://fw-releases.wirenboard.com/",
     "FW_SIGNATURES_FILE_URI": "fw/by-signature/fw_signatures.txt",
     "FW_RELEASES_FILE_URI": "fw/by-signature/release-versions.yaml",
+    "BOOT_RELEASES_FILE_URI": "boot/by-signature/release-versions.yaml",
 }
 
 
