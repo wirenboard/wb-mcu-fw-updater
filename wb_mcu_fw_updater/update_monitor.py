@@ -17,6 +17,7 @@ from copy import deepcopy
 from io import open
 
 import semantic_version
+import serial
 import six
 import tqdm
 import yaml
@@ -136,17 +137,26 @@ def fill_release_info():
         six.reraise(*sys.exc_info())
 
 
-def get_released_fw(fw_signature, release_info):
+def get_released_fw(fw_signature, release_info, mode=MODE_FW):
     """
-    Looking for released-fw:
+    Looking for released firmware/bootloader:
         version
         url on fw-releases
     By:
         fw_signature
         release suite
+        mode (firmwares and bootloaders have separate release-versions.yaml files,
+        both keyed by signature and suite)
     """
     suite = release_info["SUITE"]
-    for url in releases.get_release_file_urls(release_info):  # repo-prefix is the first, if exists
+    releases_file_uri = (
+        CONFIG["BOOT_RELEASES_FILE_URI"] if mode == MODE_BOOTLOADER else CONFIG["FW_RELEASES_FILE_URI"]
+    )
+    default_releases_file_url = urllib.parse.urljoin(CONFIG["ROOT_URL"], releases_file_uri)
+    mode_label = {MODE_BOOTLOADER: "bootloader", MODE_COMPONENTS: "components"}.get(mode, "firmware")
+    for url in releases.get_release_file_urls(
+        release_info, default_releases_file_url
+    ):  # repo-prefix is the first, if exists
         logger.debug("Looking to %s (suite: %s)", url, str(suite))
         try:
             contents = fw_downloader.get_remote_releases_info(url)
@@ -154,7 +164,8 @@ def get_released_fw(fw_signature, release_info):
             if fw_endpoint:
                 fw_version = releases.parse_fw_version(fw_endpoint)
                 logger.debug(
-                    "FW version for %s on release %s: %s (endpoint: %s)",
+                    "%s version for %s on release %s: %s (endpoint: %s)",
+                    mode_label,
                     fw_signature,
                     suite,
                     fw_version,
@@ -162,11 +173,11 @@ def get_released_fw(fw_signature, release_info):
                 )
                 return str(fw_version), str(fw_endpoint)
         except fw_downloader.RemoteFileReadingError:
-            logger.warning('No released fw for "%s" in "%s"', fw_signature, url)
+            logger.warning('No released %s for "%s" in "%s"', mode_label, fw_signature, url)
         except releases.VersionParsingError as e:
             logger.exception(e)
     raise NoReleasedFwError(
-        f'Released FW not found for "{fw_signature}"\n'
+        f'Released {mode_label} not found for "{fw_signature}"\n'
         "Release info:\n"
         f"{json.dumps(release_info, indent=4)}"
     )
@@ -410,7 +421,7 @@ def recover_device_iteration(fw_signature, device: bindings.WBModbusDeviceBase, 
     direct_flash(downloaded_fw, device, force=force)
 
 
-def direct_flash(  # pylint:disable=too-many-arguments
+def direct_flash(  # pylint:disable=too-many-arguments,too-many-positional-arguments
     fw_fpath,
     device: bindings.WBModbusDeviceBase,
     erase_all_settings=False,
@@ -559,17 +570,35 @@ def is_reflash_component_necessary(actual_version, provided_version, force_refla
     return do_flash
 
 
-def is_bootloader_latest(mb_connection):
+def _released_bootloader_versions(mb_connection):
+    """
+    (fw_signature, local, released) bootloader versions, local/released as
+    semantic_version.Version; or None when no bootloader is released for the device's
+    signature/suite. Shared by is_bootloader_latest and is_bl_update_required so both
+    read the same source (boot/by-signature/release-versions.yaml).
+    """
     fw_sig = mb_connection.get_fw_signature()
+    try:
+        remote_version, _ = get_released_fw(fw_sig, RELEASE_INFO, mode=MODE_BOOTLOADER)
+    except NoReleasedFwError:
+        return None
     local_version = mb_connection.get_bootloader_version()
-    remote_version = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER).get_latest_version_number(fw_sig)
-    return semantic_version.Version(local_version) == semantic_version.Version(remote_version)
+    return fw_sig, semantic_version.Version(local_version), semantic_version.Version(remote_version)
+
+
+def is_bootloader_latest(mb_connection):
+    versions = _released_bootloader_versions(mb_connection)
+    if versions is None:
+        return True  # nothing released for this signature/suite -> nothing to offer
+    _, local_version, remote_version = versions
+    return local_version >= remote_version
 
 
 def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
     """
     Generic .wbfw downloading logic: ("release" is a default val for version)
         version=="release"; branch==None -> looking into release-versions.yaml (default case)
+            (fw/by-signature/ for fw & components, boot/by-signature/ for bootloader)
         version=="release"; branch==<specified_branch> -> looking into branch/latest
         version==<specified_version>; branch==None -> looking into main/version
         version==<specified_version>; branch==<specified_branch> -> looking into branch/version
@@ -598,9 +627,10 @@ def _do_download(fw_sig, version, branch, mode, retrieve_latest_vnum=True):
             # instead of "retrieve_latest_vnum" logic?
 
     if version == "release":  # triggered updating from releases
-        version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO)
+        version, released_fw_endpoint = get_released_fw(fw_sig, RELEASE_INFO, mode=mode)
         downloaded_fw = fw_downloader.download_remote_file(
-            six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint)
+            six.moves.urllib.parse.urljoin(CONFIG["ROOT_URL"], released_fw_endpoint),
+            saving_dir=os.path.join(CONFIG["FW_SAVING_DIR"], mode),  # keep fw/bl/components apart
         )
     else:
         logger.debug("%s version has specified manually: %s", mode_name, version)
@@ -618,25 +648,20 @@ def is_interactive_shell():
 
 
 def is_bl_update_required(modbus_connection, force=False):
-    fw_sig = modbus_connection.get_fw_signature()
-    local_version = modbus_connection.get_bootloader_version()
-    remote_file_watcher = fw_downloader.RemoteFileWatcher(mode=MODE_BOOTLOADER)
-    latest_remote_version = remote_file_watcher.get_latest_version_number(fw_sig)
-
-    if semantic_version.Version(local_version) == semantic_version.Version(latest_remote_version):
+    versions = _released_bootloader_versions(modbus_connection)
+    if versions is None:
+        logger.debug(
+            "No released bootloader for %s in suite %s; skip bootloader update",
+            modbus_connection.get_fw_signature(),
+            RELEASE_INFO.get("SUITE"),
+        )
+        return False
+    fw_sig, local_version, remote_version = versions
+    if local_version >= remote_version:
         return False
 
-    if not remote_file_watcher.is_version_exist(fw_sig, local_version):
-        logger.warning(
-            "Local bootloader version v%s is not found on remote! (maybe was removed manually) => "
-            "Will update bootloader to latest v%s anyway!",
-            local_version,
-            latest_remote_version,
-        )
-        return True
-
     suggestion_str = (
-        f"Bootloader update (v{local_version} -> v{latest_remote_version}) for {fw_sig} "
+        f"Bootloader update (v{local_version} -> v{remote_version}) for {fw_sig} "
         f"{modbus_connection.port}:{modbus_connection.slaveid} is available! "
         "(bootloader updates are highly recommended to install)"
     )
@@ -652,14 +677,14 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
     logger.debug("Flashing approved for %s", device_str)
     bl_to_flash = None
     actual_bl_version = modbus_connection.get_bootloader_version()
+    # Bootloader downgrade is allowed and mirrors firmware: the up/down/keep decision is
+    # made by is_reflash_necessary (allow_downgrade) in flash_alive_device, so an explicit
+    # `update-bl` rolls a device back to the version pinned in the released
+    # boot/by-signature/release-versions.yaml -- lower the pin to roll bootloaders back in
+    # the field (no hard guard anymore, same as firmwares).
     if downloaded_wbfw.mode == MODE_FW:
         if is_bl_update_required(modbus_connection, force):
-            bl_to_flash = fw_downloader.RemoteFileWatcher(MODE_BOOTLOADER).download(fw_signature, "latest")
-    elif downloaded_wbfw.mode == MODE_BOOTLOADER:
-        if semantic_version.Version(downloaded_wbfw.version) < semantic_version.Version(actual_bl_version):
-            raise UpdateDeviceError(
-                f"Bootloader downgrade (v{actual_bl_version} -> v{downloaded_wbfw.version}) is not allowed!"
-            )
+            bl_to_flash = _do_download(fw_signature, "release", None, MODE_BOOTLOADER).fpath
 
     do_check_userdata_saving = semantic_version.Version(actual_bl_version) >= semantic_version.Version(
         "1.2.0"
@@ -697,7 +722,7 @@ def _do_flash(modbus_connection, downloaded_wbfw: DownloadedWBFW, erase_settings
     modbus_connection.set_response_timeout(initial_response_timeout)
 
 
-def flash_alive_device(  # pylint:disable=too-many-arguments
+def flash_alive_device(  # pylint:disable=too-many-arguments,too-many-positional-arguments
     modbus_connection,
     mode,
     branch_name,
@@ -754,7 +779,7 @@ def flash_alive_device(  # pylint:disable=too-many-arguments
         _do_flash(modbus_connection, downloaded_wbfw, erase_settings, force=force)
 
 
-def flash_alive_device_components(  # pylint:disable=too-many-arguments, too-many-locals, too-many-return-statements
+def flash_alive_device_components(  # pylint:disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-return-statements
     modbus_connection, mode, branch_name, specified_fw_version, force, component_signature=None
 ):
     fw_signature = modbus_connection.get_fw_signature()
@@ -849,6 +874,9 @@ class DeviceInfo(namedtuple("DeviceInfo", ["name", "modbus_connection"])):
         return f"{self.name} ({self.modbus_connection.slaveid}, {self.modbus_connection.port})"
 
 
+ConnectionInfo = namedtuple("ConnectionInfo", ["slaveid", "port"])
+
+
 def probe_all_devices(  # pylint:disable=too-many-locals
     driver_config_fname, minimal_response_timeout, instrument=instruments.StopbitsTolerantInstrument
 ):  # maybe rework entire data model (to get rid of passing lists)
@@ -875,22 +903,26 @@ def probe_all_devices(  # pylint:disable=too-many-locals
             # pylint:disable=line-too-long
             desc_str = f"Probing {device_name} (port: {port}, slaveid: {device_slaveid}, uart_params: {uart_params}, response_timeout: {actual_response_timeout:.2f})..."
             with spinner(description=desc_str, tqdm_kwargs={"bar_format": "{desc} (elapsed: {elapsed})"}):
-                device_info = DeviceInfo(
-                    name=device_name,
-                    modbus_connection=bindings.WBModbusDeviceBase(
+                try:
+                    configured_connection = bindings.WBModbusDeviceBase(
                         device_slaveid,
                         port,
                         *parse_uart_settings_str(uart_params),
                         response_timeout=actual_response_timeout,
                         instrument=instrument,
-                    ),
-                )
+                    )
+                except serial.SerialException:
+                    result["disconnected"].append(
+                        DeviceInfo(
+                            name=device_name,
+                            modbus_connection=ConnectionInfo(slaveid=device_slaveid, port=port),
+                        )
+                    )
+                    continue
+                device_info = DeviceInfo(name=device_name, modbus_connection=configured_connection)
                 try:
-                    device_info = DeviceInfo(
-                        name=device_name,
-                        modbus_connection=get_correct_modbus_connection(
-                            device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
-                        ),
+                    detected_connection = get_correct_modbus_connection(
+                        device_slaveid, port, actual_response_timeout, uart_params, instrument=instrument
                     )
                 except ForeignDeviceError:
                     result["foreign"].append(device_info)
@@ -910,6 +942,11 @@ def probe_all_devices(  # pylint:disable=too-many-locals
                             continue
                     result["disconnected"].append(device_info)
                     continue
+                except minimalmodbus.InvalidResponseError:
+                    result["disconnected"].append(device_info)
+                    continue
+                else:
+                    device_info = DeviceInfo(name=device_name, modbus_connection=detected_connection)
 
                 try:
                     mb_connection = device_info.modbus_connection
@@ -941,7 +978,14 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
     cmd_status = defaultdict(list)
 
     for device_info in probing_result["alive"]:
-        fw_signature = device_info.modbus_connection.get_fw_signature()
+        try:
+            fw_signature = device_info.modbus_connection.get_fw_signature()
+        except minimalmodbus.ModbusException:
+            logger.exception(
+                "Device %s was alive at the probing time, but is not responding now", str(device_info)
+            )
+            probing_result["disconnected"].append(device_info)
+            continue
         try:
             latest_remote_version, released_fw_endpoint = get_released_fw(
                 fw_signature, RELEASE_INFO
@@ -1071,7 +1115,7 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
 
     logger.info(
         "%s upgraded, %s skipped upgrade, %s bootloader updates available, %s stuck in bootloader, "
-        "%s disconnected and %s too old for any updates.",
+        "%s disconnected, %s foreign and %s too old for any updates.",
         user_log.colorize(str(len(cmd_status["ok"])), "GREEN" if cmd_status["ok"] else "RED"),
         user_log.colorize(str(len(cmd_status["skipped"])), "YELLOW" if cmd_status["skipped"] else "GREEN"),
         user_log.colorize(
@@ -1083,6 +1127,9 @@ def _update_all(  # pylint:disable=too-many-branches,too-many-statements
         ),
         user_log.colorize(
             str(len(probing_result["disconnected"])), "RED" if probing_result["disconnected"] else "GREEN"
+        ),
+        user_log.colorize(
+            str(len(probing_result["foreign"])), "RED" if probing_result["foreign"] else "GREEN"
         ),
         user_log.colorize(
             str(len(probing_result["too_old_to_update"])),

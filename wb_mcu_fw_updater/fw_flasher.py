@@ -102,7 +102,7 @@ class ModbusFlasher:
 
     GET_FREE_SPACE_FLASHFS_REG = 1003
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         addr,
         port,
